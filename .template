@@ -1,0 +1,16 @@
+Mcu Type=CH32M030
+Address=0x08000000
+Target Path=obj/PPStoAVS.hex
+Erase All=true
+Program=true
+Verify=true
+Reset=true
+
+Vendor=WCH
+Link=WCH-Link
+Toolchain=RISC-V
+Series=CH32M030
+Description=Website: https://www.wch.cn/products/CH32M030.html?\nROM(byte): 64K, SRAM(byte): 12K, CHIP PINS: 32, GPIO PORTS: 24.\nWCH CH32V1 series of mainstream MCUs covers the needs of a large variety of applications in the industrial,medical and consumer markets. High performance with first-class peripherals and low-power,low-voltage operation is paired with a high level of integration at accessible prices with a simple architecture and easy-to-use tools.
+TempratureScope=CH32M030C9U7{-40℃~105℃}
+PeripheralVersion=1.5
+MCU=CH32M030C9U7
