@@ -8,6 +8,7 @@
 
 #define PD_MAX_DATA_OBJS        7
 #define PD_MAX_MSG_LEN          (2 + 4 * PD_MAX_DATA_OBJS)  /* header + 7 个数据对象 */
+#define PD_MAX_EPR_OBJS         11      /* EPR_Source_Capabilities：1~7 SPR（不足补 0），8~11 EPR */
 #define PD_REV_30               0b10
 
 typedef enum
@@ -58,7 +59,32 @@ typedef enum
 typedef enum
 {
     MSG_TYPE_Sink_Capabilities_Extended = 0b01111,
+    MSG_TYPE_Extended_Control           = 0b10000,
+    MSG_TYPE_EPR_Source_Capabilities    = 0b10001,
 } pd_ext_msg_t;
+
+/* 扩展报文头（Extended Message Header） */
+#define EXT_CHUNKED             (1u << 15)
+#define EXT_CHUNK_NUM(h)        (((h) >> 11) & 0xF)
+#define EXT_REQUEST_CHUNK       (1u << 10)
+#define EXT_DATA_SIZE(h)        ((h) & 0x1FF)
+#define EXT_CHUNK_BYTES         26
+
+/* Extended_Control（ECDB）类型 */
+#define ECDB_EPR_GET_SOURCE_CAP 1
+#define ECDB_EPR_GET_SINK_CAP   2
+#define ECDB_EPR_KEEPALIVE      3
+#define ECDB_EPR_KEEPALIVE_ACK  4
+
+/* EPR_Mode（EPRMDO）：[31:24] Action，[23:16] Data */
+#define EPR_MODE_ENTER          1
+#define EPR_MODE_ENTER_ACK      2
+#define EPR_MODE_ENTER_OK       3
+#define EPR_MODE_ENTER_FAILED   4
+#define EPR_MODE_EXIT           5
+
+#define PDO_EPR_CAPABLE         (1u << 23)  /* Fixed 5V PDO：供电端支持 EPR */
+#define RDO_EPR_CAPABLE         (1u << 22)  /* RDO：受电端支持 EPR Mode */
 
 /* Sink_Capabilities_Extended（SKEDB，24 字节）中的 Sink Modes（byte 17） */
 #define SKEDB_LEN               24
@@ -97,6 +123,7 @@ typedef struct
     uint16_t   max_mv;
     uint16_t   max_ma;      /* SPR_AVS: 9~15V 档电流 */
     uint16_t   max_ma_20v;  /* 仅 SPR_AVS: 15~20V 档电流 */
+    uint8_t    pdp;         /* 仅 EPR_AVS: PDP（W） */
 } pdo_t;
 
 static inline pd_header_t pd_parse_header(uint16_t h)
@@ -147,6 +174,12 @@ static inline pdo_t pd_parse_pdo(uint32_t v)
         p.max_ma = ((v >> 10) & 0x3FF) * 10;
         p.max_ma_20v = (v & 0x3FF) * 10;
         break;
+    case EPR_AVS_PDO:
+        p.min_mv = ((v >> 8) & 0xFF) * 100;
+        p.max_mv = ((v >> 17) & 0x1FF) * 100;
+        p.pdp = v & 0xFF;
+        p.max_ma = 5000;
+        break;
     default:
         break;
     }
@@ -188,6 +221,13 @@ static inline uint32_t pd_build_pps_rdo(uint8_t pos, uint16_t mv, uint16_t ma)
 static inline uint32_t pd_build_avs_rdo(uint8_t pos, uint16_t mv, uint16_t ma)
 {
     return ((uint32_t)pos << 28) | (1u << 24) | ((uint32_t)(mv / 100 * 4) << 9) | (ma / 50);
+}
+
+/* EPR AVS 在某电压下的最大电流：min(PDP ÷ V, 5A) */
+static inline uint16_t pd_epr_avs_ma(const pdo_t *p, uint16_t mv)
+{
+    uint32_t ma = (uint32_t)p->pdp * 1000000u / mv;
+    return ma > 5000 ? 5000 : (uint16_t)ma;
 }
 
 static inline uint8_t  pd_rdo_pos(uint32_t rdo)          { return (rdo >> 28) & 0xF; }

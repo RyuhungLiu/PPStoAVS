@@ -51,6 +51,7 @@ int main(void)
     RCC->RSTSCKR |= RCC_RMVF;
 
     cfg_init();
+    fe_ra_apply();      /* 虚拟 E-Marker：尽早呈现 Ra */
     evlog_init();
     ev_boot_t boot = {FW_VERSION, reset_flags, *cfg()};
     evlog_add(EV_BOOT, &boot, sizeof(boot));
@@ -67,7 +68,8 @@ int main(void)
     watchdog_init();
 
 #ifndef FE_DIAG     /* 诊断构建：不留调试窗口，上电立即接管前端（重烧用断电擦除） */
-    while (millis() < BOOT_DEBUG_WINDOW_MS)
+    /* 虚拟 E-Marker：充电器在首次广播前查询线材，同样立即接管前端（重烧用断电擦除） */
+    while (millis() < BOOT_DEBUG_WINDOW_MS && !(cfg()->flags & CFG_FE_EMARKER))
     {
         be_process();
         watchdog_feed();

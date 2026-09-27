@@ -41,6 +41,7 @@
 #define BE_CC_PINS              (GPIO_Pin_0 | GPIO_Pin_1)
 #define FE_CC_PORT              GPIOA
 #define FE_CC_PIN               GPIO_Pin_3          /* 同时是 SWIO（DIO 测试点） */
+#define FE_RA_PIN               GPIO_Pin_2          /* PA2/CC3：经 1kΩ 接公头 B5（VCONN），拉低 = Ra（硬件改版后） */
 
 /* 上电后保留给调试器的窗口，之后关闭 SDI，把 PA3 交给 USBPD1 */
 #define BOOT_DEBUG_WINDOW_MS    300

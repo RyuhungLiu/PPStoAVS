@@ -44,5 +44,7 @@ extern uint16_t fe_dbg_v[6];
 bool fe_request(const fe_target_t *t);  /* 由协议桥发起；忙时返回 false */
 fe_req_status_t fe_request_status(void);
 uint8_t fe_request_waits(void);         /* 最近一次请求收到 Wait 的次数 */
-uint8_t fe_request_txwait(void);        /* 最近一次协议桥请求等 SinkTxOK 的 ms；FE_TXWAIT_TIMEOUT = 超时仍发送 */
+uint8_t fe_request_txwait(void);
+void fe_ra_apply(void);
+bool fe_epr_mode(void);                 /* 前端处于 EPR 模式（能力表含 8~11 号 EPR PDO） */                 /* 按 CFG_FE_EMARKER 呈现/撤除 Ra（上电尽早调用） */        /* 最近一次协议桥请求等 SinkTxOK 的 ms；FE_TXWAIT_TIMEOUT = 超时仍发送 */
 #define FE_TXWAIT_TIMEOUT       255

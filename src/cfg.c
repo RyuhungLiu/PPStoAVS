@@ -50,11 +50,19 @@ void cfg_defaults(cfg_t *c)
 
 bool cfg_valid(const cfg_t *c)
 {
+    bool a5 = (c->flags & CFG_FE_EMARKER) != 0;
+    if ((c->flags & CFG_EPR_AVS) && !a5)
+        return false;   /* EPR 需要虚拟 E-Marker */
+    if ((c->flags & CFG_FIX_CUSTOM) &&
+        ((c->flags & CFG_FIX12) || c->fix_dv < CFG_FIX_DV_MIN || c->fix_dv > CFG_FIX_DV_MAX || c->fix_ma50 < 10 ||
+         c->fix_ma50 > 100))
+        return false;   /* 自订 Fixed 与 12V 转换互斥 */
     return c->mode <= CFG_MODE_FIXED && (c->hide_fixed & ~0x0Fu) == 0 && (c->flags & ~CFG_FLAGS_MASK) == 0 &&
            (c->max_mv == 15000 || c->max_mv == 20000) &&
-           c->max_ma >= 500 && c->max_ma <= 3000 && c->max_ma % 50 == 0 &&
+           c->max_ma >= 500 && c->max_ma <= (a5 ? CFG_MAX_MA_5A : CFG_MAX_MA) && c->max_ma % 50 == 0 &&
            c->ovp_pct >= 1 && c->ovp_pct <= 20 && c->uvp_pct >= 1 && c->uvp_pct <= 20 &&
-           c->ocp_ma >= 500 && c->ocp_ma <= 5000 && c->ocp_ms >= 1 && c->ocp_ms <= 1000;
+           c->ocp_ma >= 500 && c->ocp_ma <= (a5 ? CFG_OCP_MAX_MA_5A : CFG_OCP_MAX_MA) && c->ocp_ms >= 1 &&
+           c->ocp_ms <= 1000;
 }
 
 void cfg_init(void)
@@ -84,7 +92,7 @@ bool cfg_set(const cfg_t *c)
     if (!cfg_valid(c))
         return false;
     cur = *c;
-    memset(cur.reserved, 0, sizeof(cur.reserved));
+    cur.reserved = 0;
     save_state = SAVE_ERASE;    /* 保存中途再次修改：从擦除重新开始 */
     return true;
 }

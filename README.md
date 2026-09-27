@@ -86,6 +86,34 @@ PPS with the same maximum voltage takes precedence). Requests below 9 V are reje
 Voltages are rounded to the nearest 100 mV, e.g. PPS 12.34 V → AVS 12.3 V, 12.36 V → 12.4 V. The current is the lower of
 the two AVS ranges. AVS has no current limiting, so the PPS current limit is not enforced by the charger (OCP still applies).
 
+### Lab mode: virtual 5 A E-Marker
+
+The front answers the charger's SOP' `Discover Identity` as a passive USB-C cable rated 50 V / 5 A and EPR capable,
+so chargers that check the cable can offer 5 A PDOs. The current limit can then be set up to 5 A and OCP up to 5.5 A.
+When the charger's 5 V PDO has the EPR bit, the front enters EPR mode after the first contract and reads
+`EPR_Source_Capabilities`, which arrives in chunks. It then uses `EPR_Request` and sends `EPR_KeepAlive` every 250 ms.
+It never requests more than 20 V.
+The front starts right at power-up (no debug window) so the charger's first cable query is not missed.
+
+Chargers query the cable only after detecting Ra on the plug's VCONN pin. The hardware revision wires plug B5
+(VCONN) through 1 kΩ to PA2/CC3. With the switch on, PA2 is driven low to present Ra; with it off, PA2 is high-Z.
+The v0.1 PCB lacks this connection, so there only chargers that query the cable without Ra will ask.
+The converter cannot check the device-side cable, which must be rated for 5 A.
+
+### Lab mode: EPR AVS as SPR AVS
+
+This mode requires the E-Marker switch. With the front in EPR mode, the SPR AVS offered to the device takes its 15–20 V range
+from the charger's EPR AVS, at up to 5 A as limited by PDP. EPR AVS has nothing below 15 V. Requests of exactly 9 V or 15 V go
+to the charger's Fixed 9 V / 15 V, and all other 9–15 V requests are rejected. The 9–15 V current advertised is that of
+the Fixed 9 V / 15 V. When this switch is on, EPR AVS takes precedence over PPS or SPR AVS as the AVS source.
+
+### Lab mode: custom Fixed
+
+Adds one non-standard Fixed PDO, 5.1–20.0 V in 100 mV steps and 0.5–5 A. It is made from the PPS covering that voltage,
+or from the charger's SPR AVS (9 V and up) when there is no PPS. Its current is min(setting, source, current limit).
+It is not offered if the charger already has that Fixed voltage, if it exceeds the max voltage, or if all 7 PDO slots
+are used. It cannot be combined with 12 V conversion.
+
 ## Host tool
 
 Plug the front Type-C into a PC (no charger needed; the board runs from the PC's 5 V) and open

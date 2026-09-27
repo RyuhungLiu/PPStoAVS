@@ -105,12 +105,17 @@ typedef struct __attribute__((packed))
 typedef enum
 {
     NOTE_FE_ACCEPT_MISSED = 1,  /* 前端漏收 Accept，已由 PS_RDY 补回 */
+    NOTE_FE_EMARKER       = 2,  /* 已以虚拟 E-Marker（5A 线材）应答充电器的 SOP' Discover Identity */
+    NOTE_FE_EPR_ENTERED   = 3,  /* 前端进入 EPR 模式 */
+    NOTE_FE_EPR_FAILED    = 4,  /* 充电器拒绝进入 EPR，data = 原因码 */
+    NOTE_FE_EPR_EXIT      = 5,  /* 前端退出 EPR 模式 */
 } note_code_t;
 
 typedef struct __attribute__((packed))
 {
     uint8_t side;
     uint8_t code;           /* note_code_t */
+    uint8_t data;
 } ev_note_t;
 
 typedef enum

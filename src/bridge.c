@@ -130,6 +130,32 @@ static uint8_t avs_tier(uint16_t max_mv)
     return (max_mv >= 20000 && cfg()->max_mv >= 20000) ? 2 : (max_mv >= 15000) ? 1 : 0;
 }
 
+/* 前端 EPR AVS：覆盖 15~20V */
+static int8_t find_epr_avs(const pdo_t *c, uint8_t n)
+{
+    if (!(cfg()->flags & CFG_EPR_AVS) || !fe_epr_mode())
+        return -1;
+    for (uint8_t i = 0; i < n; i++)
+    {
+        if (c[i].type == EPR_AVS_PDO && c[i].min_mv <= 15000 && c[i].max_mv >= 20000 && c[i].pdp > 0)
+            return i;
+    }
+    return -1;
+}
+
+/* 充电器某电压 Fixed 的位置（1-based），没有返回 0 */
+static uint8_t find_front_fixed(uint16_t mv)
+{
+    uint8_t n;
+    const pdo_t *c = fe_caps(&n);
+    for (uint8_t i = 0; i < n; i++)
+    {
+        if (c[i].type == FPDO && c[i].raw != 0 && c[i].max_mv == mv)
+            return i + 1;
+    }
+    return 0;
+}
+
 static int8_t find_native_avs(const pdo_t *c, uint8_t n)
 {
     for (uint8_t i = 0; i < n; i++)
@@ -148,9 +174,13 @@ static int8_t find_native_avs(const pdo_t *c, uint8_t n)
  *    都取 min(充电器该档 Fixed 电流, 来源电流, 电流上限)；AVS 不到 20V 时不提供 20V Fixed
  *  - PPS（模式 b/c）：充电器 APDO 全部透传，最高电压与电流按设置截断，同一最高电压只保留一个
  *  - 12V 转换（CFG_FIX12）：充电器没有 12V 时由覆盖 12V 的 PPS（优先）或原生 AVS 提供
+ *  - Lab 自订 Fixed（CFG_FIX_CUSTOM，与 12V 转换互斥）：任意 5.1~20V（100mV）与电流，来源同 12V 转换，
+ *    电流取 min(设定, 来源, 电流上限)；充电器已有同电压 Fixed 时不转换
  *  - 个数 ≤ 7，优先级 Fixed > AVS > PPS（保留最高电压高的）> 12V 转换
  *  - 顺序：Fixed（电压升序）、AVS、PPS（最高电压升序）
  *  - Lab 后端二次握手：确认设备支持 AVS 之前不给 AVS、改给全部 PPS
+ *  - Lab EPR AVS（CFG_EPR_AVS，前端 EPR 模式）：AVS 来源优先取 EPR AVS，只用 15~20V（电流 min(PDP÷20V, 5A)）；
+ *    9~15V 段空缺，只有 9V、15V 两点走 Fixed，9~15V 电流 = min(9V、15V Fixed 电流)
  *  - Lab AVS 转 PPS（CFG_AVS_TO_PPS，模式 b/c）：充电器原生 AVS 另外提供为 5V~AVS 最高电压的 PPS，
  *    电流取两段 AVS 电流较小者；同一最高电压已有充电器 PPS 时以充电器 PPS 为准
  */
@@ -189,8 +219,8 @@ static void build_back_caps(void)
     for (uint8_t i = 0; i < n; i++)
     {
         uint16_t mv = fc[i].max_mv;
-        if (fc[i].type != FPDO || mv > c->max_mv || fixed_hidden(mv))
-            continue;
+        if (fc[i].type != FPDO || fc[i].raw == 0 || mv > c->max_mv || fixed_hidden(mv))
+            continue;   /* raw 0：EPR 能力表中 SPR 位置的空位 */
         back_entry_t e = {FPDO, FPDO, i + 1, mv, mv, min_u16(fc[i].max_ma, c->max_ma), 0};
         insert_sorted(fixed, &nf, &e);
     }
@@ -219,7 +249,16 @@ static void build_back_caps(void)
         const pdo_t *src = NULL;
         uint8_t src_pos = 0;
         uint16_t s15 = 0, s20 = 0;
-        if (nat_tier > 0 && nat_tier >= pps_tier)
+        int8_t epr = find_epr_avs(fc, n);
+        int8_t f9 = find_mv(fixed, nf, 9000);
+        if (epr >= 0 && c->max_mv >= 20000 && find_mv(fixed, nf, 20000) >= 0)
+        {
+            src = &fc[epr];
+            src_pos = epr + 1;
+            s15 = f9 >= 0 ? fixed[f9].ma : fixed[f15].ma;     /* 9~15V 只有 9V、15V 两点（Fixed） */
+            s20 = pd_epr_avs_ma(src, 20000);
+        }
+        else if (nat_tier > 0 && nat_tier >= pps_tier)
         {
             src = &fc[nat];
             src_pos = nat + 1;
@@ -237,6 +276,7 @@ static void build_back_caps(void)
         {
             int8_t f20 = find_mv(fixed, nf, 20000);
             uint16_t avs_max = (avs_tier(src->max_mv) == 2 && f20 >= 0) ? 20000 : 15000;
+            bool from_epr = src->type == EPR_AVS_PDO;
             bool drop20 = avs_max < 20000 && f20 >= 0;
             if (nf - drop20 < PD_MAX_DATA_OBJS && (c->flags & CFG_BE_AVS_2ND) && !rear_avs_ok)
             {
@@ -251,12 +291,20 @@ static void build_back_caps(void)
                     nf--;
                 }
                 uint16_t ma15 = min_u16(fixed[f15].ma, s15);
-                fixed[f15].ma = ma15;
                 uint16_t ma20 = 0;
-                if (avs_max == 20000)
+                if (from_epr)
                 {
-                    ma20 = min_u16(fixed[f20].ma, s20);
-                    fixed[f20].ma = ma20;
+                    /* 15~20V 由 EPR AVS 提供，Fixed 电流不变；9~15V 电流不超过 9V/15V Fixed */
+                    ma20 = min_u16(s20, c->max_ma);
+                }
+                else
+                {
+                    fixed[f15].ma = ma15;
+                    if (avs_max == 20000)
+                    {
+                        ma20 = min_u16(fixed[f20].ma, s20);
+                        fixed[f20].ma = ma20;
+                    }
                 }
                 back_entry_t e = {SPR_AVS_PDO, src->type, src_pos, 9000, avs_max, ma15, ma20};
                 avs = e;
@@ -301,22 +349,39 @@ static void build_back_caps(void)
         }
     }
 
-    /* 4. 12V 转换 */
-    if ((c->flags & CFG_FIX12) && c->max_mv >= 12000 && !fixed_hidden(12000) && find_mv(fixed, nf, 12000) < 0 &&
-        nf + has_avs + np < PD_MAX_DATA_OBJS)
+    /* 4. 转换 Fixed：12V 转换或 Lab 自订 Fixed（互斥） */
+    uint16_t conv_mv = 0, conv_ma = c->max_ma;
+    if ((c->flags & CFG_FIX12) && !fixed_hidden(12000))
+    {
+        conv_mv = 12000;
+    }
+    else if (c->flags & CFG_FIX_CUSTOM)
+    {
+        conv_mv = c->fix_dv * 100;
+        conv_ma = min_u16(conv_ma, c->fix_ma50 * 50);
+    }
+    if (conv_mv && conv_mv <= c->max_mv && find_mv(fixed, nf, conv_mv) < 0 && nf + has_avs + np < PD_MAX_DATA_OBJS)
     {
         int8_t best = -1;
         for (uint8_t i = 0; i < n; i++)
         {
-            if (fc[i].type == PPS_PDO && fc[i].min_mv <= 12000 && fc[i].max_mv >= 12000 &&
+            if (fc[i].type == PPS_PDO && fc[i].min_mv <= conv_mv && fc[i].max_mv >= conv_mv &&
                 (best < 0 || fc[i].max_ma > fc[best].max_ma))
                 best = i;
         }
+        uint16_t src_ma = best >= 0 ? fc[best].max_ma : 0;
         if (best < 0)
-            best = find_native_avs(fc, n);
-        if (best >= 0)
         {
-            back_entry_t e = {FPDO, fc[best].type, best + 1, 12000, 12000, min_u16(fc[best].max_ma, c->max_ma), 0};
+            int8_t a = find_native_avs(fc, n);
+            if (a >= 0 && conv_mv >= 9000 && conv_mv <= fc[a].max_mv)
+            {
+                best = a;
+                src_ma = conv_mv > 15000 ? fc[a].max_ma_20v : fc[a].max_ma;
+            }
+        }
+        if (best >= 0 && src_ma > 0)
+        {
+            back_entry_t e = {FPDO, fc[best].type, best + 1, conv_mv, conv_mv, min_u16(src_ma, conv_ma), 0};
             insert_sorted(fixed, &nf, &e);
         }
     }
@@ -367,6 +432,21 @@ static fe_target_t front_target(const back_entry_t *e, uint16_t mv, uint16_t op_
     const pdo_t *src = &c[e->fe_pos - 1];
     if (e->fe_type == FPDO)
         t.ma = src->max_ma;
+    else if (e->fe_type == EPR_AVS_PDO)
+    {
+        /* EPR AVS 只有 15V 以上：9V、15V 走充电器 Fixed */
+        uint8_t fpos = mv <= 15000 ? find_front_fixed(mv) : 0;
+        if (fpos)
+        {
+            t.pos = fpos;
+            t.type = FPDO;
+            t.ma = c[fpos - 1].max_ma;
+        }
+        else
+        {
+            t.ma = pd_epr_avs_ma(src, mv);
+        }
+    }
     else if (e->fe_type == PPS_PDO)
         t.ma = (e->type == PPS_PDO) ? op_ma : src->max_ma;     /* PPS 透传按设备限流值，其余用 PPS 最大电流 */
     else
@@ -550,6 +630,13 @@ static bool map_back_request(uint32_t rdo)
         if (mv < 9000 || mv > e->mv)
             return false;
         uint16_t limit = (mv < 15000) ? e->ma : (mv > 15000) ? e->ma20 : (e->ma > e->ma20 ? e->ma : e->ma20);
+        if (e->fe_type == EPR_AVS_PDO && mv <= 15000)
+        {
+            /* EPR AVS 只有 15~20V：9V、15V 走充电器 Fixed（front_target），其余 9~15V 拒绝 */
+            if ((mv != 9000 && mv != 15000) || find_front_fixed(mv) == 0)
+                return false;
+            limit = e->ma;
+        }
         if (op_ma > limit)
             return false;
         break;

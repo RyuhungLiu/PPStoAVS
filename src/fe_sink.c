@@ -18,6 +18,11 @@
 #define T_SINK_REQUEST_MS       100     /* tSinkRequest：收到 Wait 后等待再重发 */
 #define N_WAIT_RETRY            3
 #define T_KEEPALIVE_RETRY_MS    1000    /* 保活请求失败后的重试间隔，避免连续重发 */
+#define T_ENTER_EPR_MS          550     /* tEnterEPR 450~550ms（含充电器查询线材） */
+#define T_EPR_KEEPALIVE_MS      250     /* tSinkEPRKeepAlive 250~500ms：这么久没发报文就发 EPR_KeepAlive */
+#define T_EPR_KEEPALIVE_NG_MS   400     /* SinkTxNG 持续时也要在 tSinkEPRKeepAlive 上限前发出 */
+#define N_EPR_ATTEMPTS          2       /* 每次上电最多尝试进入 EPR 的次数（避免失败循环） */
+#define EPR_SINK_PDP            100     /* EPR_Mode (Enter) 的 EPR Sink Operational PDP（W） */
 
 /* 参考手册 §15.2.15：CC 比较器 */
 #define PORT_CE                 (1u << 7)
@@ -38,6 +43,8 @@ typedef enum
     FE_ST_LEGACY,
     FE_ST_WAIT_RETRY,   /* 充电器回复 Wait，tSinkRequest 后重发同一请求 */
     FE_ST_SOFT_RESET,   /* 已发出 Soft Reset，等待 Accept */
+    FE_ST_EPR_ENTER,    /* 已发出 EPR_Mode (Enter)，等待 Enter Acknowledged */
+    FE_ST_EPR_WAIT_OK,  /* 等待 Enter Succeeded（充电器此时查询线材） */
 } fe_state_t;
 
 typedef enum
@@ -54,9 +61,16 @@ static uint32_t state_ts;
 static uint32_t keepalive_ts;
 static bool hard_reset_sent;
 static uint8_t last_rx_id;
+static uint8_t cable_last_rx_id;    /* 虚拟 E-Marker：SOP' 报文的 MessageID */
 
-static pdo_t caps[PD_MAX_DATA_OBJS];
+static pdo_t caps[PD_MAX_EPR_OBJS];
 static uint8_t num_caps;
+
+/* Lab（CFG_FE_EMARKER）：EPR 模式 */
+static bool epr_mode;
+static uint8_t epr_attempts;
+static uint8_t epr_buf[PD_MAX_EPR_OBJS * 4];    /* EPR_Source_Capabilities 分块拼接 */
+static uint8_t epr_len, epr_total;
 static bool has_contract;
 static uint32_t contract_rdo;
 static uint32_t pending_rdo;
@@ -68,6 +82,13 @@ static uint8_t wait_count;          /* 当前请求收到 Wait 的次数 */
 static bool bridge_req_waiting;     /* 协议桥请求等待 SinkTxOK */
 static uint32_t bridge_req_ts;
 static uint8_t txwait;              /* 协议桥请求等 SinkTxOK 的时间（记录用） */
+
+/* 线材的协议层随 Hard Reset、连接复位 */
+static void cable_reset(void)
+{
+    cable_last_rx_id = 0xFF;
+    phy->tx_msg_id_sop1 = 0;
+}
 static fe_req_status_t req_status = FE_REQ_IDLE;
 
 #ifdef FE_DIAG
@@ -175,28 +196,61 @@ static void send_not_supported(void)
     send_ctrl(phy->revision >= PD_REV_30 ? MSG_TYPE_Not_Supported : MSG_TYPE_Reject);
 }
 
+static bool epr_wanted(void)
+{
+    return (cfg()->flags & CFG_FE_EMARKER) != 0;
+}
+
+/* EPR 模式下用 EPR_Request（RDO + 所请求 PDO 的副本），否则 Request */
+static void send_rdo(uint32_t rdo, uint8_t pos)
+{
+    if (epr_mode && pos >= 1 && pos <= num_caps)
+    {
+        uint32_t objs[2] = {rdo, caps[pos - 1].raw};
+        pd_phy_send(phy, MSG_TYPE_EPR_Request, 2, objs);
+    }
+    else
+    {
+        pd_phy_send(phy, MSG_TYPE_Request, 1, &rdo);
+    }
+}
+
 static void send_request(const fe_target_t *t, req_origin_t origin)
 {
     uint32_t rdo;
     if (t->type == PPS_PDO)
         rdo = pd_build_pps_rdo(t->pos, t->mv, t->ma);
-    else if (t->type == SPR_AVS_PDO)
+    else if (t->type == SPR_AVS_PDO || t->type == EPR_AVS_PDO)
         rdo = pd_build_avs_rdo(t->pos, t->mv, t->ma);   /* AVS 不需要保活 */
     else
         rdo = pd_build_fixed_rdo(t->pos, t->ma, t->ma);
+    if (epr_wanted())
+        rdo |= RDO_EPR_CAPABLE;
 
     pending = *t;
     pending_rdo = rdo;
     pending_origin = origin;
     wait_count = 0;
-    pd_phy_send(phy, MSG_TYPE_Request, 1, &rdo);
+    send_rdo(rdo, t->pos);
     set_state(FE_ST_WAIT_ACCEPT);
 }
 
 static void resend_pending(void)
 {
-    pd_phy_send(phy, MSG_TYPE_Request, 1, &pending_rdo);
+    send_rdo(pending_rdo, pending.pos);
     set_state(FE_ST_WAIT_ACCEPT);
+}
+
+static void log_note(uint8_t code, uint8_t data)
+{
+    ev_note_t e = {0, code, data};
+    evlog_add(EV_NOTE, &e, sizeof(e));
+}
+
+static void epr_reset(void)
+{
+    epr_mode = false;
+    epr_len = epr_total = 0;
 }
 
 static void request_finished(bool ok)
@@ -252,6 +306,8 @@ static void do_hard_reset(void)
     log_reset(RST_HARD_SENT);
     pd_phy_send_hard_reset(phy);
     pd_phy_reset_protocol(phy);
+    cable_reset();
+    epr_reset();
     last_rx_id = 0xFF;
     has_contract = false;
     num_caps = 0;
@@ -261,17 +317,18 @@ static void do_hard_reset(void)
     set_state(FE_ST_WAIT_CAPS);
 }
 
-static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
+/* Source_Capabilities 或 EPR_Source_Capabilities（1~7 SPR，8~ EPR，空位为 0） */
+static void handle_caps(const uint8_t *data, uint8_t n, uint8_t revision)
 {
-    uint32_t raw[PD_MAX_DATA_OBJS];
-    num_caps = h->num_objs;
+    uint32_t raw[PD_MAX_EPR_OBJS];
+    num_caps = n;
     for (uint8_t i = 0; i < num_caps; i++)
     {
-        raw[i] = pd_get_u32(&m->data[2 + i * 4]);
+        raw[i] = pd_get_u32(&data[i * 4]);
         caps[i] = pd_parse_pdo(raw[i]);
     }
     evlog_add(EV_FE_CAPS, raw, num_caps * 4);
-    phy->revision = (h->revision < PD_REV_30) ? h->revision : PD_REV_30;
+    phy->revision = (revision < PD_REV_30) ? revision : PD_REV_30;
 
     /* 如有协议桥请求正在进行，被新的能力报文打断（协议桥可重发） */
     if (req_status == FE_REQ_BUSY)
@@ -292,11 +349,78 @@ static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
     }
 }
 
+static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
+{
+    if (epr_mode)
+    {
+        epr_mode = false;       /* 充电器改发 SPR 能力：已退出 EPR */
+        log_note(NOTE_FE_EPR_EXIT, 0);
+    }
+    handle_caps(&m->data[2], h->num_objs, h->revision);
+}
+
+/* 扩展报文：EPR_Source_Capabilities 分块拼接、Extended_Control，其余回 Not_Supported */
+static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
+{
+    uint16_t ext = m->data[2] | (m->data[3] << 8);
+    const uint8_t *d = &m->data[4];
+    uint8_t avail = m->len > 4 ? m->len - 4 : 0;
+
+    if (h->msg_type == MSG_TYPE_EPR_Source_Capabilities)
+    {
+        if (ext & EXT_REQUEST_CHUNK)
+            return;
+        uint8_t chunk = EXT_CHUNK_NUM(ext);
+        if (chunk == 0)
+        {
+            uint16_t size = EXT_DATA_SIZE(ext);
+            epr_total = size > sizeof(epr_buf) ? sizeof(epr_buf) : size;
+            epr_len = 0;
+        }
+        else if (epr_total == 0 || epr_len != chunk * EXT_CHUNK_BYTES)
+        {
+            return;     /* 分块顺序不对，等充电器重发 */
+        }
+        uint8_t n = epr_total - epr_len;
+        if (n > EXT_CHUNK_BYTES)
+            n = EXT_CHUNK_BYTES;
+        if (n > avail)
+            n = avail;
+        memcpy(&epr_buf[epr_len], d, n);
+        epr_len += n;
+        if (epr_len < epr_total)
+        {
+            pd_phy_send_chunk_request(phy, MSG_TYPE_EPR_Source_Capabilities, chunk + 1);
+            return;
+        }
+        epr_mode = true;
+        uint8_t objs = epr_total / 4;
+        epr_total = epr_len = 0;
+        handle_caps(epr_buf, objs, h->revision);
+        return;
+    }
+    if (h->msg_type == MSG_TYPE_Extended_Control && avail >= 1 && d[0] == ECDB_EPR_KEEPALIVE_ACK)
+        return;
+    send_not_supported();
+}
+
+static void send_epr_keepalive(void)
+{
+    uint8_t d[2] = {ECDB_EPR_KEEPALIVE, 0};
+    pd_phy_send_ext(phy, MSG_TYPE_Extended_Control, d, sizeof(d));
+}
+
+static bool caps_epr_capable(void)
+{
+    return num_caps > 0 && caps[0].type == FPDO && (caps[0].raw & PDO_EPR_CAPABLE);
+}
+
 static void send_sink_caps(void)
 {
     uint32_t objs[2];
-    objs[0] = pd_build_fixed_pdo(5000, 3000, 0);
-    objs[1] = pd_build_pps_apdo(3300, 21000, 3000);
+    uint16_t ma = cfg()->max_ma;
+    objs[0] = pd_build_fixed_pdo(5000, ma, 0);
+    objs[1] = pd_build_pps_apdo(3300, 21000, ma);
     pd_phy_send(phy, MSG_TYPE_Sink_Capabilities, 2, objs);
 }
 
@@ -324,8 +448,78 @@ static void send_sink_caps_ext(void)
     evlog_add(EV_AVS_2ND, &e, sizeof(e));
 }
 
+/*
+ * Lab（CFG_FE_EMARKER）：扮演无源 5A 线材（E-Marker），应答充电器 SOP' 的 Discover Identity。
+ * 格式参照实测 5A 线材：ID Header 产品类型 = 无源线材；Cable VDO：USB-C 对 USB-C、50V、5A、EPR、USB 2.0。
+ * 充电器在 VCONN 脚检测到 Ra 才会供 VCONN、查询线材：公头 B5 经 1kΩ 接 PA2，PA2 拉低即为 Ra
+ */
+void fe_ra_apply(void)
+{
+    static int8_t applied = -1;
+    int8_t on = (cfg()->flags & CFG_FE_EMARKER) != 0;
+    if (on == applied)
+        return;
+    applied = on;
+    RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOA, ENABLE);
+    GPIO_InitTypeDef gpio = {0};
+    gpio.GPIO_Pin = FE_RA_PIN;
+    gpio.GPIO_Speed = GPIO_Speed_30MHz;
+    if (on)
+    {
+        GPIOA->BCR = FE_RA_PIN;
+        gpio.GPIO_Mode = GPIO_Mode_Out_PP;
+    }
+    else
+    {
+        gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;     /* 高阻：没有 Ra，充电器不供 VCONN */
+    }
+    GPIO_Init(GPIOA, &gpio);
+}
+#define EMARKER_ID_HEADER       ((3u << 27) | 0x1209u)      /* 无源线材，VID 0x1209 */
+#define EMARKER_PRODUCT_VDO     (0x0001u << 16)             /* PID 0x0001 */
+/* C-C、EPR Capable、延迟 <10ns、50V、5A、USB 2.0（EPR 要求线材 50V/5A/EPR；本机只请求 ≤ 20V） */
+#define EMARKER_CABLE_VDO       ((2u << 18) | (1u << 17) | (1u << 13) | (3u << 9) | (2u << 5))
+
+static void handle_cable_msg(const pd_rx_msg_t *m)
+{
+    pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
+    uint8_t rev = h.revision < PD_REV_30 ? h.revision : PD_REV_30;
+
+    if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
+    {
+        cable_reset();
+        pd_phy_send_sop1(phy, MSG_TYPE_Accept, 0, NULL, rev);
+        return;
+    }
+    if (h.msg_id == cable_last_rx_id)
+        return;
+    cable_last_rx_id = h.msg_id;
+    if (h.extended || h.msg_type != MSG_TYPE_Vendor_Defined || h.num_objs == 0)
+        return;
+
+    uint32_t vdm = pd_get_u32(&m->data[2]);
+    if (!((vdm >> 15) & 1) || ((vdm >> 6) & 3) != 0)
+        return;     /* 只应答结构化 VDM 的 REQ */
+    if ((vdm >> 16) == 0xFF00 && (vdm & 0x1F) == 1)
+    {
+        uint32_t o[5] = {(vdm & ~0xC0u) | 0x40u, EMARKER_ID_HEADER, 0, EMARKER_PRODUCT_VDO, EMARKER_CABLE_VDO};
+        if (pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 5, o, rev))
+            log_note(NOTE_FE_EMARKER, 0);
+    }
+    else
+    {
+        uint32_t nak = (vdm & ~0xC0u) | 0x80u;
+        pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &nak, rev);
+    }
+}
+
 static void handle_msg(const pd_rx_msg_t *m)
 {
+    if (m->sop)
+    {
+        handle_cable_msg(m);
+        return;
+    }
     pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
 
     if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
@@ -346,7 +540,7 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     if (h.extended)
     {
-        send_not_supported();
+        handle_ext(m, &h);
         return;
     }
 
@@ -361,6 +555,33 @@ static void handle_msg(const pd_rx_msg_t *m)
             if ((pd_get_u32(&m->data[2]) >> 15) & 1)    /* 结构化 VDM */
                 send_not_supported();
             break;
+        case MSG_TYPE_EPR_Mode:
+        {
+            uint32_t d = pd_get_u32(&m->data[2]);
+            uint8_t action = d >> 24, data = (d >> 16) & 0xFF;
+            if (action == EPR_MODE_ENTER_ACK && state == FE_ST_EPR_ENTER)
+            {
+                set_state(FE_ST_EPR_WAIT_OK);
+            }
+            else if (action == EPR_MODE_ENTER_OK && (state == FE_ST_EPR_ENTER || state == FE_ST_EPR_WAIT_OK))
+            {
+                epr_mode = true;
+                log_note(NOTE_FE_EPR_ENTERED, 0);
+                set_state(FE_ST_WAIT_CAPS);     /* 充电器接着发 EPR_Source_Capabilities */
+            }
+            else if (action == EPR_MODE_ENTER_FAILED)
+            {
+                log_note(NOTE_FE_EPR_FAILED, data);
+                set_state(FE_ST_READY);
+            }
+            else if (action == EPR_MODE_EXIT)
+            {
+                epr_mode = false;
+                log_note(NOTE_FE_EPR_EXIT, 0);
+                set_state(FE_ST_WAIT_CAPS);     /* 充电器接着发 SPR 能力 */
+            }
+            break;
+        }
         case MSG_TYPE_Alert:
         case MSG_TYPE_BIST:
             break;
@@ -402,8 +623,7 @@ static void handle_msg(const pd_rx_msg_t *m)
         else if (state == FE_ST_WAIT_ACCEPT)
         {
             /* 漏收了 Accept：PS_RDY 说明充电器已接受并完成转换 */
-            ev_note_t e = {0, NOTE_FE_ACCEPT_MISSED};
-            evlog_add(EV_NOTE, &e, sizeof(e));
+            log_note(NOTE_FE_ACCEPT_MISSED, 0);
             request_finished(true);
         }
         break;
@@ -439,6 +659,7 @@ void fe_init(void)
     pd_phy_set_cc(phy, 1);
 
     last_rx_id = 0xFF;
+    cable_reset();
     has_contract = false;
     num_caps = 0;
     hard_reset_sent = false;
@@ -456,11 +677,15 @@ static void enter_legacy(void)
 
 void fe_process(void)
 {
+    phy->sop1_en = (cfg()->flags & CFG_FE_EMARKER) != 0;
+    fe_ra_apply();
     if (phy->hard_reset_rcvd)
     {
         phy->hard_reset_rcvd = false;
         log_reset(RST_HARD_RCVD);
         pd_phy_reset_protocol(phy);
+        cable_reset();
+        epr_reset();
         last_rx_id = 0xFF;
         has_contract = false;
         num_caps = 0;
@@ -514,10 +739,23 @@ void fe_process(void)
             do_hard_reset();
         break;
 
+    case FE_ST_EPR_ENTER:
+        if (elapsed > T_SENDER_RESPONSE_MS)
+            send_soft_reset();
+        break;
+
+    case FE_ST_EPR_WAIT_OK:
+        if (elapsed > T_ENTER_EPR_MS)
+            send_soft_reset();
+        break;
+
     case FE_ST_WAIT_PS_RDY:
-        if (elapsed > (pending.type == SPR_AVS_PDO ? T_AVS_TRANSITION_MS : T_PS_TRANSITION_MS))
+    {
+        bool avs = pending.type == SPR_AVS_PDO || pending.type == EPR_AVS_PDO;
+        if (elapsed > (avs ? T_AVS_TRANSITION_MS : T_PS_TRANSITION_MS))
             do_hard_reset();
         break;
+    }
 
     case FE_ST_WAIT_RETRY:
         if (elapsed >= T_SINK_REQUEST_MS && (sink_tx_ok() || elapsed >= T_SINK_REQUEST_MS + T_SINK_TX_WAIT_MS))
@@ -540,6 +778,23 @@ void fe_process(void)
         {
             if (sink_tx_ok() || millis() - keepalive_ts > PPS_KEEPALIVE_MS + T_KEEPALIVE_NG_MS)
                 send_request(&contract, ORIGIN_KEEPALIVE);
+        }
+        else if (epr_mode && millis() - phy->last_tx_ms >= T_EPR_KEEPALIVE_MS)
+        {
+            if (sink_tx_ok() || millis() - phy->last_tx_ms >= T_EPR_KEEPALIVE_NG_MS)
+                send_epr_keepalive();
+        }
+        else if (epr_wanted() && !epr_mode && epr_attempts < N_EPR_ATTEMPTS && has_contract && caps_epr_capable() &&
+                 elapsed > T_SENDER_RESPONSE_MS)
+        {
+            if (sink_tx_ok())
+            {
+                /* 进入 EPR：[31:24] Action = Enter，[23:16] EPR Sink Operational PDP */
+                uint32_t d = ((uint32_t)EPR_MODE_ENTER << 24) | ((uint32_t)EPR_SINK_PDP << 16);
+                epr_attempts++;
+                pd_phy_send(phy, MSG_TYPE_EPR_Mode, 1, &d);
+                set_state(FE_ST_EPR_ENTER);
+            }
         }
         break;
 
@@ -564,7 +819,9 @@ bool fe_flash_safe(void)
         return true;
     if (state != FE_ST_READY || bridge_req_waiting)
         return false;
-    /* PPS 保活快到期时不做（Flash 操作期间无法收发） */
+    /* PPS 保活、EPR KeepAlive 快到期时不做（Flash 操作期间无法收发） */
+    if (epr_mode && millis() - phy->last_tx_ms > T_EPR_KEEPALIVE_MS - 100)
+        return false;
     return !(has_contract && contract.type == PPS_PDO && millis() - keepalive_ts > PPS_KEEPALIVE_MS - 200);
 }
 
@@ -634,4 +891,9 @@ uint8_t fe_request_waits(void)
 uint8_t fe_request_txwait(void)
 {
     return txwait;
+}
+
+bool fe_epr_mode(void)
+{
+    return epr_mode;
 }

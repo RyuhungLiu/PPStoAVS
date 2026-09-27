@@ -66,6 +66,17 @@ static void put_bytes(wr_t *w, const void *src, uint8_t len)
 
 static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
 {
+    if (arg[0] == 2)
+    {
+        /* 协议 v4：前端 EPR 能力表 8 号起的 PDO */
+        uint8_t n;
+        const pdo_t *caps = fe_caps(&n);
+        uint8_t k = n > PD_MAX_DATA_OBJS ? n - PD_MAX_DATA_OBJS : 0;
+        put8(w, k);
+        for (uint8_t i = 0; i < k; i++)
+            put32(w, caps[PD_MAX_DATA_OBJS + i].raw);
+        return ST_OK;
+    }
     if (arg[0] == 1)
     {
         uint8_t blob[PD_MAX_DATA_OBJS * 5];
@@ -80,7 +91,7 @@ static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
     bool back_contract = bridge_back_contract(&be_rdo, &be_mv);
     uint32_t fe_rdo = fe_contract_rdo();
     uint8_t flags = (fe_is_legacy() ? 0x01 : 0) | (be_attached() ? 0x02 : 0) | (power_sw_is_on() ? 0x04 : 0) |
-                    (back_contract ? 0x08 : 0) | (fe_rdo ? 0x10 : 0) | (bridge_rear_avs_2nd_state() << 5);
+                    (back_contract ? 0x08 : 0) | (fe_rdo ? 0x10 : 0) | (bridge_rear_avs_2nd_state() << 5) | (fe_epr_mode() ? 0x80 : 0);
 
     put8(w, fe_state_code());
     put8(w, be_state_code());
@@ -93,6 +104,8 @@ static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
 
     uint8_t n;
     const pdo_t *caps = fe_caps(&n);
+    if (n > PD_MAX_DATA_OBJS)
+        n = PD_MAX_DATA_OBJS;   /* 其余见 arg 2 */
     put8(w, n);
     for (uint8_t i = 0; i < n; i++)
         put32(w, caps[i].raw);

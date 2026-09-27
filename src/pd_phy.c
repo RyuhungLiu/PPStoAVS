@@ -139,8 +139,10 @@ bool pd_phy_rx_pop(pd_phy_t *p, pd_rx_msg_t *out)
     return true;
 }
 
-static bool send_frame(pd_phy_t *p, uint16_t header, const uint8_t *payload, uint8_t payload_len)
+static bool send_frame(pd_phy_t *p, uint8_t sop, uint8_t *msg_id, uint16_t header, const uint8_t *payload,
+                       uint8_t payload_len)
 {
+    bool sop1 = sop == UPD_SOP1;
     p->last_act_ms = millis();
     uint8_t len = 2 + payload_len;
 
@@ -151,23 +153,25 @@ static bool send_frame(pd_phy_t *p, uint16_t header, const uint8_t *payload, uin
         p->tx_buf[1] = header >> 8;
         memcpy(&p->tx_buf[2], payload, payload_len);
         p->goodcrc_rcvd = false;
-        phy_tx_blocking(p, len, UPD_SOP0);
+        phy_tx_blocking(p, len, sop);
         NVIC_EnableIRQ(p->irqn);
 
         uint32_t start = micros();
         while ((uint32_t)(micros() - start) < T_RECEIVE_US)
         {
-            if (p->goodcrc_rcvd && p->goodcrc_id == p->tx_msg_id)
+            if (p->goodcrc_rcvd && p->goodcrc_id == *msg_id && p->goodcrc_sop1 == sop1)
             {
-                p->tx_msg_id = (p->tx_msg_id + 1) & 0x7;
+                *msg_id = (*msg_id + 1) & 0x7;
                 p->dbg_tx_ok++;
+                if (!sop1)
+                    p->last_tx_ms = millis();
                 return true;
             }
         }
     }
     p->dbg_tx_fail++;
     /* 未收到 GoodCRC：MessageID 仍然递增，避免对方把下一条当作重发丢弃 */
-    p->tx_msg_id = (p->tx_msg_id + 1) & 0x7;
+    *msg_id = (*msg_id + 1) & 0x7;
     return false;
 }
 
@@ -177,20 +181,40 @@ bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t
     for (uint8_t i = 0; i < num_objs; i++)
         pd_put_u32(&payload[i * 4], objs[i]);
     uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
-    return send_frame(p, header, payload, num_objs * 4);
+    return send_frame(p, UPD_SOP0, &p->tx_msg_id, header, payload, num_objs * 4);
+}
+
+bool pd_phy_send_sop1(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs, uint8_t revision)
+{
+    uint8_t payload[PD_MAX_DATA_OBJS * 4];
+    for (uint8_t i = 0; i < num_objs; i++)
+        pd_put_u32(&payload[i * 4], objs[i]);
+    /* SOP'：bit8 = Cable Plug，bit5 保留为 0 */
+    uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id_sop1, 1, 0, revision);
+    return send_frame(p, UPD_SOP1, &p->tx_msg_id_sop1, header, payload, num_objs * 4);
+}
+
+static bool send_ext_frame(pd_phy_t *p, uint8_t msg_type, uint16_t ext, const uint8_t *data, uint8_t size)
+{
+    uint8_t payload[PD_MAX_DATA_OBJS * 4] = {0};
+    payload[0] = ext & 0xFF;
+    payload[1] = ext >> 8;
+    if (size)
+        memcpy(&payload[2], data, size);
+    uint8_t num_objs = (2 + size + 3) / 4;  /* 按 4 字节补零 */
+    uint16_t header = (1u << 15) |
+                      pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
+    return send_frame(p, UPD_SOP0, &p->tx_msg_id, header, payload, num_objs * 4);
 }
 
 bool pd_phy_send_ext(pd_phy_t *p, uint8_t msg_type, const uint8_t *data, uint8_t size)
 {
-    uint8_t payload[PD_MAX_DATA_OBJS * 4] = {0};
-    uint16_t ext = (1u << 15) | size;       /* Chunked = 1，Chunk Number 0 */
-    payload[0] = ext & 0xFF;
-    payload[1] = ext >> 8;
-    memcpy(&payload[2], data, size);
-    uint8_t num_objs = (2 + size + 3) / 4;  /* 按 4 字节补零 */
-    uint16_t header = (1u << 15) |
-                      pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
-    return send_frame(p, header, payload, num_objs * 4);
+    return send_ext_frame(p, msg_type, EXT_CHUNKED | size, data, size);    /* Chunk Number 0 */
+}
+
+bool pd_phy_send_chunk_request(pd_phy_t *p, uint8_t msg_type, uint8_t chunk)
+{
+    return send_ext_frame(p, msg_type, EXT_CHUNKED | ((uint16_t)chunk << 11) | EXT_REQUEST_CHUNK, NULL, 0);
 }
 
 void pd_phy_send_hard_reset(pd_phy_t *p)
@@ -220,8 +244,9 @@ static void phy_isr(pd_phy_t *p)
         p->dbg_last_sop = status & BMC_AUX_Mask;
 
         uint8_t sop = status & BMC_AUX_Mask;
+        bool sop1 = sop == BMC_AUX_SOP1_HRST && p->sop1_en;     /* IF_RX_ACT 时 10 = SOP'（Hard Reset 走 IF_RX_RESET） */
         bool replied = false;
-        if (sop == BMC_AUX_SOP0 && rx_len >= 6)
+        if ((sop == BMC_AUX_SOP0 || sop1) && rx_len >= 6)
         {
             p->dbg_sop0++;
             uint16_t header = p->rx_buf[0] | (p->rx_buf[1] << 8);
@@ -231,6 +256,7 @@ static void phy_isr(pd_phy_t *p)
             if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_GoodCRC)
             {
                 p->goodcrc_id = h.msg_id;
+                p->goodcrc_sop1 = sop1;
                 p->goodcrc_rcvd = true;
             }
             else
@@ -239,15 +265,17 @@ static void phy_isr(pd_phy_t *p)
                 if (next != p->q_tail && msg_len <= PD_MAX_MSG_LEN)
                 {
                     p->q[p->q_head].len = msg_len;
+                    p->q[p->q_head].sop = sop1;
                     memcpy(p->q[p->q_head].data, p->rx_buf, msg_len);
                     p->q_head = next;
                 }
 
                 delay_us(30);   /* tInterFrameGap ≥ 25us（同 WCH EVT） */
-                uint16_t goodcrc = pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
+                uint16_t goodcrc = sop1 ? pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, 1, 0, h.revision)
+                                        : pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
                 p->tx_buf[0] = goodcrc & 0xFF;
                 p->tx_buf[1] = goodcrc >> 8;
-                phy_tx_blocking(p, 2, UPD_SOP0);
+                phy_tx_blocking(p, 2, sop1 ? UPD_SOP1 : UPD_SOP0);
                 replied = true;
             }
         }

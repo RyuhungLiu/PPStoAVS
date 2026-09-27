@@ -20,6 +20,6 @@
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  3
+#define HOST_PROTO_VERSION  4
 
 void host_process(void);

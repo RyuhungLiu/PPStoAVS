@@ -13,6 +13,7 @@
 typedef struct
 {
     uint8_t len;                    /* 字节数：header + 数据对象，不含 CRC */
+    uint8_t sop;                    /* 0 = SOP，1 = SOP'（发给线材） */
     uint8_t data[PD_MAX_MSG_LEN];
 } pd_rx_msg_t;
 
@@ -26,6 +27,8 @@ typedef struct
     uint8_t cc_sel;                 /* 0 = PORT_CC1，1 = PORT_CC2 */
 
     uint8_t tx_msg_id;              /* 下一条待发报文的 MessageID */
+    uint8_t tx_msg_id_sop1;         /* 虚拟 E-Marker 的 SOP' MessageID */
+    volatile bool sop1_en;          /* 接收并应答 SOP'（虚拟 E-Marker） */
 
     uint8_t rx_buf[PD_BUF_LEN] __attribute__((aligned(4)));
     uint8_t tx_buf[PD_BUF_LEN] __attribute__((aligned(4)));
@@ -37,7 +40,9 @@ typedef struct
     volatile bool hard_reset_rcvd;
     volatile bool goodcrc_rcvd;
     volatile uint8_t goodcrc_id;
+    volatile bool goodcrc_sop1;
     volatile uint32_t last_act_ms;  /* 最近一次收发（Flash 操作避开 PD 活动） */
+    uint32_t last_tx_ms;            /* 最近一次成功发出的 SOP 报文（EPR KeepAlive 计时） */
 
     /* 诊断计数（FE_DIAG 构建时编码进后端 PDO） */
     volatile uint16_t dbg_rx_sel[2];
@@ -59,6 +64,10 @@ bool pd_phy_rx_pop(pd_phy_t *p, pd_rx_msg_t *out);
 bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs);
 /* 扩展报文，单个 chunk（data ≤ 26 字节） */
 bool pd_phy_send_ext(pd_phy_t *p, uint8_t msg_type, const uint8_t *data, uint8_t size);
+/* 请求扩展报文的第 chunk 个分块 */
+bool pd_phy_send_chunk_request(pd_phy_t *p, uint8_t msg_type, uint8_t chunk);
+/* 以线材身份（Cable Plug）发 SOP' 报文 */
+bool pd_phy_send_sop1(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs, uint8_t revision);
 void pd_phy_send_hard_reset(pd_phy_t *p);
 
 volatile uint8_t *pd_phy_port_reg(pd_phy_t *p, uint8_t cc_sel);

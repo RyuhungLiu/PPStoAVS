@@ -115,6 +115,23 @@ td.nw { white-space: nowrap; }
 .check input { margin-top: 3px; }
 .check b { font-weight: 600; }
 .check span { display: block; color: var(--muted); font-size: 12px; }
+.labgrp { margin: 16px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.labs { display: grid; gap: 8px; }
+.lab { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.lab:has(.labhead input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.lab.off { opacity: .55; }
+.labhead { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.labhead input { margin-top: 3px; }
+.labhead b { font-weight: 600; }
+.labhead span:not(.tag):not(.labtags) { display: block; color: var(--muted); font-size: 12px; }
+.labtags { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.lab details { margin: 6px 0 0 24px; font-size: 12px; color: var(--muted); }
+.lab summary { cursor: pointer; color: var(--accent); width: max-content; }
+.lab ul { margin: 6px 0 2px; padding-left: 18px; }
+.lab li { margin: 3px 0; }
+.labin { margin: 8px 0 0 24px; }
+.labin input[type=number] { width: 84px; }
+@media (max-width: 640px) { .labhead { flex-wrap: wrap; } .labtags { margin-left: 24px; justify-content: flex-start; } }
 .actions { position: sticky; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
 @media (max-width: 640px) { .fields { grid-template-columns: 1fr; gap: 4px 0; } .fields > .lbl { margin-top: 8px; } }
@@ -220,7 +237,7 @@ td.nw { white-space: nowrap; }
             <label><input type="radio" name="maxMv" value="20000">20 V</label>
           </div>
           <div class="lbl" data-i18n="maxI"></div>
-          <div class="inline"><input type="number" id="maxMa" min="500" max="3000" step="50"><span class="muted">mA</span><span class="small muted" data-i18n="maxId"></span></div>
+          <div class="inline"><input type="number" id="maxMa" min="500" max="3000" step="50"><span class="muted">mA</span><span class="small muted" id="maxIdTxt" data-i18n="maxId"></span></div>
           <div class="lbl" data-i18n="hide"></div>
           <div>
             <div class="inline">
@@ -254,11 +271,38 @@ td.nw { white-space: nowrap; }
 
     <div class="card">
       <h3><span data-i18n="secLab"></span><span class="tag warn">Lab</span></h3>
-      <div class="small muted" style="margin:-4px 0 12px" data-i18n="labD"></div>
-      <div style="display:grid;gap:12px">
-        <label class="check"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndD"></span></div></label>
-        <label class="check"><input type="checkbox" id="be2nd"><div><b data-i18n="be2nd"></b><span data-i18n="be2ndD"></span></div></label>
-        <label class="check"><input type="checkbox" id="avs2pps"><div><b data-i18n="avs2pps"></b><span data-i18n="avs2ppsD"></span></div></label>
+      <div class="small muted" data-i18n="labD"></div>
+      <h4 class="labgrp" data-i18n="labFront"></h4>
+      <div class="labs">
+        <div class="lab" id="lab-fe2nd">
+          <label class="labhead"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndS"></span></div><span class="labtags"></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fe2ndL"></ul></details>
+        </div>
+        <div class="lab" id="lab-emarker">
+          <label class="labhead"><input type="checkbox" id="emarker"><div><b data-i18n="emarker"></b><span data-i18n="emarkerS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagHw"></span><span class="tag acc" data-i18n="tag5a"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="emarkerL"></ul></details>
+        </div>
+      </div>
+      <h4 class="labgrp" data-i18n="labRear"></h4>
+      <div class="labs">
+        <div class="lab" id="lab-be2nd">
+          <label class="labhead"><input type="checkbox" id="be2nd"><div><b data-i18n="be2nd"></b><span data-i18n="be2ndS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAC"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="be2ndL"></ul></details>
+        </div>
+        <div class="lab" id="lab-avs2pps">
+          <label class="labhead"><input type="checkbox" id="avs2pps"><div><b data-i18n="avs2pps"></b><span data-i18n="avs2ppsS"></span></div><span class="labtags"><span class="tag " data-i18n="tagBC"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="avs2ppsL"></ul></details>
+        </div>
+        <div class="lab" id="lab-eprAvs">
+          <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="eprAvsL"></ul></details>
+        </div>
+        <div class="lab" id="lab-fixc">
+          <label class="labhead"><input type="checkbox" id="fixc"><div><b data-i18n="fixc"></b><span data-i18n="fixcS"></span></div><span class="labtags"><span class="tag " data-i18n="tagNo12"></span></span></label>
+          <div class="labin inline" id="fixcIn"><input type="number" id="fixcV" min="5.1" max="20" step="0.1"><span class="muted">V</span>
+            <input type="number" id="fixcA" min="0.5" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="fixcRange"></span></div>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fixcL"></ul></details>
+        </div>
       </div>
     </div>
 
@@ -325,7 +369,7 @@ const T = {
     modeD: "d · Fixed only", modeDd: "Most compatible. No adjustable voltage.",
     fix12: "Provide 12 V Fixed when the charger has none",
     fix12d: "Made from PPS (preferred) or AVS. Skipped when all 7 PDO slots are used.",
-    secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000",
+    secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000", maxId5: "500–5000 (5A Lab)",
     hide: "Hide Fixed", hideD: "Hiding 15 V also removes AVS; hiding 20 V limits AVS to 15 V.",
     secProt: "Protection", ovp: "Over-voltage", uvp: "Under-voltage", uvpD: "not checked on PPS contracts", ocp: "Over-current",
     secLog: "Records", logPps: "Record device PPS requests",
@@ -344,25 +388,63 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Auto-recovered" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
     rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
-    feSt: ["waiting caps", "waiting Accept", "waiting PS_RDY", "ready", "non-PD", "Wait retry", "Soft Reset"],
+    feSt: ["waiting caps", "waiting Accept", "waiting PS_RDY", "ready", "non-PD", "Wait retry", "Soft Reset", "entering EPR", "entering EPR"],
+    stEpr: "Entering EPR",
     beSt: ["unattached", "attach", "vSafe5V", "startup", "sending caps", "waiting Request", "transition", "ready",
            "SinkTx wait", "Hard Reset", "recover", "non-PD", "discharge", "2nd handshake", "2nd handshake"],
-    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY",
+    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode",
+    note4: "Front · charger refused EPR: ", eprFail: ["unknown", "cable not EPR capable", "source not VCONN source", "EPR bit not set in RDO", "unable at this time", "EPR bit not set in 5V PDO"],
     merged: "adjusted ×", waitN: "charger Wait ×", txWait: "waited SinkTxOK ", txTimeout: "SinkTxNG, sent after timeout", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
     on: "on", off: "off", pps: "PPS log", fix12s: "12 V",
-    secLab: "Lab mode", labD: "Experimental features for testing chargers and devices.",
-    fe2nd: "Front (plug): tell the charger AVS is supported",
-    fe2ndD: "When the charger asks for Sink_Capabilities_Extended, reply with Sink Modes = AVS. Chargers with a second handshake then re-advertise AVS in place of PPS. Off: reply Not_Supported.",
-    be2nd: "Rear (receptacle): offer PPS first, AVS only after the device declares it",
-    be2ndD: "Imitates the charger second handshake: after the first contract, ask the device for Sink_Capabilities_Extended and re-advertise with AVS only if Sink Modes has AVS. Modes a/c only. Reset when the device is unplugged.",
+    secLab: "Lab mode", labD: "Experimental features. Each switch is independent unless noted; they may depend on specific chargers or devices and are not fully spec compliant.",
+    labFront: "Front · charger side", labRear: "Rear · device side", labMore: "Details",
+    tagHw: "HW revision", tag5a: "5 A / EPR", tagAC: "modes a/c", tagBC: "modes b/c", tagNeedEm: "needs E-Marker", tagNo12: "not with 12 V",
+    fe2nd: "AVS second handshake (front)", fe2ndS: "Tell the charger the converter supports AVS.",
+    fe2ndL: ["When the charger sends Get_Sink_Cap_Extended, reply with Sink_Capabilities_Extended, Sink Modes = AVS (bit 5).",
+      "Chargers with a second handshake then re-advertise, replacing PPS with SPR AVS.",
+      "Off: reply Not_Supported; the charger keeps PPS.",
+      "Record: \"AVS 2nd handshake · front declared\"."],
+    emarker: "Virtual 5 A E-Marker (with EPR)", emarkerS: "Answer the charger as a 50 V / 5 A / EPR cable to unlock 5 A and EPR.",
+    emarkerL: ["Presents Ra by driving PA2 low (plug B5/VCONN → 1 kΩ → PA2, hardware revision). On the v0.1 PCB only chargers that query the cable without Ra will ask.",
+      "Answers SOP' Discover Identity: passive USB-C to USB-C cable, 50 V, 5 A, EPR capable.",
+      "Current limit up to 5 A, OCP up to 5.5 A. The device-side cable must be rated for 5 A — the converter cannot check it.",
+      "If the charger supports EPR, the front enters EPR mode, reads EPR capabilities (including EPR AVS) and sends EPR_KeepAlive every 250 ms. It never requests more than 20 V.",
+      "The front starts right at power-up (no 300 ms debug window); reflash with power-off erase.",
+      "Takes effect when the charger is plugged in — replug after changing it."],
+    be2nd: "AVS second handshake (rear)", be2ndS: "Offer PPS first; AVS only after the device declares it.",
+    be2ndL: ["First negotiation offers Fixed + PPS only.",
+      "200 ms after the contract, query the device's Sink_Capabilities_Extended.",
+      "Re-advertise Fixed + AVS only if Sink Modes has AVS; otherwise (or no reply) keep PPS.",
+      "Restarts when the device is unplugged (not on Hard Reset, to avoid loops)."],
+    avs2pps: "AVS as PPS", avs2ppsS: "Offer the charger's native AVS to the device as PPS.",
+    avs2ppsL: ["PPS from 5 V to the AVS maximum; current is the lower of the two AVS ranges.",
+      "Requests below 9 V are rejected (AVS starts at 9 V).",
+      "Voltage is rounded to the nearest 100 mV: 12.34 V → 12.3 V, 12.36 V → 12.4 V.",
+      "AVS has no current limiting, so the device's PPS current limit is not enforced by the charger (OCP still applies).",
+      "A charger PPS with the same maximum voltage takes precedence."],
+    eprAvs: "EPR AVS 15–20 V as SPR AVS", eprAvsS: "The device's SPR AVS takes 15–20 V from the charger's EPR AVS, up to 5 A.",
+    eprAvsL: ["Active when the front is in EPR mode and the charger has an EPR AVS covering 15–20 V.",
+      "15.1–20 V: request EPR AVS; current min(5 A, PDP ÷ voltage).",
+      "Exactly 9 V or 15 V: served by the charger's Fixed 9 V / 15 V.",
+      "Any other 9–15 V request is rejected.",
+      "Takes precedence over PPS or SPR AVS as the AVS source. Never above 20 V."],
+    fixc: "Custom Fixed", fixcS: "Add one non-standard Fixed voltage and current, made from PPS.", fixcRange: "5.1–20.0 V · 0.5–5 A",
+    fixcL: ["Source: the PPS covering the voltage (highest current first); without PPS, the charger's SPR AVS (9 V and up only).",
+      "Current = min(setting, source current, current limit).",
+      "Placed among the Fixed PDOs by voltage. Not offered if the charger already has that Fixed voltage, it exceeds the max voltage, or all 7 PDO slots are used.",
+      "The front requests that voltage as PPS with the PPS maximum current as its limit; OCP protects against overload.",
+      "Cannot be used together with 12 V conversion — turning one on turns the other off."],
+    fixcOff12: "12 V conversion was turned off (it cannot be used with Custom Fixed).",
+    fix12OffC: "Custom Fixed was turned off (it cannot be used with 12 V conversion).",
+    fixcs: "Fixed",
     avs2: ["", "2nd handshake: waiting", "2nd handshake: device has no AVS", "2nd handshake: AVS given"],
     stQuery: "2nd handshake", fe2s: "front 2nd", be2s: "rear 2nd", a2ps: "AVS→PPS",
-    avs2pps: "Rear: offer the charger's AVS as PPS",
-    avs2ppsD: "Adds a PPS APDO from 5 V to the AVS maximum, served by the charger's AVS. AVS has no range below 9 V, so requests under 9 V are rejected; voltages are rounded to the nearest 100 mV (PPS 20 mV → AVS 100 mV). AVS has no current limiting (OCP still applies). Modes b/c only; a charger PPS with the same maximum voltage takes precedence.",
+    em: "5A E-Marker", eprs: "EPR AVS",
+    emarkerWarn: "5 A only works if the charger asks for the cable.\n\nThe device-side cable must be rated for 5 A — the converter cannot check it. The current limit can then be set up to 5 A.\n\nEnable?",
     avs2Ev: "AVS 2nd handshake", avs2Fe: "Front · replied Sink_Capabilities_Extended", avs2Be: "Rear · device Sink Modes",
     avs2Yes: "AVS supported → AVS offered", avs2No: "no AVS → PPS kept", avs2None: "Rear · device did not reply → PPS kept",
   },
@@ -385,7 +467,7 @@ const T = {
     modeD: "d · 只有 Fixed", modeDd: "相容性最好，不提供可調電壓。",
     fix12: "充電器沒有 12V 時提供 12V Fixed",
     fix12d: "由 PPS（優先）或 AVS 轉換；7 個 PDO 位置已滿時不轉換。",
-    secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000",
+    secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000", maxId5: "500–5000（5A Lab）",
     hide: "隱藏 Fixed", hideD: "隱藏 15V 會同時取消 AVS；隱藏 20V 會讓 AVS 只到 15V。",
     secProt: "保護", ovp: "過壓", uvp: "欠壓", uvpD: "PPS 合約時不檢查", ocp: "過流",
     secLog: "記錄", logPps: "記錄設備的 PPS 請求",
@@ -404,25 +486,63 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "已自動恢復" },
+          13: "AVS 二次握手", 14: "協議事件" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
     rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
-    feSt: ["等能力", "等 Accept", "等 PS_RDY", "就緒", "非 PD", "Wait 重試", "Soft Reset 中"],
+    feSt: ["等能力", "等 Accept", "等 PS_RDY", "就緒", "非 PD", "Wait 重試", "Soft Reset 中", "進入 EPR 中", "進入 EPR 中"],
+    stEpr: "進入 EPR",
     beSt: ["未插入", "偵測中", "等 5V", "啟動", "發送能力", "等請求", "轉換中", "就緒",
            "SinkTx 等待", "Hard Reset", "恢復中", "非 PD", "放電中", "二次握手", "二次握手"],
-    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回",
+    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式",
+    note4: "前端 · 充電器拒絕進入 EPR：", eprFail: ["原因不明", "線材不支援 EPR", "充電器無法供 VCONN", "RDO 未設 EPR 位", "暫時無法進入", "5V PDO 未設 EPR 位"],
     merged: "微調 ×", waitN: "充電器 Wait ×", txWait: "等 SinkTxOK ", txTimeout: "SinkTxNG 逾時仍送出", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
     on: "開", off: "關", pps: "PPS 記錄", fix12s: "12V 轉換",
-    secLab: "Lab 模式", labD: "實驗功能，用於測試充電器與設備的行為。",
-    fe2nd: "前端（公頭）：向充電器宣告支援 AVS",
-    fe2ndD: "充電器查詢 Sink_Capabilities_Extended 時回覆 Sink Modes = AVS。支援二次握手的充電器會重新廣播，用 AVS 取代 PPS。關閉時回覆 Not_Supported。",
-    be2nd: "後端（母座）：先給 PPS，設備宣告支援 AVS 後才給 AVS",
-    be2ndD: "模擬充電器的二次握手：第一次協商後向設備查詢 Sink_Capabilities_Extended，Sink Modes 有 AVS 才重新廣播 AVS。只在方式 a/c 有作用；設備拔出後重新開始。",
+    secLab: "Lab 模式", labD: "實驗功能。除非另外註明，每一項都可以單獨開關；可能依賴特定充電器或設備，也不完全符合規範。",
+    labFront: "前端 · 充電器側", labRear: "後端 · 設備側", labMore: "詳細說明",
+    tagHw: "需硬體改版", tag5a: "5A / EPR", tagAC: "方式 a/c", tagBC: "方式 b/c", tagNeedEm: "需 E-Marker", tagNo12: "與 12V 轉換互斥",
+    fe2nd: "AVS 二次握手（前端）", fe2ndS: "向充電器宣告轉換器支援 AVS。",
+    fe2ndL: ["充電器送 Get_Sink_Cap_Extended 時，回覆 Sink_Capabilities_Extended，Sink Modes = AVS（bit5）。",
+      "支援二次握手的充電器會重新廣播，用 SPR AVS 取代 PPS。",
+      "關閉時回覆 Not_Supported，充電器維持 PPS。",
+      "記錄：「AVS 二次握手 · 前端已宣告」。"],
+    emarker: "虛擬 5A E-Marker（含 EPR）", emarkerS: "以 50V / 5A / EPR 線材的身分回覆充電器，取得 5A 與 EPR 能力。",
+    emarkerL: ["PA2 拉低呈現 Ra（公頭 B5/VCONN 經 1kΩ 接 PA2，需硬體改版）。v0.1 板上只有不偵測 Ra 也會查詢線材的充電器才會來問。",
+      "回覆 SOP' Discover Identity：無源 USB-C 對 USB-C 線材、50V、5A、支援 EPR。",
+      "電流上限可設到 5A、OCP 到 5.5A。設備端線材必須能承受 5A，轉換器無法檢查。",
+      "充電器支援 EPR 時，前端進入 EPR 模式，讀取 EPR 能力（含 EPR AVS），之後每 250ms 送 EPR_KeepAlive；永遠只請求 20V 以下。",
+      "開啟後上電立即接管前端（沒有 300ms 偵錯窗口），重燒請用斷電擦除。",
+      "插上充電器時才生效，修改後請拔插充電器。"],
+    be2nd: "AVS 二次握手（後端）", be2ndS: "先給設備 PPS，設備宣告支援 AVS 後才給 AVS。",
+    be2ndL: ["第一次協商只提供 Fixed + PPS。",
+      "合約建立 200ms 後，查詢設備的 Sink_Capabilities_Extended。",
+      "Sink Modes 有 AVS 才重新廣播 Fixed + AVS；沒有或不回覆就維持 PPS。",
+      "設備拔出後重新開始（Hard Reset 不會重來，避免循環）。"],
+    avs2pps: "AVS 轉 PPS", avs2ppsS: "把充電器的原生 AVS 當作 PPS 提供給設備。",
+    avs2ppsL: ["提供 5V 到 AVS 最高電壓的 PPS，電流取 AVS 兩段中較小者。",
+      "請求低於 9V 直接拒絕（AVS 從 9V 開始）。",
+      "電壓四捨五入到 100mV：12.34V → 12.3V，12.36V → 12.4V。",
+      "AVS 沒有限流功能，設備的 PPS 電流上限不會由充電器執行（OCP 仍有效）。",
+      "充電器已有相同最高電壓的 PPS 時，以充電器的為準。"],
+    eprAvs: "EPR AVS 15–20V 當作 SPR AVS", eprAvsS: "設備的 SPR AVS 在 15–20V 由充電器的 EPR AVS 供電，最高 5A。",
+    eprAvsL: ["前端已進入 EPR 模式，且充電器有覆蓋 15–20V 的 EPR AVS 時生效。",
+      "15.1–20V：請求 EPR AVS，電流 min(5A, PDP ÷ 電壓)。",
+      "剛好 9V、15V：改走充電器的 Fixed 9V / 15V。",
+      "其他 9–15V 請求一律拒絕。",
+      "優先於 PPS 平移或 SPR AVS 作為 AVS 來源；永遠不超過 20V。"],
+    fixc: "自訂 Fixed", fixcS: "增加一個非標準的 Fixed 電壓與電流，由 PPS 轉換。", fixcRange: "5.1–20.0V · 0.5–5A",
+    fixcL: ["來源：覆蓋該電壓的 PPS（電流大者優先）；沒有 PPS 時用充電器的 SPR AVS（僅 9V 以上）。",
+      "電流 = min(設定值, 來源電流, 電流上限)。",
+      "依電壓排在 Fixed 之間。充電器已有同電壓的 Fixed、超過最高電壓、或 7 個 PDO 位置已滿時不提供。",
+      "前端以 PPS 請求該電壓，限流為 PPS 最大電流；過載由 OCP 保護。",
+      "與「12V 轉換」互斥：開啟其中一個會自動關閉另一個。"],
+    fixcOff12: "已關閉 12V 轉換（與自訂 Fixed 互斥）。",
+    fix12OffC: "已關閉自訂 Fixed（與 12V 轉換互斥）。",
+    fixcs: "Fixed",
     avs2: ["", "二次握手：等待查詢", "二次握手：設備不支援 AVS", "二次握手：已給 AVS"],
     stQuery: "二次握手中", fe2s: "前端二次握手", be2s: "後端二次握手", a2ps: "AVS 轉 PPS",
-    avs2pps: "後端：把充電器的 AVS 當作 PPS 提供",
-    avs2ppsD: "增加一個 5V 到 AVS 最高電壓的 PPS，實際由充電器的 AVS 供電。AVS 沒有 9V 以下的範圍，請求低於 9V 直接拒絕；電壓四捨五入到 100mV（PPS 20mV → AVS 100mV）。AVS 沒有限流功能（OCP 仍有效）。只在方式 b/c 有作用；充電器已有相同最高電壓的 PPS 時以充電器的為準。",
+    em: "5A E-Marker", eprs: "EPR AVS",
+    emarkerWarn: "只有充電器來查詢線材時才會拿到 5A。\n\n設備端的線材必須能承受 5A，轉換器無法檢查。開啟後電流上限可設到 5A。\n\n確定開啟？",
     avs2Ev: "AVS 二次握手", avs2Fe: "前端 · 已回覆 Sink_Capabilities_Extended", avs2Be: "後端 · 設備 Sink Modes",
     avs2Yes: "支援 AVS → 改為廣播 AVS", avs2No: "不支援 AVS → 維持 PPS", avs2None: "後端 · 設備沒有回覆 → 維持 PPS",
   },
@@ -448,6 +568,7 @@ function crc32(bytes) { let c = 0xFFFFFFFF; for (const b of bytes) c = CRC_TABLE
 
 /* PDO 解码 */
 function decodePdo(raw) {
+  if (raw === 0) return { type: "—", empty: true, min: 0, max: 0, ma: 0 };   /* EPR 能力表 SPR 位置的空位 */
   const top = raw >>> 30;
   if (top === 0) return { type: "Fixed", min: ((raw >>> 10) & 0x3FF) * 50, max: ((raw >>> 10) & 0x3FF) * 50, ma: (raw & 0x3FF) * 10 };
   if (top === 1) return { type: "Battery", min: ((raw >>> 10) & 0x3FF) * 50, max: ((raw >>> 20) & 0x3FF) * 50, mw: (raw & 0x3FF) * 250 };
@@ -455,13 +576,17 @@ function decodePdo(raw) {
   const sub = (raw >>> 28) & 3;
   if (sub === 0) return { type: "PPS", min: ((raw >>> 8) & 0xFF) * 100, max: ((raw >>> 17) & 0xFF) * 100, ma: (raw & 0x7F) * 50 };
   if (sub === 2) { const i20 = (raw & 0x3FF) * 10; return { type: "AVS", min: 9000, max: i20 ? 20000 : 15000, ma: ((raw >>> 10) & 0x3FF) * 10, ma20: i20 }; }
-  return { type: "EPR AVS", min: 0, max: 0, ma: 0 };
+  if (sub === 1) { const pdp = raw & 0xFF, max = ((raw >>> 17) & 0x1FF) * 100; return { type: "EPR AVS", min: ((raw >>> 8) & 0xFF) * 100, max, pdp, ma: Math.min(5000, Math.floor(pdp * 1e6 / max)) }; }
+  return { type: "?", min: 0, max: 0, ma: 0 };
 }
 function pdoVolt(p) {
+  if (p.empty) return "";
   if (p.type === "Fixed") return fmtV(p.max);
   return `${(p.min / 1000).toFixed(1)}–${(p.max / 1000).toFixed(1)} V`;
 }
 function pdoCur(p) {
+  if (p.empty) return "";
+  if (p.type === "EPR AVS") return `${p.pdp} W`;
   if (p.type === "AVS") return p.ma20 && p.ma20 !== p.ma ? `${fmtA(p.ma)} / ${fmtA(p.ma20)}` : fmtA(p.ma);
   if (p.type === "Battery") return (p.mw / 1000).toFixed(1) + " W";
   return fmtA(p.ma ?? 0);
@@ -473,7 +598,7 @@ function decodeRdo(rdo, caps) {
   const p = caps && caps[pos - 1] ? decodePdo(caps[pos - 1]) : null;
   const type = p ? p.type : "?";
   if (type === "PPS") return { pos, type, mv: ((rdo >>> 9) & 0xFFF) * 20, ma: (rdo & 0x7F) * 50 };
-  if (type === "AVS") return { pos, type, mv: ((rdo >>> 9) & 0xFFF) * 25, ma: (rdo & 0x7F) * 50 };
+  if (type === "AVS" || type === "EPR AVS") return { pos, type, mv: ((rdo >>> 9) & 0xFFF) * 25, ma: (rdo & 0x7F) * 50 };
   return { pos, type, mv: p ? p.max : 0, ma: ((rdo >>> 10) & 0x3FF) * 10 };
 }
 const rdoText = (r) => r ? `#${r.pos} ${r.type} ${r.mv ? fmtV(r.mv) : ""} ${fmtA(r.ma)}` : t("none");
@@ -534,6 +659,10 @@ async function refreshStatus() {
   state.status = { fe: a[0], be: a[1], flags: a[2], vbus: u16(a, 3), ibus: u16(a, 5), feRdo: u32(a, 7), beRdo: u32(a, 11), beMv: u16(a, 15),
     cc: state.info && state.info.proto >= 3 ? u16(a, 18 + n * 4) : null };
   state.frontCaps = Array.from({ length: n }, (_, i) => u32(a, 18 + i * 4));
+  if (state.info && state.info.proto >= 4) {
+    const e = await request(0x02, [2]);     /* EPR 能力表 8 号起 */
+    for (let i = 0; i < e[0]; i++) state.frontCaps.push(u32(e, 1 + i * 4));
+  }
   const b = await request(0x02, [1]);
   const m = b[0];
   state.rearCaps = Array.from({ length: m }, (_, i) => u32(b, 1 + i * 4));
@@ -563,7 +692,7 @@ function setTab(name) {
 function feState(s) {
   if (s.flags & 1) return [t("stLegacy"), "warn"];
   return [[t("stWait"), ""], [t("stNeg"), "acc"], [t("stNeg"), "acc"], [t("stReady"), "ok"], [t("stLegacy"), "warn"],
-    [t("stNeg"), "acc"], [t("stReset"), "warn"]][s.fe] ?? [String(s.fe), ""];
+    [t("stNeg"), "acc"], [t("stReset"), "warn"], [t("stEpr"), "acc"], [t("stEpr"), "acc"]][s.fe] ?? [String(s.fe), ""];
 }
 function beState(s) {
   if (!(s.flags & 2)) return [t("stNone"), ""];
@@ -604,7 +733,7 @@ function renderStatus() {
   $("feBig").textContent = fr ? fmtV(fr.mv) : (s.flags & 1) ? "5.0 V" : "—";
   /* CC 电压：Rp 3A ≥ 1.23V = SinkTxOK，1.5A = SinkTxNG（PD 3.0 冲突避免） */
   const cc = s.cc != null && !(s.flags & 1) ? ` · CC ${(s.cc / 1000).toFixed(2)} V ${s.cc >= 1230 ? "TxOK" : "TxNG"}` : "";
-  $("feSub").textContent = (fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract")) + cc;
+  $("feSub").textContent = (s.flags & 128 ? "EPR · " : "") + (fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract")) + cc;
 
   setTag("swTag", (s.flags & 4) ? [t("swOn"), "ok"] : [t("swOff"), ""]);
   $("vbusBig").textContent = fmtV(s.vbus);
@@ -624,12 +753,14 @@ function renderStatus() {
 
 /* ================= settings ================= */
 function cfgFromBytes(p) {
-  return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0 };
+  return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0,
+    fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0 };
 }
 function cfgToBytes(c) {
   const b = new Uint8Array(16);
   b[0] = c.mode; b[1] = c.hide; b[2] = c.maxMv & 0xFF; b[3] = c.maxMv >> 8; b[4] = c.maxMa & 0xFF; b[5] = c.maxMa >> 8;
   b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
+  b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0;
   return Array.from(b);
 }
 function readForm() {
@@ -638,7 +769,8 @@ function readForm() {
   const radio = (name) => Number((document.querySelector(`input[name=${name}]:checked`) || { value: 0 }).value);
   return { mode: radio("mode"), hide, maxMv: radio("maxMv"), maxMa: Math.round(Number($("maxMa").value) / 50) * 50,
     ovp: Number($("ovp").value), uvp: Number($("uvp").value), ocpMa: Number($("ocpMa").value), ocpMs: Number($("ocpMs").value),
-    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) | ($("avs2pps").checked ? 16 : 0) };
+    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) | ($("avs2pps").checked ? 16 : 0) | ($("emarker").checked ? 32 : 0) | ($("eprAvs").checked ? 64 : 0) | ($("fixc").checked ? 128 : 0),
+    fixDv: Math.round(Number($("fixcV").value) * 10) || 0, fixMa50: Math.round(Number($("fixcA").value) * 20) || 0 };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -646,7 +778,9 @@ function writeForm(c) {
   document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
-  $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16);
+  $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
+  $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
+  applyCurLimits(); applyLabDeps();
   updateDirty();
 }
 const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
@@ -731,6 +865,7 @@ async function loadLog(session) {
 function pdoChips(caps, src, fcaps) {
   return `<div class="pdos">` + caps.map((raw, i) => {
     const p = decodePdo(raw);
+    if (p.empty) return "";
     const k = src ? src[i] : 0;
     const fp = k && fcaps[k - 1] ? decodePdo(fcaps[k - 1]) : null;
     const from = fp ? ` <i>← #${k}${fp.type !== p.type ? " " + fp.type : ""}</i>` : "";
@@ -739,7 +874,7 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : ""].filter(Boolean).join(", ");
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : ""].filter(Boolean).join(", ");
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` +
     (flags ? ` · ${flags}` : "");
 }
@@ -762,7 +897,7 @@ function decodeRecords(records) {
         const src = r.type === 12 ? Array.from(d.subarray(n * 4, n * 5)) : null;
         if (r.type === 2) fcaps = caps; else rcaps = caps;
         html = pdoChips(caps, src, fcaps);
-        text = caps.map((raw) => { const p = decodePdo(raw); return `${p.type} ${pdoVolt(p)} ${pdoCur(p)}`; }).join(" · ");
+        text = caps.filter((raw) => raw !== 0).map((raw) => { const p = decodePdo(raw); return `${p.type} ${pdoVolt(p)} ${pdoCur(p)}`; }).join(" · ");
         cat = "caps";
         break; }
       case 3: text = fmtA(u16(d, 0)); cls = "warn"; break;
@@ -784,7 +919,11 @@ function decodeRecords(records) {
         text = `${t("side")[d[0]] ?? d[0]} · ${t("rst")[d[1]] ?? d[1]}`;
         if (d.length >= 5) text += ` · ${t("stateAt")} ${(d[0] ? t("beSt") : t("feSt"))[d[2]] ?? d[2]} · ${t("rxErr")} ${u16(d, 3)}`;
         cls = "warn"; cat = "bad"; break; }
-      case 14: text = d[1] === 1 ? t("note1") : `${t("side")[d[0]] ?? d[0]} · ${d[1]}`; cls = "warn"; cat = "bad"; break;
+      case 14: {
+        const code = d[1], x = d.length >= 3 ? d[2] : 0;
+        text = code === 4 ? `${t("note4")}${t("eprFail")[x] ?? x}` : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
+        const info = code === 2 || code === 3 || code === 5;
+        cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
       case 11: text = cfgText(cfgFromBytes(d)); cls = "acc"; break;
       case 13: {
         const modes = "0x" + d[2].toString(16).toUpperCase().padStart(2, "0");
@@ -839,6 +978,9 @@ function exportLog() {
 function applyI18n() {
   document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-list]").forEach((el) => {
+    el.replaceChildren(...(t(el.dataset.i18nList) || []).map((x) => Object.assign(document.createElement("li"), { textContent: x })));
+  });
   $("lang").value = lang;
   renderAll();
 }
@@ -857,6 +999,26 @@ $("btnConnect").onclick = connect;
 $("view-settings").addEventListener("input", updateDirty);
 $("view-settings").addEventListener("change", updateDirty);
 $("logPps").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("logPpsWarn"))) { e.target.checked = false; updateDirty(); } });
+/* 5A E-Marker：電流上限 5A、OCP 5.5A；關閉時收回到 3A / 5A */
+function applyCurLimits() {
+  const a5 = $("emarker").checked, mi = $("maxMa"), oi = $("ocpMa");
+  mi.max = a5 ? 5000 : 3000; oi.max = a5 ? 5500 : 5000;
+  if (Number(mi.value) > Number(mi.max)) mi.value = mi.max;
+  if (Number(oi.value) > Number(oi.max)) oi.value = oi.max;
+  $("maxIdTxt").dataset.i18n = a5 ? "maxId5" : "maxId"; $("maxIdTxt").textContent = t($("maxIdTxt").dataset.i18n);
+  applyLabDeps();
+}
+/* Lab 相依：EPR AVS 需要 E-Marker；自訂 Fixed 才顯示輸入框 */
+function applyLabDeps() {
+  const a5 = $("emarker").checked;
+  $("eprAvs").disabled = !a5; if (!a5) $("eprAvs").checked = false;
+  $("lab-eprAvs").classList.toggle("off", !a5);
+  $("fixcIn").hidden = !$("fixc").checked;
+}
+/* 自訂 Fixed 與 12V 轉換互斥 */
+$("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
+$("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
+$("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });
 $("btnApply").onclick = () => applyCfg(false);
 $("btnRevert").onclick = () => state.cfg && writeForm(state.cfg);
 $("btnDefaults").onclick = () => { if (confirm(t("defaultsConfirm"))) applyCfg(true); };

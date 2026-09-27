@@ -26,7 +26,17 @@ typedef enum
 #define CFG_FE_AVS_2ND      (1u << 2)   /* Lab：充电器查询 Sink_Capabilities_Extended 时声明支持 AVS，触发二次握手 */
 #define CFG_BE_AVS_2ND      (1u << 3)   /* Lab：后端先给 PPS，设备声明支持 AVS 后才给 AVS（模拟二次握手） */
 #define CFG_AVS_TO_PPS      (1u << 4)   /* Lab：充电器原生 AVS 转为后端 PPS（5~9V 拒绝，电压四舍五入到 100mV） */
-#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND | CFG_AVS_TO_PPS)
+#define CFG_FE_EMARKER      (1u << 5)   /* Lab：前端应答充电器的 SOP' 查询，扮演 5A 线材；电流上限可设到 5A */
+#define CFG_EPR_AVS         (1u << 6)   /* Lab（需 CFG_FE_EMARKER）：前端 EPR AVS 的 15~20V 作为后端 SPR AVS 15~20V；9V/15V 走 Fixed */
+#define CFG_FIX_CUSTOM      (1u << 7)   /* Lab：自订非标准 Fixed（fix_dv/fix_ma50），由 PPS（优先）或 AVS 提供；与 CFG_FIX12 互斥 */
+#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND | CFG_AVS_TO_PPS | CFG_FE_EMARKER | \
+                             CFG_EPR_AVS | CFG_FIX_CUSTOM)
+#define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */
+#define CFG_FIX_DV_MAX      200
+#define CFG_MAX_MA          3000
+#define CFG_MAX_MA_5A       5000        /* CFG_FE_EMARKER 时 */
+#define CFG_OCP_MAX_MA      5000
+#define CFG_OCP_MAX_MA_5A   5500        /* 电流检测约 5.8A 饱和 */
 
 /* 上位机协议直接收发此结构（小端，16 字节） */
 typedef struct __attribute__((packed))
@@ -40,7 +50,9 @@ typedef struct __attribute__((packed))
     uint16_t ocp_ma;        /* 500 ~ 5000 */
     uint16_t ocp_ms;        /* 1 ~ 1000 */
     uint8_t  flags;         /* CFG_* 标志 */
-    uint8_t  reserved[3];
+    uint8_t  fix_dv;        /* CFG_FIX_CUSTOM：电压，100mV 单位（51 ~ 200） */
+    uint8_t  fix_ma50;      /* CFG_FIX_CUSTOM：电流，50mA 单位（10 ~ 100） */
+    uint8_t  reserved;
 } cfg_t;
 
 void cfg_init(void);                    /* 从 Flash 读取，无效则用默认值 */
