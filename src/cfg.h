@@ -25,7 +25,8 @@ typedef enum
 #define CFG_LOG_PPS         (1u << 1)   /* 记录设备的 PPS 请求（默认不记录：PPS 会频繁调压） */
 #define CFG_FE_AVS_2ND      (1u << 2)   /* Lab：充电器查询 Sink_Capabilities_Extended 时声明支持 AVS，触发二次握手 */
 #define CFG_BE_AVS_2ND      (1u << 3)   /* Lab：后端先给 PPS，设备声明支持 AVS 后才给 AVS（模拟二次握手） */
-#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND)
+#define CFG_AVS_TO_PPS      (1u << 4)   /* Lab：充电器原生 AVS 转为后端 PPS（5~9V 拒绝，电压四舍五入到 100mV） */
+#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND | CFG_AVS_TO_PPS)
 
 /* 上位机协议直接收发此结构（小端，16 字节） */
 typedef struct __attribute__((packed))

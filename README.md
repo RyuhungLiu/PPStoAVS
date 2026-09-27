@@ -79,6 +79,13 @@ in place of PPS when the sink's Sink Modes has the AVS bit (bit 5). Two independ
 - **Rear (receptacle)** — imitate that charger: offer Fixed + PPS first; after the first contract, query the device
   and re-advertise with AVS only if it declares AVS support. Applies to modes a/c; restarts when the device is unplugged.
 
+### Lab mode: AVS as PPS
+
+Offers the charger's native SPR AVS to the device as a PPS APDO from 5 V to the AVS maximum (modes b/c; a charger
+PPS with the same maximum voltage takes precedence). Requests below 9 V are rejected, since AVS starts at 9 V.
+Voltages are rounded to the nearest 100 mV, e.g. PPS 12.34 V → AVS 12.3 V, 12.36 V → 12.4 V. The current is the lower of
+the two AVS ranges. AVS has no current limiting, so the PPS current limit is not enforced by the charger (OCP still applies).
+
 ## Host tool
 
 Plug the front Type-C into a PC (no charger needed; the board runs from the PC's 5 V) and open

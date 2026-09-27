@@ -151,6 +151,8 @@ static int8_t find_native_avs(const pdo_t *c, uint8_t n)
  *  - 个数 ≤ 7，优先级 Fixed > AVS > PPS（保留最高电压高的）> 12V 转换
  *  - 顺序：Fixed（电压升序）、AVS、PPS（最高电压升序）
  *  - Lab 后端二次握手：确认设备支持 AVS 之前不给 AVS、改给全部 PPS
+ *  - Lab AVS 转 PPS（CFG_AVS_TO_PPS，模式 b/c）：充电器原生 AVS 另外提供为 5V~AVS 最高电压的 PPS，
+ *    电流取两段 AVS 电流较小者；同一最高电压已有充电器 PPS 时以充电器 PPS 为准
  */
 static void build_back_caps(void)
 {
@@ -279,6 +281,15 @@ static void build_back_caps(void)
                 insert_sorted(pps, &np, &e);
             else if (e.ma > pps[k].ma || (e.ma == pps[k].ma && e.min_mv < pps[k].min_mv))
                 pps[k] = e;
+        }
+        int8_t nat = find_native_avs(fc, n);
+        if ((c->flags & CFG_AVS_TO_PPS) && nat >= 0 && fc[nat].max_mv > 9000)
+        {
+            const pdo_t *a = &fc[nat];
+            uint16_t mv = min_u16(a->max_mv, c->max_mv);
+            uint16_t ma = (mv > 15000 && a->max_ma_20v) ? min_u16(a->max_ma, a->max_ma_20v) : a->max_ma;
+            back_entry_t e = {PPS_PDO, SPR_AVS_PDO, nat + 1, 5000, mv, min_u16(ma, c->max_ma), 0};
+            insert_sorted(pps, &np, &e);    /* 同一最高电压已有充电器 PPS 则不插入 */
         }
         uint8_t room = PD_MAX_DATA_OBJS - nf - has_avs;
         if (np > room)
@@ -522,6 +533,13 @@ static bool map_back_request(uint32_t rdo)
         op_ma = pd_rdo_avs_ma(rdo);
         if (mv < e->min_mv || mv > e->mv || op_ma > e->ma || op_ma == 0)
             return false;
+        if (e->fe_type == SPR_AVS_PDO)
+        {
+            /* Lab AVS 转 PPS：AVS 100mV 步进，四舍五入；AVS 没有 9V 以下，拒绝 */
+            mv = (mv + 50) / 100 * 100;
+            if (mv < 9000)
+                return false;
+        }
         break;
 
     case SPR_AVS_PDO:

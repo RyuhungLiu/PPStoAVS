@@ -258,6 +258,7 @@ td.nw { white-space: nowrap; }
       <div style="display:grid;gap:12px">
         <label class="check"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndD"></span></div></label>
         <label class="check"><input type="checkbox" id="be2nd"><div><b data-i18n="be2nd"></b><span data-i18n="be2ndD"></span></div></label>
+        <label class="check"><input type="checkbox" id="avs2pps"><div><b data-i18n="avs2pps"></b><span data-i18n="avs2ppsD"></span></div></label>
       </div>
     </div>
 
@@ -359,7 +360,9 @@ const T = {
     be2nd: "Rear (receptacle): offer PPS first, AVS only after the device declares it",
     be2ndD: "Imitates the charger second handshake: after the first contract, ask the device for Sink_Capabilities_Extended and re-advertise with AVS only if Sink Modes has AVS. Modes a/c only. Reset when the device is unplugged.",
     avs2: ["", "2nd handshake: waiting", "2nd handshake: device has no AVS", "2nd handshake: AVS given"],
-    stQuery: "2nd handshake", fe2s: "front 2nd", be2s: "rear 2nd",
+    stQuery: "2nd handshake", fe2s: "front 2nd", be2s: "rear 2nd", a2ps: "AVS→PPS",
+    avs2pps: "Rear: offer the charger's AVS as PPS",
+    avs2ppsD: "Adds a PPS APDO from 5 V to the AVS maximum, served by the charger's AVS. AVS has no range below 9 V, so requests under 9 V are rejected; voltages are rounded to the nearest 100 mV (PPS 20 mV → AVS 100 mV). AVS has no current limiting (OCP still applies). Modes b/c only; a charger PPS with the same maximum voltage takes precedence.",
     avs2Ev: "AVS 2nd handshake", avs2Fe: "Front · replied Sink_Capabilities_Extended", avs2Be: "Rear · device Sink Modes",
     avs2Yes: "AVS supported → AVS offered", avs2No: "no AVS → PPS kept", avs2None: "Rear · device did not reply → PPS kept",
   },
@@ -417,7 +420,9 @@ const T = {
     be2nd: "後端（母座）：先給 PPS，設備宣告支援 AVS 後才給 AVS",
     be2ndD: "模擬充電器的二次握手：第一次協商後向設備查詢 Sink_Capabilities_Extended，Sink Modes 有 AVS 才重新廣播 AVS。只在方式 a/c 有作用；設備拔出後重新開始。",
     avs2: ["", "二次握手：等待查詢", "二次握手：設備不支援 AVS", "二次握手：已給 AVS"],
-    stQuery: "二次握手中", fe2s: "前端二次握手", be2s: "後端二次握手",
+    stQuery: "二次握手中", fe2s: "前端二次握手", be2s: "後端二次握手", a2ps: "AVS 轉 PPS",
+    avs2pps: "後端：把充電器的 AVS 當作 PPS 提供",
+    avs2ppsD: "增加一個 5V 到 AVS 最高電壓的 PPS，實際由充電器的 AVS 供電。AVS 沒有 9V 以下的範圍，請求低於 9V 直接拒絕；電壓四捨五入到 100mV（PPS 20mV → AVS 100mV）。AVS 沒有限流功能（OCP 仍有效）。只在方式 b/c 有作用；充電器已有相同最高電壓的 PPS 時以充電器的為準。",
     avs2Ev: "AVS 二次握手", avs2Fe: "前端 · 已回覆 Sink_Capabilities_Extended", avs2Be: "後端 · 設備 Sink Modes",
     avs2Yes: "支援 AVS → 改為廣播 AVS", avs2No: "不支援 AVS → 維持 PPS", avs2None: "後端 · 設備沒有回覆 → 維持 PPS",
   },
@@ -633,7 +638,7 @@ function readForm() {
   const radio = (name) => Number((document.querySelector(`input[name=${name}]:checked`) || { value: 0 }).value);
   return { mode: radio("mode"), hide, maxMv: radio("maxMv"), maxMa: Math.round(Number($("maxMa").value) / 50) * 50,
     ovp: Number($("ovp").value), uvp: Number($("uvp").value), ocpMa: Number($("ocpMa").value), ocpMs: Number($("ocpMs").value),
-    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) };
+    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) | ($("avs2pps").checked ? 16 : 0) };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -641,7 +646,7 @@ function writeForm(c) {
   document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
-  $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8);
+  $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16);
   updateDirty();
 }
 const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
@@ -734,7 +739,7 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : ""].filter(Boolean).join(", ");
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : ""].filter(Boolean).join(", ");
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` +
     (flags ? ` · ${flags}` : "");
 }
