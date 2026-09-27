@@ -47,7 +47,7 @@
 
 /* ---------------- 产品能力与保护 ---------------- */
 /* 最高电压、电流上限、OVP/UVP 容差、OCP 由上位机设置（cfg.c，默认 20V / 3A / ±5% / 3.5A 50ms） */
-#define FW_VERSION              0x0020  /* 0xMMmp：v0.2.0 */
+#define FW_VERSION              0x0030  /* 0xMMmp：v0.3.0 */
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */
