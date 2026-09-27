@@ -65,4 +65,17 @@ bash scripts/setup_sdk.sh
 ```
 
 Output: `build/PPStoAVS.hex` / `.bin`. Prebuilt images are attached to the GitHub release.
-Flash with WCH-Link on the DIO test point (PA3/SWIO); the debugger must reset the chip before connecting.
+
+## Flashing
+
+The chip has no factory bootloader (no USB/UART ISP); use WCH-LinkE in single-wire mode:
+SWDIO → DIO test point (PA3/SWIO), GND → GND, WCH-LinkE 5V → VBUS.
+
+- A blank chip connects directly. Firmware disables SWIO 300 ms after boot, so to reflash first run
+  **WCH-LinkUtility → Clear All Code Flash - By Power Off** (board powered from WCH-LinkE), then program.
+- **Disconnect WCH-LinkE before plugging in a charger.** PA3 is also the front CC line; the probe
+  corrupts BMC and the front never receives Source_Capabilities.
+
+Diagnostic build: `make BUILD=build_diag EXTRA_DEFS=-DFE_DIAG`. When the front falls back to non-PD,
+Fixed PDOs 5.05–5.30 V carry front-end counters in their current field (10 mA = 1): RX events,
+SOP messages, TX OK, TX fail, `PORT_CC2` register, last SOP×100 + length.

@@ -26,7 +26,7 @@ INC := -Isrc -Isdk/Core -Isdk/Peripheral/inc -Isdk/User
 
 ARCH := -march=rv32imc_zba_zbb_zbc_zbs_xw -mabi=ilp32 -msmall-data-limit=8 -mno-save-restore
 
-CFLAGS := $(ARCH) -Os -std=gnu99 -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections \
+CFLAGS := $(EXTRA_DEFS) $(ARCH) -Os -std=gnu99 -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections \
           -fno-common -Wall -Wextra -Wno-unused-parameter -g $(INC)
 ASFLAGS := $(ARCH) -x assembler-with-cpp $(INC)
 LDFLAGS := $(ARCH) -T sdk/Ld/Link.ld -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(BUILD)/$(TARGET).map \

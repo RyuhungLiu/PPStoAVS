@@ -158,10 +158,12 @@ bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t
             if (p->goodcrc_rcvd && p->goodcrc_id == p->tx_msg_id)
             {
                 p->tx_msg_id = (p->tx_msg_id + 1) & 0x7;
+                p->dbg_tx_ok++;
                 return true;
             }
         }
     }
+    p->dbg_tx_fail++;
     /* 未收到 GoodCRC：MessageID 仍然递增，避免对方把下一条当作重发丢弃 */
     p->tx_msg_id = (p->tx_msg_id + 1) & 0x7;
     return false;
@@ -184,11 +186,15 @@ static void phy_isr(pd_phy_t *p)
         uint8_t status = r->STATUS;
         uint16_t rx_len = r->BMC_BYTE_CNT;
         r->STATUS = IF_RX_ACT;
+        p->dbg_rx_act++;
+        p->dbg_last_len = rx_len;
+        p->dbg_last_sop = status & BMC_AUX_Mask;
 
         uint8_t sop = status & BMC_AUX_Mask;
         bool replied = false;
         if (sop == BMC_AUX_SOP0 && rx_len >= 6)
         {
+            p->dbg_sop0++;
             uint16_t header = p->rx_buf[0] | (p->rx_buf[1] << 8);
             pd_header_t h = pd_parse_header(header);
             uint8_t msg_len = rx_len - 4; /* 去掉 CRC32 */

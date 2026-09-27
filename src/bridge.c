@@ -3,6 +3,7 @@
 #include "board.h"
 #include "power_sw.h"
 #include "timebase.h"
+#include "pd_phy.h"
 
 #define T_FRONT_REQ_START_MS    500     /* 前端忙（保活等）时等待其空闲的最长时间 */
 #define T_FRONT_DONE_MS         1000    /* Accept + PS_RDY 的总时限（前端自身另有 tPSTransition 超时） */
@@ -114,6 +115,17 @@ static void rebuild_back_caps(void)
     {
         uint16_t ma = min_u16(fe_is_legacy() ? fe_legacy_current_ma() : 500, MAX_OUTPUT_CURRENT_MA);
         add_entry(FPDO, 5000, ma, 1, pd_build_fixed_pdo(5000, ma, 0));
+#ifdef FE_DIAG
+        /* 诊断（FE_DIAG）：把前端计数编码进 5.05~5.30V 的电流字段（10mA 单位） */
+        const pd_phy_t *d = &pd_phy_fe;
+        uint16_t v[6] = {d->dbg_rx_act, d->dbg_sop0, d->dbg_tx_ok, d->dbg_tx_fail,
+                         d->regs->PORT_CC2, (uint16_t)(d->dbg_last_sop * 100 + d->dbg_last_len)};
+        for (uint8_t i = 0; i < 6; i++)
+        {
+            uint16_t x = v[i] > 1023 ? 1023 : v[i];
+            add_entry(FPDO, 5050 + i * 50, 0, 1, pd_build_fixed_pdo(5050 + i * 50, 0, 0) | x);
+        }
+#endif
         return;
     }
 

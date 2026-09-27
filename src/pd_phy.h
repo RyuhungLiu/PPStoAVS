@@ -37,6 +37,10 @@ typedef struct
     volatile bool hard_reset_rcvd;
     volatile bool goodcrc_rcvd;
     volatile uint8_t goodcrc_id;
+
+    /* 诊断计数（FE_DIAG 构建时编码进后端 PDO） */
+    volatile uint16_t dbg_rx_act, dbg_sop0, dbg_tx_ok, dbg_tx_fail;
+    volatile uint8_t dbg_last_len, dbg_last_sop;
 } pd_phy_t;
 
 extern pd_phy_t pd_phy_be;  /* USBPD0：后端 Source */
