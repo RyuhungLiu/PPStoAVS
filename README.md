@@ -9,7 +9,7 @@ PPS charger ── Type-C plug (USBPD1, Sink) ── CH32M030K9U7 ── NMOS sw
 
 v0.1.1 is verified on hardware. v0.2.0 adds a USB HID link on the front D+/D− for a browser-based
 host tool: change the output mode and limits, and read back per-session logs. v0.3.0 adds Lab mode
-(AVS second handshake) and handles fast AVS/PPS requests reliably.
+(AVS second handshake) and handles fast AVS/PPS requests reliably. v0.4.0 adds Lab mode AVS as PPS.
 
 ## Pin assignment
 
