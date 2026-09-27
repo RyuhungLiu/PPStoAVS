@@ -141,6 +141,7 @@ bool pd_phy_rx_pop(pd_phy_t *p, pd_rx_msg_t *out)
 
 bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs)
 {
+    p->last_act_ms = millis();
     uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
     uint8_t len = 2 + num_objs * 4;
 
@@ -176,6 +177,7 @@ bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t
 
 void pd_phy_send_hard_reset(pd_phy_t *p)
 {
+    p->last_act_ms = millis();
     NVIC_DisableIRQ(p->irqn);
     phy_tx_blocking(p, 0, UPD_HARD_RESET);
     NVIC_EnableIRQ(p->irqn);
@@ -187,6 +189,8 @@ static void phy_isr(pd_phy_t *p)
     USBPD_TypeDef *r = p->regs;
 
     p->dbg_irq++;
+    if (r->STATUS & (IF_RX_ACT | IF_RX_RESET))
+        p->last_act_ms = millis();
     if (r->STATUS & IF_RX_ACT)
     {
         uint8_t status = r->STATUS;

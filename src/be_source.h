@@ -4,5 +4,11 @@
  */
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
 void be_init(void);
 void be_process(void);
+bool be_flash_safe(void);
+uint8_t be_state_code(void);
+bool be_attached(void);

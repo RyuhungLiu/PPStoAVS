@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPStoAVS Host</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1b2130; --muted: #6b7385; --line: #e2e5ea; --soft: #f1f3f6;
+  --accent: #2563eb; --accent-soft: #e8f0fe; --accent-text: #ffffff;
+  --ok: #15803d; --ok-soft: #e7f6ec; --warn: #b45309; --warn-soft: #fdf3e2; --bad: #c02626; --bad-soft: #fdecec;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216; --panel: #171b21; --text: #e5e8ec; --muted: #939cab; --line: #2a3039; --soft: #1e232b;
+    --accent: #5b93ff; --accent-soft: #1b2740; --accent-text: #0b0e12;
+    --ok: #4ade80; --ok-soft: #13291c; --warn: #fbbf24; --warn-soft: #2d2412; --bad: #f87171; --bad-soft: #321a1a;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+
+/* ---------- header & tabs ---------- */
+.top { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 16px; letter-spacing: .2px; }
+.conn { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; min-width: 0; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.spacer { flex: 1; }
+.tabs { max-width: 1100px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; }
+.tab { border: 0; background: none; padding: 8px 14px 10px; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; font-weight: 500; }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.view { display: grid; gap: 16px; }
+.view[hidden] { display: none; }
+
+/* ---------- basics ---------- */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.card h3 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--soft); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .45; cursor: default; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+.tag { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px; font-weight: 600;
+  background: var(--soft); color: var(--muted); white-space: nowrap; }
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+select, input[type=number] { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+input[type=number] { width: 100px; }
+
+/* ---------- notice ---------- */
+.notice { border: 1px dashed var(--line); border-radius: 12px; padding: 18px 20px; background: var(--panel); }
+.notice h3 { margin: 0 0 8px; font-size: 15px; }
+.notice ol { margin: 0; padding-left: 20px; }
+.notice.bad { border-color: var(--bad); color: var(--bad); }
+
+/* ---------- status flow ---------- */
+.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 10px; }
+.node { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.node .label { font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.node .big { font-size: 28px; font-weight: 700; line-height: 1.2; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.node .sub { color: var(--muted); font-size: 13px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.node.mid { background: var(--soft); }
+.arrow { align-self: center; color: var(--muted); font-size: 20px; }
+@media (max-width: 760px) {
+  .flow { grid-template-columns: 1fr; }
+  .arrow { transform: rotate(90deg); justify-self: center; line-height: 1; }
+}
+
+/* ---------- tables ---------- */
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+tr.hl td { background: var(--accent-soft); }
+tr.hl td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+td.nw { white-space: nowrap; }
+.empty { color: var(--muted); padding: 10px 0; }
+
+/* ---------- settings ---------- */
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt input { margin-top: 3px; }
+.opt b { display: block; font-weight: 600; }
+.opt span { display: block; color: var(--muted); font-size: 12px; }
+.fields { display: grid; grid-template-columns: max-content 1fr; gap: 12px 16px; align-items: center; }
+.fields > .lbl { color: var(--muted); }
+.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { padding: 6px 14px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg label:last-child { border-right: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: var(--accent-text); }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.chip:has(input:checked) { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); text-decoration: line-through; }
+.chip input { display: none; }
+.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.check input { margin-top: 3px; }
+.check b { font-weight: 600; }
+.check span { display: block; color: var(--muted); font-size: 12px; }
+.actions { position: sticky; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+@media (max-width: 640px) { .fields { grid-template-columns: 1fr; gap: 4px 0; } .fields > .lbl { margin-top: 8px; } }
+
+/* ---------- log ---------- */
+.logbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filters { display: inline-flex; gap: 4px; }
+.filters button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.filters button[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.ev { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.ev.ok::before { background: var(--ok); }
+.ev.warn::before { background: var(--warn); }
+.ev.bad::before { background: var(--bad); }
+.ev.acc::before { background: var(--accent); }
+.logrow { display: grid; grid-template-columns: 84px 128px 1fr; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.logrow:last-child { border-bottom: 0; }
+.logrow.head { color: var(--muted); font-size: 12px; padding-top: 0; }
+.logrow .time { color: var(--muted); padding-top: 1px; }
+@media (max-width: 640px) {
+  .logrow { grid-template-columns: auto 1fr; }
+  .logrow .detail { grid-column: 1 / -1; }
+  .logrow.head { display: none; }
+}
+.pdos { display: flex; flex-wrap: wrap; gap: 4px; }
+.pdo { border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 12px; white-space: nowrap; background: var(--soft); }
+.pdo i { font-style: normal; color: var(--muted); }
+#msg { font-size: 12px; color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="bar">
+    <div class="brand">PPStoAVS</div>
+    <div class="conn"><span class="dot" id="connDot"></span><span id="connText"></span><span id="devInfo"></span></div>
+    <span class="spacer"></span>
+    <span id="msg"></span>
+    <select id="lang" aria-label="Language"><option value="zh">繁體中文</option><option value="en">English</option></select>
+    <button class="btn primary" id="btnConnect"></button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="status" data-i18n="tabStatus"></button>
+    <button class="tab" role="tab" data-tab="settings" data-i18n="tabSettings"></button>
+    <button class="tab" role="tab" data-tab="log" data-i18n="tabLog"></button>
+  </nav>
+</div>
+
+<main>
+  <!-- ===== 狀態 ===== -->
+  <div class="view" id="view-status">
+    <div class="notice" id="guide">
+      <h3 data-i18n="guideTitle"></h3>
+      <ol><li data-i18n="guide1"></li><li data-i18n="guide2"></li><li data-i18n="guide3"></li></ol>
+    </div>
+    <div class="flow">
+      <div class="node">
+        <div class="label"><span data-i18n="charger"></span><span class="tag" id="feTag"></span></div>
+        <div class="big" id="feBig">—</div>
+        <div class="sub" id="feSub"></div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node mid">
+        <div class="label"><span data-i18n="converter"></span><span class="tag" id="swTag"></span></div>
+        <div class="big" id="vbusBig">—</div>
+        <div class="sub" id="vbusSub"></div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="label"><span data-i18n="device"></span><span class="tag" id="beTag"></span></div>
+        <div class="big" id="beBig">—</div>
+        <div class="sub" id="beSub"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3 data-i18n="chargerCaps"></h3><div class="scroll" id="frontCaps"></div></div>
+      <div class="card"><h3 data-i18n="rearCaps"></h3><div class="scroll" id="rearCaps"></div></div>
+    </div>
+  </div>
+
+  <!-- ===== 設定 ===== -->
+  <div class="view" id="view-settings" hidden>
+    <div class="card">
+      <h3 data-i18n="secMode"></h3>
+      <div class="modes">
+        <label class="opt"><input type="radio" name="mode" value="0"><div><b data-i18n="modeA"></b><span data-i18n="modeAd"></span></div></label>
+        <label class="opt"><input type="radio" name="mode" value="1"><div><b data-i18n="modeB"></b><span data-i18n="modeBd"></span></div></label>
+        <label class="opt"><input type="radio" name="mode" value="2"><div><b data-i18n="modeC"></b><span data-i18n="modeCd"></span></div></label>
+        <label class="opt"><input type="radio" name="mode" value="3"><div><b data-i18n="modeD"></b><span data-i18n="modeDd"></span></div></label>
+      </div>
+      <div style="margin-top:14px">
+        <label class="check"><input type="checkbox" id="fix12"><div><b data-i18n="fix12"></b><span data-i18n="fix12d"></span></div></label>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3 data-i18n="secLimits"></h3>
+        <div class="fields">
+          <div class="lbl" data-i18n="maxV"></div>
+          <div class="seg">
+            <label><input type="radio" name="maxMv" value="15000">15 V</label>
+            <label><input type="radio" name="maxMv" value="20000">20 V</label>
+          </div>
+          <div class="lbl" data-i18n="maxI"></div>
+          <div class="inline"><input type="number" id="maxMa" min="500" max="3000" step="50"><span class="muted">mA</span><span class="small muted" data-i18n="maxId"></span></div>
+          <div class="lbl" data-i18n="hide"></div>
+          <div>
+            <div class="inline">
+              <label class="chip"><input type="checkbox" data-bit="0">9 V</label>
+              <label class="chip"><input type="checkbox" data-bit="1">12 V</label>
+              <label class="chip"><input type="checkbox" data-bit="2">15 V</label>
+              <label class="chip"><input type="checkbox" data-bit="3">20 V</label>
+            </div>
+            <div class="small muted" style="margin-top:6px" data-i18n="hideD"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 data-i18n="secProt"></h3>
+        <div class="fields">
+          <div class="lbl" data-i18n="ovp"></div>
+          <div class="inline"><input type="number" id="ovp" min="1" max="20"><span class="muted">%</span></div>
+          <div class="lbl" data-i18n="uvp"></div>
+          <div class="inline"><input type="number" id="uvp" min="1" max="20"><span class="muted">%</span><span class="small muted" data-i18n="uvpD"></span></div>
+          <div class="lbl" data-i18n="ocp"></div>
+          <div class="inline"><input type="number" id="ocpMa" min="500" max="5000" step="50"><span class="muted">mA</span>
+            <input type="number" id="ocpMs" min="1" max="1000"><span class="muted">ms</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="secLog"></h3>
+      <label class="check"><input type="checkbox" id="logPps"><div><b data-i18n="logPps"></b><span data-i18n="logPpsD"></span></div></label>
+    </div>
+
+    <div class="card">
+      <h3><span data-i18n="rearCaps"></span><span class="tag" data-i18n="nowTag"></span></h3>
+      <div class="scroll" id="rearCaps2"></div>
+    </div>
+
+    <div class="actions">
+      <span class="tag" id="cfgState"></span>
+      <span class="small muted" id="dirtyText"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="btnDefaults" data-i18n="defaults"></button>
+      <button class="btn" id="btnRevert" data-i18n="revert"></button>
+      <button class="btn primary" id="btnApply" data-i18n="apply"></button>
+    </div>
+  </div>
+
+  <!-- ===== 記錄 ===== -->
+  <div class="view" id="view-log" hidden>
+    <div class="card">
+      <div class="logbar">
+        <select id="sessionSel" aria-label="Session"></select>
+        <div class="filters" id="filters">
+          <button data-f="all" data-i18n="fAll"></button>
+          <button data-f="req" data-i18n="fReq"></button>
+          <button data-f="caps" data-i18n="fCaps"></button>
+          <button data-f="bad" data-i18n="fBad"></button>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn" id="btnLogRefresh" data-i18n="refresh"></button>
+        <button class="btn" id="btnExport" data-i18n="export"></button>
+        <button class="btn danger" id="btnClear" data-i18n="clear"></button>
+      </div>
+      <div class="stats" id="logStats" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <div id="logTable"></div>
+      <div class="small muted" id="logNote" style="margin-top:8px"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* ================= i18n ================= */
+const T = {
+  en: {
+    connect: "Connect", disconnect: "Disconnect", connected: "Connected", notConnected: "Not connected",
+    noHid: "WebHID is not available in this browser. Use desktop Chrome or Edge.",
+    tabStatus: "Status", tabSettings: "Settings", tabLog: "Records",
+    guideTitle: "How to connect", guide1: "Plug the front Type-C plug into a computer (no charger needed).",
+    guide2: "Click Connect at the top right.", guide3: "Select \"PPStoAVS Bridge\" and allow access.",
+    charger: "Charger (front)", converter: "Converter", device: "Device (rear)",
+    chargerCaps: "Charger capabilities", rearCaps: "Offered to device",
+    stWait: "Waiting", stNeg: "Negotiating", stReady: "Contract", stLegacy: "Non-PD", stNone: "Not attached",
+    stDetect: "Detecting", stUpdate: "Updating caps", stReset: "Resetting", stNoPd: "Non-PD device (5 V)", stDischarge: "Discharging",
+    swOn: "Switch on", swOff: "Switch off", current: "Current", noContract: "No contract",
+    colType: "Type", colVolt: "Voltage", colCur: "Current", colSrc: "From charger", converted: "converted",
+    none: "—", notAvail: "Not connected",
+    secMode: "Output mode", modeA: "a · Fixed + AVS", modeAd: "Default. Passes the charger's AVS through, or translates it from PPS.",
+    modeB: "b · Fixed + PPS", modeBd: "Charger PPS passed through as-is. No AVS.",
+    modeC: "c · Fixed + AVS + PPS", modeCd: "Both, in spec order: Fixed → AVS → PPS.",
+    modeD: "d · Fixed only", modeDd: "Most compatible. No adjustable voltage.",
+    fix12: "Provide 12 V Fixed when the charger has none",
+    fix12d: "Made from PPS (preferred) or AVS. Skipped when all 7 PDO slots are used.",
+    secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000",
+    hide: "Hide Fixed", hideD: "Hiding 15 V also removes AVS; hiding 20 V limits AVS to 15 V.",
+    secProt: "Protection", ovp: "Over-voltage", uvp: "Under-voltage", uvpD: "not checked on PPS contracts", ocp: "Over-current",
+    secLog: "Records", logPps: "Record device PPS requests",
+    logPpsD: "Off by default. PPS devices adjust voltage very often; failed requests are always recorded.",
+    logPpsWarn: "PPS devices can adjust voltage several times per second.\n\nConsecutive adjustments are merged, but the 64-record limit per session may still fill up quickly and flash wear increases.\n\nRecord PPS requests anyway?",
+    nowTag: "current", saved: "Saved", saving: "Saving…", dirty: "Unsaved changes", clean: "No changes",
+    apply: "Apply", revert: "Discard changes", defaults: "Restore defaults",
+    defaultsConfirm: "Restore all settings to defaults? The device may be re-negotiated.",
+    applied: "Applied. The device received the new capabilities.", invalid: "Invalid value",
+    fAll: "All", fReq: "Requests", fCaps: "Capabilities", fBad: "Problems",
+    refresh: "Reload", export: "Export JSON", clear: "Clear all",
+    clearConfirm: "Erase all records in the device? This cannot be undone.",
+    sessionN: (n) => `Session ${n}`, currentS: "current", pages: "pages",
+    colTime: "Time", colEvent: "Event", colDetail: "Detail", noRecords: "No records.",
+    crcBad: "page CRC errors", dropped: "records dropped (per-session limit)",
+    stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
+    ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
+          6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
+          12: "Offered to device" },
+    res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
+    prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
+    rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received"], side: ["Front", "Rear"],
+    merged: "adjusted ×", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
+    on: "on", off: "off", pps: "PPS log", fix12s: "12 V",
+  },
+  zh: {
+    connect: "連線", disconnect: "中斷連線", connected: "已連線", notConnected: "未連線",
+    noHid: "此瀏覽器不支援 WebHID，請改用桌面版 Chrome 或 Edge。",
+    tabStatus: "狀態", tabSettings: "設定", tabLog: "記錄",
+    guideTitle: "連線步驟", guide1: "把前端 Type-C 公頭插到電腦（不需要接充電器）。",
+    guide2: "按右上角「連線」。", guide3: "選擇「PPStoAVS Bridge」並允許存取。",
+    charger: "充電器（前端）", converter: "轉換器", device: "設備（後端）",
+    chargerCaps: "充電器能力", rearCaps: "輸出給設備",
+    stWait: "等待中", stNeg: "協商中", stReady: "已協商", stLegacy: "非 PD", stNone: "未插入",
+    stDetect: "偵測中", stUpdate: "更新能力中", stReset: "重置中", stNoPd: "非 PD 設備（5V）", stDischarge: "放電中",
+    swOn: "開關導通", swOff: "開關關斷", current: "電流", noContract: "沒有合約",
+    colType: "類型", colVolt: "電壓", colCur: "電流", colSrc: "來自充電器", converted: "轉換",
+    none: "—", notAvail: "未連線",
+    secMode: "透傳方式", modeA: "a · Fixed + AVS", modeAd: "預設。優先透傳充電器的 AVS，沒有時由 PPS 平移。",
+    modeB: "b · Fixed + PPS", modeBd: "充電器的 PPS 原樣透傳，不提供 AVS。",
+    modeC: "c · Fixed + AVS + PPS", modeCd: "兩者都提供，依規範排序：Fixed → AVS → PPS。",
+    modeD: "d · 只有 Fixed", modeDd: "相容性最好，不提供可調電壓。",
+    fix12: "充電器沒有 12V 時提供 12V Fixed",
+    fix12d: "由 PPS（優先）或 AVS 轉換；7 個 PDO 位置已滿時不轉換。",
+    secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000",
+    hide: "隱藏 Fixed", hideD: "隱藏 15V 會同時取消 AVS；隱藏 20V 會讓 AVS 只到 15V。",
+    secProt: "保護", ovp: "過壓", uvp: "欠壓", uvpD: "PPS 合約時不檢查", ocp: "過流",
+    secLog: "記錄", logPps: "記錄設備的 PPS 請求",
+    logPpsD: "預設關閉。PPS 設備會頻繁調壓；失敗的請求一律會記錄。",
+    logPpsWarn: "PPS 設備可能每秒調壓好幾次。\n\n連續微調會合併成一條，但每段 64 條的上限仍可能很快用完，Flash 寫入也會增加。\n\n確定要記錄 PPS 請求？",
+    nowTag: "目前", saved: "已儲存", saving: "儲存中…", dirty: "有未套用的修改", clean: "沒有修改",
+    apply: "套用", revert: "放棄修改", defaults: "恢復預設",
+    defaultsConfirm: "確定把所有設定恢復為預設值？設備可能會重新協商。",
+    applied: "已套用，設備已收到新的能力列表。", invalid: "數值不正確",
+    fAll: "全部", fReq: "請求", fCaps: "能力", fBad: "異常",
+    refresh: "重新讀取", export: "匯出 JSON", clear: "清除全部",
+    clearConfirm: "確定要清除設備內的全部記錄？此操作無法復原。",
+    sessionN: (n) => `第 ${n} 段`, currentS: "本次", pages: "頁",
+    colTime: "時間", colEvent: "事件", colDetail: "內容", noRecords: "沒有記錄。",
+    crcBad: "頁 CRC 錯誤", dropped: "筆記錄因每段上限被捨棄",
+    stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
+    ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
+          6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備" },
+    res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
+    prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
+    rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset"], side: ["前端", "後端"],
+    merged: "微調 ×", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
+    on: "開", off: "關", pps: "PPS 記錄", fix12s: "12V 轉換",
+  },
+};
+let lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+try { lang = localStorage.getItem("lang") || lang; } catch (e) {}
+const t = (k) => T[lang][k] ?? T.en[k] ?? k;
+
+/* ================= helpers ================= */
+const $ = (id) => document.getElementById(id);
+const u16 = (b, o) => b[o] | (b[o + 1] << 8);
+const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+const fmtV = (mv) => (mv / 1000).toFixed(mv % 100 ? 2 : 1) + " V";
+const fmtA = (ma) => (ma / 1000).toFixed(2) + " A";
+const fmtFw = (v) => `v${v >> 8}.${(v >> 4) & 0xF}.${v & 0xF}`;   /* 0xMMmp */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function msg(text) { $("msg").textContent = text || ""; if (text) setTimeout(() => { if ($("msg").textContent === text) $("msg").textContent = ""; }, 6000); }
+
+const CRC_TABLE = (() => { const tb = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; tb[n] = c >>> 0; }
+  return tb; })();
+function crc32(bytes) { let c = 0xFFFFFFFF; for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+/* PDO 解码 */
+function decodePdo(raw) {
+  const top = raw >>> 30;
+  if (top === 0) return { type: "Fixed", min: ((raw >>> 10) & 0x3FF) * 50, max: ((raw >>> 10) & 0x3FF) * 50, ma: (raw & 0x3FF) * 10 };
+  if (top === 1) return { type: "Battery", min: ((raw >>> 10) & 0x3FF) * 50, max: ((raw >>> 20) & 0x3FF) * 50, mw: (raw & 0x3FF) * 250 };
+  if (top === 2) return { type: "Variable", min: ((raw >>> 10) & 0x3FF) * 50, max: ((raw >>> 20) & 0x3FF) * 50, ma: (raw & 0x3FF) * 10 };
+  const sub = (raw >>> 28) & 3;
+  if (sub === 0) return { type: "PPS", min: ((raw >>> 8) & 0xFF) * 100, max: ((raw >>> 17) & 0xFF) * 100, ma: (raw & 0x7F) * 50 };
+  if (sub === 2) { const i20 = (raw & 0x3FF) * 10; return { type: "AVS", min: 9000, max: i20 ? 20000 : 15000, ma: ((raw >>> 10) & 0x3FF) * 10, ma20: i20 }; }
+  return { type: "EPR AVS", min: 0, max: 0, ma: 0 };
+}
+function pdoVolt(p) {
+  if (p.type === "Fixed") return fmtV(p.max);
+  return `${(p.min / 1000).toFixed(1)}–${(p.max / 1000).toFixed(1)} V`;
+}
+function pdoCur(p) {
+  if (p.type === "AVS") return p.ma20 && p.ma20 !== p.ma ? `${fmtA(p.ma)} / ${fmtA(p.ma20)}` : fmtA(p.ma);
+  if (p.type === "Battery") return (p.mw / 1000).toFixed(1) + " W";
+  return fmtA(p.ma ?? 0);
+}
+/* RDO 解码：需要对应能力表判断类型 */
+function decodeRdo(rdo, caps) {
+  if (!rdo) return null;
+  const pos = rdo >>> 28;
+  const p = caps && caps[pos - 1] ? decodePdo(caps[pos - 1]) : null;
+  const type = p ? p.type : "?";
+  if (type === "PPS") return { pos, type, mv: ((rdo >>> 9) & 0xFFF) * 20, ma: (rdo & 0x7F) * 50 };
+  if (type === "AVS") return { pos, type, mv: ((rdo >>> 9) & 0xFFF) * 25, ma: (rdo & 0x7F) * 50 };
+  return { pos, type, mv: p ? p.max : 0, ma: ((rdo >>> 10) & 0x3FF) * 10 };
+}
+const rdoText = (r) => r ? `#${r.pos} ${r.type} ${r.mv ? fmtV(r.mv) : ""} ${fmtA(r.ma)}` : t("none");
+
+/* ================= HID transport ================= */
+const FILTER = { vendorId: 0x1209, productId: 0x0001, usagePage: 0xFF00 };
+let dev = null, tagCtr = 0, waiter = null, queue = Promise.resolve();
+
+function onReport(e) {
+  const b = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
+  if (waiter && b[0] === (waiter.cmd | 0x80) && b[1] === waiter.tag) { const w = waiter; waiter = null; clearTimeout(w.timer); w.resolve(b); }
+}
+function request(cmd, payload = []) {
+  const run = () => new Promise((resolve, reject) => {
+    if (!dev || !dev.opened) return reject(new Error(t("notConnected")));
+    const tag = (tagCtr = (tagCtr + 1) & 0xFF);
+    const buf = new Uint8Array(64); buf[0] = cmd; buf[1] = tag; buf.set(payload.slice(0, 62), 2);
+    waiter = { cmd, tag, resolve, timer: setTimeout(() => { waiter = null; reject(new Error("timeout")); }, 1500) };
+    dev.sendReport(0, buf).catch((err) => { waiter = null; reject(err); });
+  }).then((b) => { if (b[2] !== 0) throw new Error("status " + b[2]); return b.subarray(3); });
+  const p = queue.then(run, run);
+  queue = p.catch(() => {});
+  return p;
+}
+
+async function openDevice(d) {
+  if (!d.opened) await d.open();
+  dev = d;
+  dev.addEventListener("inputreport", onReport);
+  renderConn();
+  await refreshInfo();
+  await loadCfg(true);
+  await refreshStatus();
+  await loadSessions();
+}
+async function connect() {
+  if (dev) { try { await dev.close(); } catch (e) {} dev = null; resetState(); renderAll(); return; }
+  try {
+    const list = await navigator.hid.requestDevice({ filters: [FILTER] });
+    if (list.length) await openDevice(list[0]);
+  } catch (e) { msg(e.message); }
+}
+
+/* ================= state ================= */
+const state = { info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, cfgSaving: false,
+  sessions: [], current: 0, ramMask: 0, log: null, filter: "all", tab: "status" };
+function resetState() { Object.assign(state, { info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, sessions: [], log: null }); }
+
+async function refreshInfo() {
+  const p = await request(0x01);
+  state.info = { proto: p[0], fw: u16(p, 1), session: u16(p, 3), uptime: u32(p, 5), dropped: u16(p, 9), flags: p[11], pages: p[12] };
+  state.cfgSaving = !!(state.info.flags & 1);
+  renderConn(); renderCfgState();
+}
+async function refreshStatus() {
+  const a = await request(0x02, [0]);
+  const n = a[17];
+  state.status = { fe: a[0], be: a[1], flags: a[2], vbus: u16(a, 3), ibus: u16(a, 5), feRdo: u32(a, 7), beRdo: u32(a, 11), beMv: u16(a, 15) };
+  state.frontCaps = Array.from({ length: n }, (_, i) => u32(a, 18 + i * 4));
+  const b = await request(0x02, [1]);
+  const m = b[0];
+  state.rearCaps = Array.from({ length: m }, (_, i) => u32(b, 1 + i * 4));
+  state.rearSrc = Array.from({ length: m }, (_, i) => b[1 + m * 4 + i]);
+  renderStatus();
+}
+
+/* ================= connection / tabs ================= */
+function renderConn() {
+  $("btnConnect").textContent = dev ? t("disconnect") : t("connect");
+  $("connDot").className = "dot" + (dev ? " on" : "");
+  $("connText").textContent = dev ? t("connected") : t("notConnected");
+  const i = state.info;
+  $("devInfo").textContent = dev && i ? `· ${t("fw")} ${fmtFw(i.fw)} · ${t("sessionN")(i.session)}` : "";
+  $("guide").hidden = !!dev;
+  document.querySelectorAll("#view-settings input, #view-settings button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
+  if (dev) updateDirty();
+}
+function setTab(name) {
+  state.tab = name;
+  document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  ["status", "settings", "log"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  try { localStorage.setItem("tab", name); } catch (e) {}
+}
+
+/* ================= status ================= */
+function feState(s) {
+  if (s.flags & 1) return [t("stLegacy"), "warn"];
+  return [[t("stWait"), ""], [t("stNeg"), "acc"], [t("stNeg"), "acc"], [t("stReady"), "ok"]][s.fe] ?? [String(s.fe), ""];
+}
+function beState(s) {
+  if (!(s.flags & 2)) return [t("stNone"), ""];
+  const map = { 1: [t("stDetect"), ""], 7: (s.flags & 8) ? [t("stReady"), "ok"] : [t("stNeg"), "acc"], 8: [t("stUpdate"), "acc"],
+    9: [t("stReset"), "warn"], 10: [t("stReset"), "warn"], 11: [t("stNoPd"), "warn"], 12: [t("stDischarge"), "warn"] };
+  return map[s.be] ?? [t("stNeg"), "acc"];
+}
+function setTag(id, [text, cls]) { const el = $(id); el.textContent = text; el.className = "tag " + (cls || ""); }
+
+function capsTable(caps, activePos, src) {
+  if (!caps.length) return `<div class="empty">${dev ? t("none") : t("notAvail")}</div>`;
+  let h = `<table><tr><th>#</th><th>${t("colType")}</th><th>${t("colVolt")}</th><th>${t("colCur")}</th>${src ? `<th>${t("colSrc")}</th>` : ""}</tr>`;
+  caps.forEach((raw, i) => {
+    const p = decodePdo(raw);
+    let srcCell = "";
+    if (src) {
+      const k = src[i];
+      const fp = k && state.frontCaps[k - 1] ? decodePdo(state.frontCaps[k - 1]) : null;
+      srcCell = `<td class="nw">${fp ? `#${k} ${fp.type}` : t("none")}${fp && fp.type !== p.type ? ` <span class="tag acc">${t("converted")}</span>` : ""}</td>`;
+    }
+    h += `<tr class="${activePos === i + 1 ? "hl" : ""}" title="0x${raw.toString(16).toUpperCase().padStart(8, "0")}">` +
+      `<td>${i + 1}</td><td>${p.type}</td><td class="nw">${pdoVolt(p)}</td><td class="nw">${pdoCur(p)}</td>${srcCell}</tr>`;
+  });
+  return h + "</table>";
+}
+function renderStatus() {
+  const s = state.status;
+  if (!s || !dev) {
+    ["feBig", "vbusBig", "beBig"].forEach((id) => ($(id).textContent = "—"));
+    ["feSub", "vbusSub", "beSub"].forEach((id) => ($(id).textContent = ""));
+    ["feTag", "swTag", "beTag"].forEach((id) => setTag(id, ["", ""]));
+    $("frontCaps").innerHTML = capsTable([], 0); $("rearCaps").innerHTML = capsTable([], 0, []); $("rearCaps2").innerHTML = capsTable([], 0, []);
+    return;
+  }
+  setTag("feTag", feState(s));
+  const fr = (s.flags & 16) ? decodeRdo(s.feRdo, state.frontCaps) : null;
+  $("feBig").textContent = fr ? fmtV(fr.mv) : (s.flags & 1) ? "5.0 V" : "—";
+  $("feSub").textContent = fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract");
+
+  setTag("swTag", (s.flags & 4) ? [t("swOn"), "ok"] : [t("swOff"), ""]);
+  $("vbusBig").textContent = fmtV(s.vbus);
+  $("vbusSub").textContent = `${t("current")} ${fmtA(s.ibus)}`;
+
+  setTag("beTag", beState(s));
+  const br = (s.flags & 8) ? decodeRdo(s.beRdo, state.rearCaps) : null;
+  $("beBig").textContent = br ? fmtV(s.beMv || br.mv) : "—";
+  $("beSub").textContent = br ? `${br.type} · ${fmtA(br.ma)} · #${br.pos}` : t("noContract");
+
+  $("frontCaps").innerHTML = capsTable(state.frontCaps, fr ? fr.pos : 0);
+  const rear = capsTable(state.rearCaps, br ? br.pos : 0, state.rearSrc);
+  $("rearCaps").innerHTML = rear; $("rearCaps2").innerHTML = rear;
+}
+
+/* ================= settings ================= */
+function cfgFromBytes(p) {
+  return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0 };
+}
+function cfgToBytes(c) {
+  const b = new Uint8Array(16);
+  b[0] = c.mode; b[1] = c.hide; b[2] = c.maxMv & 0xFF; b[3] = c.maxMv >> 8; b[4] = c.maxMa & 0xFF; b[5] = c.maxMa >> 8;
+  b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
+  return Array.from(b);
+}
+function readForm() {
+  let hide = 0;
+  document.querySelectorAll(".chip input").forEach((c) => { if (c.checked) hide |= 1 << Number(c.dataset.bit); });
+  const radio = (name) => Number((document.querySelector(`input[name=${name}]:checked`) || { value: 0 }).value);
+  return { mode: radio("mode"), hide, maxMv: radio("maxMv"), maxMa: Math.round(Number($("maxMa").value) / 50) * 50,
+    ovp: Number($("ovp").value), uvp: Number($("uvp").value), ocpMa: Number($("ocpMa").value), ocpMs: Number($("ocpMs").value),
+    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) };
+}
+function writeForm(c) {
+  document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
+  document.querySelectorAll("input[name=maxMv]").forEach((r) => (r.checked = Number(r.value) === c.maxMv));
+  document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
+  $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
+  $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
+  updateDirty();
+}
+const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
+function updateDirty() {
+  const d = isDirty();
+  $("dirtyText").textContent = state.cfg ? (d ? t("dirty") : t("clean")) : "";
+  $("dirtyText").style.color = d ? "var(--warn)" : "";
+  $("btnApply").disabled = !dev || !d; $("btnRevert").disabled = !dev || !d;
+}
+function renderCfgState() {
+  const el = $("cfgState");
+  if (!dev || !state.cfg) { el.textContent = ""; el.className = "tag"; return; }
+  el.textContent = state.cfgSaving ? t("saving") : t("saved");
+  el.className = "tag " + (state.cfgSaving ? "warn" : "ok");
+}
+async function loadCfg(force) {
+  const p = await request(0x10);
+  const wasDirty = isDirty();
+  state.cfg = cfgFromBytes(p); state.cfgSaving = !!p[16];
+  if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
+  renderCfgState();
+}
+async function applyCfg(defaults) {
+  try {
+    if (defaults) await request(0x12); else await request(0x11, cfgToBytes(readForm()));
+    await loadCfg(true);
+    msg(""); flash(t("applied"));
+    setTimeout(() => refreshStatus().catch(() => {}), 400);
+  } catch (e) { msg(e.message === "status 2" ? t("invalid") : e.message); }
+}
+function flash(text) { const el = $("dirtyText"); el.textContent = text; el.style.color = "var(--ok)"; setTimeout(updateDirty, 3000); }
+
+/* ================= records ================= */
+async function loadSessions() {
+  const p = await request(0x20);
+  state.current = u16(p, 0); state.ramMask = p[2];
+  const n = p[3];
+  state.sessions = Array.from({ length: n }, (_, i) => ({ session: u16(p, 4 + i * 4), first: p[6 + i * 4], pages: p[7 + i * 4] }));
+  const sel = $("sessionSel"); const prev = sel.value;
+  const ids = [state.current, ...state.sessions.map((s) => s.session).filter((s) => s !== state.current)].slice(0, 9);
+  sel.innerHTML = ids.map((id) => {
+    const s = state.sessions.find((x) => x.session === id);
+    return `<option value="${id}">${t("sessionN")(id)}${id === state.current ? ` (${t("currentS")})` : ""} · ${s ? s.pages : 0} ${t("pages")}</option>`;
+  }).join("");
+  if (ids.includes(Number(prev))) sel.value = prev;
+  await loadLog(Number(sel.value));
+}
+async function readPage(idx) {
+  const page = new Uint8Array(128);
+  for (let off = 0; off < 128; off += 56) {
+    const p = await request(0x21, [idx, off]);
+    page.set(p.subarray(3, 3 + p[2]), off);
+  }
+  return page;
+}
+async function loadLog(session) {
+  const pages = [];
+  const s = state.sessions.find((x) => x.session === session);
+  if (s) for (let k = 0; k < s.pages; k++) pages.push({ idx: (s.first + k) % 128, ram: false });
+  if (session === state.current) {
+    if (state.ramMask & 2) pages.push({ idx: 0xFE, ram: true });
+    if (state.ramMask & 4) pages.push({ idx: 0xFD, ram: true });
+    pages.push({ idx: 0xFF, ram: true });
+  }
+  const records = []; let crcErrors = 0;
+  for (const pg of pages) {
+    const b = await readPage(pg.idx);
+    if (u16(b, 0) !== 0x4C50) continue;
+    if (!pg.ram && crc32(b.subarray(0, 124)) !== u32(b, 124)) crcErrors++;
+    let o = 8;
+    while (o + 6 <= 124 && b[o] !== 0) {
+      const type = b[o], len = b[o + 1];
+      if (o + 6 + len > 124) break;
+      records.push({ type, t: u32(b, o + 2), data: b.slice(o + 6, o + 6 + len) });
+      o += 6 + len;
+    }
+  }
+  state.log = { session, records, crcErrors };
+  renderLog();
+}
+
+function pdoChips(caps, src, fcaps) {
+  return `<div class="pdos">` + caps.map((raw, i) => {
+    const p = decodePdo(raw);
+    const k = src ? src[i] : 0;
+    const fp = k && fcaps[k - 1] ? decodePdo(fcaps[k - 1]) : null;
+    const from = fp ? ` <i>← #${k}${fp.type !== p.type ? " " + fp.type : ""}</i>` : "";
+    return `<span class="pdo">${p.type} ${pdoVolt(p)} ${pdoCur(p)}${from}</span>`;
+  }).join("") + `</div>`;
+}
+function cfgText(c) {
+  const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : ""].filter(Boolean).join(", ");
+  return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` +
+    (flags ? ` · ${flags}` : "");
+}
+/* 返回 { t, type, name, html, text, cls, cat }；cat: req / caps / bad / other */
+function decodeRecords(records) {
+  let fcaps = [], rcaps = [];
+  return records.map((r) => {
+    const d = r.data; let text = "", html = null, cls = "", cat = "other";
+    switch (r.type) {
+      case 1: {
+        const f = d[2], why = [];
+        if (f & 0x08) why.push("POR"); if (f & 0x04) why.push("PIN"); if (f & 0x10) why.push("SW");
+        if (f & 0x40) { why.push("WWDG"); cls = "warn"; } if (f & 0x80) why.push("LPWR");
+        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3)))}`;
+        cls = cls || "acc";
+        break; }
+      case 2: case 7: case 12: {
+        const n = r.type === 12 ? d.length / 5 : d.length / 4;
+        const caps = Array.from({ length: n }, (_, i) => u32(d, i * 4));
+        const src = r.type === 12 ? Array.from(d.subarray(n * 4, n * 5)) : null;
+        if (r.type === 2) fcaps = caps; else rcaps = caps;
+        html = pdoChips(caps, src, fcaps);
+        text = caps.map((raw) => { const p = decodePdo(raw); return `${p.type} ${pdoVolt(p)} ${pdoCur(p)}`; }).join(" · ");
+        cat = "caps";
+        break; }
+      case 3: text = fmtA(u16(d, 0)); cls = "warn"; break;
+      case 4: text = `${rdoText(decodeRdo(u32(d, 0), fcaps))} → ${d[6] ? t("res")[0] : t("res")[2]}`; cls = d[6] ? "" : "bad"; cat = d[6] ? "req" : "bad"; break;
+      case 5: text = "CC" + (d[0] + 1); cls = "acc"; break;
+      case 6: break;
+      case 8: {
+        const back = decodeRdo(u32(d, 0), rcaps), front = decodeRdo(u32(d, 4), fcaps);
+        const res = d[12], rep = d[13];
+        text = res === 1 ? `${t("devS")} ${rdoText(back)} · ${t("res")[1]}`   /* 拒绝时没有前端请求 */
+          : `${t("devS")} ${rdoText(back)} → ${t("chgS")} ${rdoText(front)} · ${t("vbus")} ${fmtV(u16(d, 10))} · ${t("res")[res] ?? res}` +
+            (rep ? ` · ${t("merged")}${rep + 1}` : "");
+        cls = res === 0 ? "ok" : "bad"; cat = res === 0 ? "req" : "bad";
+        break; }
+      case 9: text = `${t("prot")[d[0]] ?? d[0]} · ${t("vbus")} ${fmtV(u16(d, 1))} · ${t("current")} ${fmtA(u16(d, 3))} · ${t("target")} ${fmtV(u16(d, 5))}`; cls = "bad"; cat = "bad"; break;
+      case 10: text = `${t("side")[d[0]] ?? d[0]} · ${t("rst")[d[1]] ?? d[1]}`; cls = "warn"; cat = "bad"; break;
+      case 11: text = cfgText(cfgFromBytes(d)); cls = "acc"; break;
+      default: text = Array.from(d, (x) => x.toString(16).padStart(2, "0")).join(" ");
+    }
+    return { t: r.t, type: r.type, name: t("ev")[r.type] ?? "type " + r.type, text, html: html ?? esc(text), cls, cat };
+  });
+}
+function renderLog() {
+  const L = state.log;
+  document.querySelectorAll("#filters button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === state.filter)));
+  if (!L || !dev) { $("logTable").innerHTML = ""; $("logNote").textContent = ""; $("logStats").innerHTML = ""; return; }
+  const rows = decodeRecords(L.records);
+  const count = (f) => rows.filter(f).length;
+  const nReq = count((r) => r.type === 8), nFail = count((r) => r.type === 8 && r.cls === "bad");
+  const nProt = count((r) => r.type === 9), nRst = count((r) => r.type === 10);
+  $("logStats").innerHTML = [
+    `<span class="tag">${nReq} ${t("stReq")}</span>`,
+    `<span class="tag ${nFail ? "bad" : ""}">${nFail} ${t("stFail")}</span>`,
+    `<span class="tag ${nProt ? "bad" : ""}">${nProt} ${t("stProt")}</span>`,
+    `<span class="tag ${nRst ? "warn" : ""}">${nRst} ${t("stRst")}</span>`,
+  ].join("");
+  const shown = rows.filter((r) => state.filter === "all" || r.cat === state.filter);
+  $("logTable").innerHTML = shown.length
+    ? `<div class="logrow head"><div>${t("colTime")}</div><div>${t("colEvent")}</div><div>${t("colDetail")}</div></div>` +
+      shown.map((r) => `<div class="logrow"><div class="time mono">${(r.t / 1000).toFixed(3)} s</div>` +
+        `<div><span class="ev ${r.cls}">${esc(r.name)}</span></div><div class="detail">${r.html}</div></div>`).join("")
+    : `<div class="empty">${t("noRecords")}</div>`;
+  const notes = [];
+  if (L.crcErrors) notes.push(`${L.crcErrors} ${t("crcBad")}`);
+  if (L.session === state.current && state.info && state.info.dropped) notes.push(`${state.info.dropped} ${t("dropped")}`);
+  $("logNote").textContent = notes.join(" · ");
+}
+function exportLog() {
+  if (!state.log) return;
+  const out = { session: state.log.session, exported: new Date().toISOString(),
+    records: decodeRecords(state.log.records).map((r, i) => ({ t_ms: r.t, event: r.name, detail: r.text,
+      raw: Array.from(state.log.records[i].data, (x) => x.toString(16).padStart(2, "0")).join("") })) };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+  a.download = `ppstoavs-session-${state.log.session}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ================= render all / i18n ================= */
+function applyI18n() {
+  document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  $("lang").value = lang;
+  renderAll();
+}
+function renderAll() { renderConn(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); }
+function loadSessionsLabelsOnly() {
+  const sel = $("sessionSel");
+  Array.from(sel.options).forEach((o) => {
+    const id = Number(o.value), s = state.sessions.find((x) => x.session === id);
+    o.textContent = `${t("sessionN")(id)}${id === state.current ? ` (${t("currentS")})` : ""} · ${s ? s.pages : 0} ${t("pages")}`;
+  });
+}
+
+/* ================= wiring ================= */
+document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
+$("btnConnect").onclick = connect;
+$("view-settings").addEventListener("input", updateDirty);
+$("view-settings").addEventListener("change", updateDirty);
+$("logPps").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("logPpsWarn"))) { e.target.checked = false; updateDirty(); } });
+$("btnApply").onclick = () => applyCfg(false);
+$("btnRevert").onclick = () => state.cfg && writeForm(state.cfg);
+$("btnDefaults").onclick = () => { if (confirm(t("defaultsConfirm"))) applyCfg(true); };
+$("btnLogRefresh").onclick = () => loadSessions().catch((e) => msg(e.message));
+$("sessionSel").onchange = (e) => loadLog(Number(e.target.value)).catch((err) => msg(err.message));
+document.querySelectorAll("#filters button").forEach((b) => (b.onclick = () => { state.filter = b.dataset.f; renderLog(); }));
+$("btnExport").onclick = exportLog;
+$("btnClear").onclick = async () => {
+  if (!confirm(t("clearConfirm"))) return;
+  try { await request(0x22); setTimeout(() => loadSessions().catch(() => {}), 1500); } catch (e) { msg(e.message); }
+};
+$("lang").onchange = (e) => { lang = e.target.value; try { localStorage.setItem("lang", lang); } catch (err) {} applyI18n(); };
+
+let tick = 0;
+setInterval(async () => {
+  if (!dev) return;
+  try {
+    await refreshStatus();
+    if (++tick % 3 === 0) { await refreshInfo(); if (state.cfgSaving || $("cfgState").textContent === t("saving")) await loadCfg(false); }
+  } catch (e) { msg(e.message); }
+}, 1000);
+
+let startTab = "status";
+try { startTab = localStorage.getItem("tab") || startTab; } catch (e) {}
+setTab(["status", "settings", "log"].includes(startTab) ? startTab : "status");
+applyI18n();
+
+if (!("hid" in navigator)) {
+  const g = $("guide"); g.className = "notice bad"; g.innerHTML = `<h3>${esc(t("noHid"))}</h3>`;
+  $("btnConnect").disabled = true;
+} else {
+  navigator.hid.addEventListener("disconnect", (e) => { if (e.device === dev) { dev = null; resetState(); renderAll(); } });
+  navigator.hid.getDevices().then((list) => {
+    const d = list.find((x) => x.vendorId === FILTER.vendorId && x.productId === FILTER.productId);
+    if (d) openDevice(d).catch((e) => msg(e.message));
+  });
+}
+</script>
+</body>
+</html>

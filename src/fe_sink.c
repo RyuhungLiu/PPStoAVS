@@ -1,6 +1,7 @@
 #include "fe_sink.h"
 #include "board.h"
 #include "bridge.h"
+#include "evlog.h"
 #include "pd_phy.h"
 #include "timebase.h"
 
@@ -47,6 +48,8 @@ static uint8_t last_rx_id;
 static pdo_t caps[PD_MAX_DATA_OBJS];
 static uint8_t num_caps;
 static bool has_contract;
+static uint32_t contract_rdo;
+static uint32_t pending_rdo;
 static fe_target_t contract;
 static fe_target_t pending;
 static req_origin_t pending_origin;
@@ -161,10 +164,13 @@ static void send_request(const fe_target_t *t, req_origin_t origin)
     uint32_t rdo;
     if (t->type == PPS_PDO)
         rdo = pd_build_pps_rdo(t->pos, t->mv, t->ma);
+    else if (t->type == SPR_AVS_PDO)
+        rdo = pd_build_avs_rdo(t->pos, t->mv, t->ma);   /* AVS 不需要保活 */
     else
         rdo = pd_build_fixed_rdo(t->pos, t->ma, t->ma);
 
     pending = *t;
+    pending_rdo = rdo;
     pending_origin = origin;
     pd_phy_send(phy, MSG_TYPE_Request, 1, &rdo);
     set_state(FE_ST_WAIT_ACCEPT);
@@ -175,8 +181,14 @@ static void request_finished(bool ok)
     if (ok)
     {
         contract = pending;
+        contract_rdo = pending_rdo;
         has_contract = true;
         keepalive_ts = millis();
+    }
+    if (pending_origin == ORIGIN_CAPS)
+    {
+        ev_fe_contract_t e = {pending_rdo, pending.mv, ok};
+        evlog_add(EV_FE_CONTRACT, &e, sizeof(e));
     }
     if (pending_origin == ORIGIN_BRIDGE)
     {
@@ -185,8 +197,15 @@ static void request_finished(bool ok)
     set_state(FE_ST_READY);
 }
 
+static void log_reset(uint8_t kind)
+{
+    ev_reset_t e = {0, kind};
+    evlog_add(EV_RESET, &e, sizeof(e));
+}
+
 static void do_hard_reset(void)
 {
+    log_reset(RST_HARD_SENT);
     pd_phy_send_hard_reset(phy);
     pd_phy_reset_protocol(phy);
     last_rx_id = 0xFF;
@@ -200,11 +219,14 @@ static void do_hard_reset(void)
 
 static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
 {
+    uint32_t raw[PD_MAX_DATA_OBJS];
     num_caps = h->num_objs;
     for (uint8_t i = 0; i < num_caps; i++)
     {
-        caps[i] = pd_parse_pdo(pd_get_u32(&m->data[2 + i * 4]));
+        raw[i] = pd_get_u32(&m->data[2 + i * 4]);
+        caps[i] = pd_parse_pdo(raw[i]);
     }
+    evlog_add(EV_FE_CAPS, raw, num_caps * 4);
     phy->revision = (h->revision < PD_REV_30) ? h->revision : PD_REV_30;
 
     /* 如有协议桥请求正在进行，被新的能力报文打断 */
@@ -230,6 +252,7 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
     {
+        log_reset(RST_SOFT_RCVD);
         pd_phy_reset_protocol(phy);
         last_rx_id = 0xFF;
         send_ctrl(MSG_TYPE_Accept);
@@ -321,11 +344,20 @@ void fe_init(void)
     set_state(FE_ST_WAIT_CAPS);
 }
 
+static void enter_legacy(void)
+{
+    set_state(FE_ST_LEGACY);
+    uint16_t ma = fe_legacy_current_ma();
+    evlog_add(EV_FE_LEGACY, &ma, sizeof(ma));
+    bridge_on_front_caps();
+}
+
 void fe_process(void)
 {
     if (phy->hard_reset_rcvd)
     {
         phy->hard_reset_rcvd = false;
+        log_reset(RST_HARD_RCVD);
         pd_phy_reset_protocol(phy);
         last_rx_id = 0xFF;
         has_contract = false;
@@ -350,8 +382,7 @@ void fe_process(void)
         diag_wait_caps();
         if (elapsed > T_LEGACY_MS)
         {
-            set_state(FE_ST_LEGACY);
-            bridge_on_front_caps();
+            enter_legacy();
         }
         break;
 #endif
@@ -362,8 +393,7 @@ void fe_process(void)
         }
         else if (hard_reset_sent && elapsed > T_LEGACY_MS)
         {
-            set_state(FE_ST_LEGACY);
-            bridge_on_front_caps();
+            enter_legacy();
         }
         break;
 
@@ -396,6 +426,31 @@ void fe_process(void)
     case FE_ST_LEGACY:
         break;
     }
+}
+
+bool fe_caps_available(void)
+{
+    return num_caps > 0 || state == FE_ST_LEGACY;
+}
+
+uint32_t fe_contract_rdo(void)
+{
+    return has_contract ? contract_rdo : 0;
+}
+
+bool fe_flash_safe(void)
+{
+    if (state == FE_ST_LEGACY)
+        return true;
+    if (state != FE_ST_READY || bridge_req_waiting)
+        return false;
+    /* PPS 保活快到期时不做（Flash 操作期间无法收发） */
+    return !(has_contract && contract.type == PPS_PDO && millis() - keepalive_ts > PPS_KEEPALIVE_MS - 200);
+}
+
+uint8_t fe_state_code(void)
+{
+    return (uint8_t)state;
 }
 
 bool fe_is_ready(void)

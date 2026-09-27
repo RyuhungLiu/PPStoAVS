@@ -7,7 +7,8 @@ USB PD protocol converter on **WCH CH32M030K9U7**: takes a charger that offers *
 PPS charger ── Type-C plug (USBPD1, Sink) ── CH32M030K9U7 ── NMOS switch ── Type-C receptacle (USBPD0, Source) ── device
 ```
 
-First version: minimal, offline (no logging), **not yet verified on hardware**.
+v0.1.1 is verified on hardware. v0.2.0 adds a USB HID link on the front D+/D− for a browser-based
+host tool: change the output mode and limits, and read back per-session logs.
 
 ## Pin assignment
 
@@ -19,29 +20,80 @@ First version: minimal, offline (no logging), **not yet verified on hardware**.
 | 1, 2, 5, 29, 30 | HVCP, PB14, PC5, PB12, CAP2 | 2-stage charge pump | TIM2 remap 10, PWM 500 kHz; VHVCP ≈ VHV + 8.5 V |
 | 21 | PA13 | ADC_IN18 | Front VBUS, 100k/10k divider (÷11) |
 | 18 / 19 | PA10 / PA11 | ISP2 / ISN2 → OPA4 → ADC_IN10 | 5 mΩ low-side shunt, gain 55, bias 1.6 V |
-| 12 / 13 | PB0 / PB1 | UDP / UDM | Front D+/D−, reserved |
+| 12 / 13 | PB0 / PB1 | UDP / UDM | Front D+/D− → USB HID (host tool) |
 | 7 | VHV | Supply | Front VBUS |
 
-## PPS → AVS translation
+## Capability translation
 
-Rules follow USB PD R3.2 (Table 3-1/3-2 notes, §4.1.3.2.4, Table 4-3):
+Rules follow USB PD R3.2 v1.2 (§6.4.1.1, Table 3-1/3-2 notes, §4.1.3.2.4, Table 4-3):
 
-1. **PPS selection** — pick the PPS APDO whose range reaches 20 V (min ≤ 9 V) with the highest current;
-   otherwise one that reaches 15 V.
-2. **Fixed PDOs** — passed through from the charger, ≤ 20 V, each capped at 3 A.
-3. **AVS is offered only if the charger has a 15 V Fixed PDO** (spec requirement) and a PPS was selected.
-4. **AVS current** — 9–15 V uses the 15 V Fixed current, 15–20 V uses the 20 V Fixed current, where each
-   is `min(charger Fixed current, PPS current, 3 A)`. The same value is written into the 15 V / 20 V Fixed PDOs.
-5. **If the selected PPS tops out below 20 V**, the 20 V Fixed PDO is dropped and AVS goes to 15 V only.
-6. **Requests** — a Fixed request maps to the charger's Fixed PDO; an AVS request (100 mV steps) maps to
-   a PPS request at the same voltage with the PPS maximum current. Voltage changes are requested in one step.
-7. **Sequence** — device Request → Accept → front Request → charger PS_RDY → front VBUS within ±5 % for
-   3 consecutive samples → PS_RDY to device. PPS keep-alive every 5 s.
-8. **Charger re-advertises (DPS)** — keep the device's voltage if still available and re-advertise;
+1. **Fixed PDOs** — passed through from the charger up to the max voltage (default 20 V), each capped at the
+   current limit (default 3 A). 9/12/15/20 V can be hidden from the host tool.
+2. **AVS is offered only if a 15 V Fixed PDO is offered** (spec requirement). Source, in order of preference:
+   - the charger's own SPR AVS APDO, passed through;
+   - otherwise a PPS APDO translated to AVS: the one reaching 20 V (min ≤ 9 V) with the highest current,
+     else one reaching 15 V.
+3. **AVS current** — 9–15 V uses the 15 V Fixed current, 15–20 V uses the 20 V Fixed current, where each
+   is `min(charger Fixed current, source current, current limit)`. The same value is written into the 15 V / 20 V Fixed PDOs.
+4. **If the AVS source tops out below 20 V**, the 20 V Fixed PDO is dropped and AVS goes to 15 V only.
+5. **12 V conversion (optional)** — if the charger has no 12 V Fixed PDO, offer one backed by a PPS APDO
+   covering 12 V (preferred) or by the charger's AVS. Only added when a PDO slot is still free.
+6. **Order** — Fixed (ascending), then AVS, then PPS (ascending max voltage); at most 7 PDOs.
+   When slots run out: Fixed > AVS > PPS (higher max voltage kept) > 12 V conversion.
+7. **Requests** — a Fixed request maps to the charger's Fixed PDO (or to its PPS/AVS at 12 V); an AVS
+   request (100 mV steps) maps to the charger's AVS, or to a PPS request with the PPS maximum current;
+   a PPS request is forwarded as-is (20 mV / 50 mA units). Voltage changes are requested in one step.
+8. **Sequence** — device Request → Accept → front Request → charger PS_RDY → front VBUS within the OVP/UVP
+   window for 3 consecutive samples → PS_RDY to device. PPS keep-alive every 5 s (not needed for AVS).
+9. **Charger re-advertises (DPS)** — keep the device's voltage if still available and re-advertise;
    otherwise go back to 5 V and Hard Reset the device.
-9. **No PPS** → Fixed only. **Non-PD charger** → 5 V only.
+10. **Non-PD charger** → 5 V only.
 
-Protection: front VBUS outside ±5 % (3 samples) or current > 3.5 A for 50 ms → switch off and Hard Reset.
+Protection: front VBUS outside the OVP/UVP window (default ±5 %, 3 samples) or current above the OCP
+threshold (default 3.5 A for 50 ms) → switch off and Hard Reset. UVP is skipped while a PPS contract is
+passed through (current-limit mode).
+
+### Output modes
+
+| Mode | Rear Source_Capabilities |
+|---|---|
+| a (default) | Fixed + AVS |
+| b | Fixed + all charger PPS APDOs (max voltage/current capped) |
+| c | Fixed + AVS + all charger PPS APDOs |
+| d | Fixed only |
+
+The 12 V conversion can be enabled in any mode. Changing the mode or limits re-advertises to the device;
+if the current contract is no longer offered, the device is Hard Reset.
+
+Example — charger `5/9/15/20 V Fixed, PPS 5–11 V, AVS 9–20 V, PPS 4.5–21 V` in mode c:
+`5/9/15/20 V Fixed, AVS 9–20 V (#6), PPS 5–11 V (#5), PPS 4.5–20 V (#7)` — 7 PDOs, so no 12 V conversion.
+
+## Host tool
+
+Plug the front Type-C into a PC (no charger needed; the board runs from the PC's 5 V) and open
+[`tools/ppstoavs.html`](tools/ppstoavs.html) in desktop Chrome or Edge (WebHID). No driver or install.
+
+- **Status** — charger → converter → device overview (contracts, VBUS, current, switch), charger PDOs and
+  the rear PDOs with the charger PDO each one comes from.
+- **Settings** — mode, 12 V conversion, max voltage (15/20 V), current limit (≤ 3 A), hidden Fixed PDOs,
+  OVP/UVP %, OCP mA/ms, PPS request logging. Applied immediately and saved to flash.
+- **Records** — the last power sessions (up to 64 records each): charger PDOs, the PDOs offered to the device
+  (logged whenever they change, attached or not), every request (device RDO → charger RDO, voltage, result),
+  resets, protection trips, attach/detach. Consecutive PPS/AVS steps on the same PDO are merged into one
+  record with a repeat count. Successful device PPS requests are not logged unless enabled. Export as JSON.
+
+Device: VID `1209` / PID `0001` (pid.codes test ID), vendor usage page `0xFF00`, 64-byte reports.
+Protocol is documented in [`src/host.h`](src/host.h).
+
+Flash layout (64 KB, 128-byte pages):
+
+| Range | Use |
+|---|---|
+| `0x0000–0xBEFF` | Firmware |
+| `0xBF00–0xBFFF` | Settings (2 pages, alternating, CRC) |
+| `0xC000–0xFFFF` | Log ring (128 pages, CRC per page) |
+
+Flash writes stall the CPU for ~4.5 ms, so they only run when both PD ports have been idle for 300 ms.
 
 ## Risks
 
@@ -56,6 +108,7 @@ Protection: front VBUS outside ±5 % (3 samples) or current > 3.5 A for 50 ms �
 - **Gate turn-off** — Vgs can briefly approach −VBUS when the gate is pulled low.
 - **AVS small steps** must finish within 50 ms; this relies on the charger's PPS response time.
 - **PD2.0 devices** also receive the AVS APDO in the first Source_Capabilities.
+- **Rear Rp** always advertises 3 A, even with a lower current limit; OCP still applies.
 
 ## Build
 

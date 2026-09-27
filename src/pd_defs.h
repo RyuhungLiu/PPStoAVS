@@ -172,9 +172,16 @@ static inline uint32_t pd_build_pps_rdo(uint8_t pos, uint16_t mv, uint16_t ma)
     return ((uint32_t)pos << 28) | (1u << 24) | ((uint32_t)(mv / 20) << 9) | (ma / 50);
 }
 
+/* SPR AVS RDO：[20:9] 电压 25mV（100mV 步进），[6:0] 电流 50mA */
+static inline uint32_t pd_build_avs_rdo(uint8_t pos, uint16_t mv, uint16_t ma)
+{
+    return ((uint32_t)pos << 28) | (1u << 24) | ((uint32_t)(mv / 100 * 4) << 9) | (ma / 50);
+}
+
 static inline uint8_t  pd_rdo_pos(uint32_t rdo)          { return (rdo >> 28) & 0xF; }
 static inline uint16_t pd_rdo_fixed_op_ma(uint32_t rdo)  { return ((rdo >> 10) & 0x3FF) * 10; }
 static inline uint32_t pd_rdo_avs_mv(uint32_t rdo)       { return ((rdo >> 9) & 0xFFF) * 25; }
+static inline uint16_t pd_rdo_pps_mv(uint32_t rdo)       { return ((rdo >> 9) & 0xFFF) * 20; }
 static inline uint16_t pd_rdo_avs_ma(uint32_t rdo)       { return (rdo & 0x7F) * 50; }
 
 static inline uint32_t pd_get_u32(const uint8_t *p)

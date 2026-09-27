@@ -2,6 +2,7 @@
 #include "analog.h"
 #include "board.h"
 #include "bridge.h"
+#include "evlog.h"
 #include "pd_phy.h"
 #include "power_sw.h"
 #include "timebase.h"
@@ -128,6 +129,12 @@ static bool send_caps(void)
     return pd_phy_send(phy, MSG_TYPE_Source_Capabilities, n, pdos);
 }
 
+static void log_reset(uint8_t kind)
+{
+    ev_reset_t e = {1, kind};
+    evlog_add(EV_RESET, &e, sizeof(e));
+}
+
 static void go_unattached(void)
 {
     power_sw_set(false);
@@ -146,6 +153,7 @@ static void go_unattached(void)
  */
 static void on_detach(void)
 {
+    evlog_add(EV_BE_DETACH, NULL, 0);
     bridge_on_back_reset();
     set_rp(CC_PU_80);
     pd_phy_reset_protocol(phy);
@@ -159,6 +167,7 @@ static void on_detach(void)
 
 static void start_hard_reset(bool send)
 {
+    log_reset(send ? RST_HARD_SENT : RST_HARD_RCVD);
     if (send)
         pd_phy_send_hard_reset(phy);
     hard_reset_count++;
@@ -187,6 +196,7 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
     {
+        log_reset(RST_SOFT_RCVD);
         pd_phy_reset_protocol(phy);
         last_rx_id = 0xFF;
         send_ctrl(MSG_TYPE_Accept);
@@ -296,6 +306,8 @@ static void poll_attach(void)
         open_count = 0;
         rx_skip_count = 0;
         hard_reset_count = 0;
+        uint8_t cc = (uint8_t)attach_cc;
+        evlog_add(EV_BE_ATTACH, &cc, 1);
         set_state(BE_ST_WAIT_VSAFE5V);
     }
 }
@@ -321,6 +333,21 @@ static bool poll_detach(void)
         open_count = 0;
     }
     return false;
+}
+
+bool be_flash_safe(void)
+{
+    return state == BE_ST_UNATTACHED || state == BE_ST_ATTACH_WAIT || state == BE_ST_READY || state == BE_ST_NO_PD;
+}
+
+uint8_t be_state_code(void)
+{
+    return (uint8_t)state;
+}
+
+bool be_attached(void)
+{
+    return attached_state();
 }
 
 void be_init(void)

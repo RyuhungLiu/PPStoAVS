@@ -8,7 +8,7 @@
 typedef struct
 {
     uint8_t    pos;         /* 1-based，对应充电器 Source_Capabilities 中的位置 */
-    pdo_type_t type;        /* FPDO 或 PPS_PDO */
+    pdo_type_t type;        /* FPDO、PPS_PDO 或 SPR_AVS_PDO */
     uint16_t   mv;
     uint16_t   ma;
 } fe_target_t;
@@ -29,6 +29,10 @@ bool fe_is_legacy(void);        /* 充电器不支持 PD */
 uint16_t fe_legacy_current_ma(void);
 
 const pdo_t *fe_caps(uint8_t *num);
+bool fe_caps_available(void);
+uint32_t fe_contract_rdo(void);     /* 当前前端合约的 RDO，无合约为 0 */
+bool fe_flash_safe(void);           /* 空闲且近期不会发保活，可以做 Flash 操作 */
+uint8_t fe_state_code(void);
 bool fe_caps_unconstrained(void);
 const fe_target_t *fe_contract(void);
 

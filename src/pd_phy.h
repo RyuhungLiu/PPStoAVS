@@ -37,6 +37,7 @@ typedef struct
     volatile bool hard_reset_rcvd;
     volatile bool goodcrc_rcvd;
     volatile uint8_t goodcrc_id;
+    volatile uint32_t last_act_ms;  /* 最近一次收发（Flash 操作避开 PD 活动） */
 
     /* 诊断计数（FE_DIAG 构建时编码进后端 PDO） */
     volatile uint16_t dbg_rx_sel[2];

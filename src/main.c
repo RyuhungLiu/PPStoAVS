@@ -6,17 +6,24 @@
  *  2. 时基、ADC/OPA4，MOS 关断状态下校准电流零点
  *  3. 启动 HVCP 电荷泵
  *  4. 初始化后端 USBPD0（Source，开始检测设备）
- *  5. 保留调试窗口后关闭 SDI，初始化前端 USBPD1（Sink，PA3/CC4R）
- *  6. 主循环：前端 → 协议桥 → 后端，喂狗
+ *  5. 读取设置、扫描记录区并预擦除（PD 尚未启动，Flash 停顿无影响）
+ *  6. 前端 D+/D- USB HID（上位机）
+ *  7. 保留调试窗口后关闭 SDI，初始化前端 USBPD1（Sink，PA3/CC4R）
+ *  8. 主循环：前端 → 协议桥 → 后端 → 上位机 → Flash 写入调度，喂狗
  */
 #include "analog.h"
 #include "be_source.h"
 #include "board.h"
 #include "bridge.h"
+#include "cfg.h"
+#include "evlog.h"
 #include "fe_sink.h"
+#include "host.h"
 #include "pd_phy.h"
 #include "power_sw.h"
+#include "store.h"
 #include "timebase.h"
+#include "usb_hid.h"
 
 static void watchdog_init(void)
 {
@@ -39,6 +46,15 @@ int main(void)
     SystemCoreClockUpdate();
     timebase_init();
 
+    /* 复位原因：RCC_RSTSCKR[31:24]，读出后清除 */
+    uint8_t reset_flags = RCC->RSTSCKR >> 24;
+    RCC->RSTSCKR |= RCC_RMVF;
+
+    cfg_init();
+    evlog_init();
+    ev_boot_t boot = {FW_VERSION, reset_flags, *cfg()};
+    evlog_add(EV_BOOT, &boot, sizeof(boot));
+
     analog_init();
     analog_calibrate_current_zero();
 
@@ -46,6 +62,7 @@ int main(void)
 
     pd_phy_hw_init();
     be_init();
+    usb_hid_init();
 
     watchdog_init();
 
@@ -63,6 +80,8 @@ int main(void)
         fe_process();
         bridge_process();
         be_process();
+        host_process();
+        store_process();
         watchdog_feed();
     }
 }

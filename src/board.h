@@ -45,12 +45,9 @@
 #define BOOT_DEBUG_WINDOW_MS    300
 
 /* ---------------- 产品能力与保护 ---------------- */
-#define MAX_OUTPUT_CURRENT_MA   3000    /* Rp 3A，无 E-Marker 检测 */
-#define MAX_OUTPUT_VOLTAGE_MV   20000   /* 仅 SPR，最高 20V */
-#define VBUS_TOLERANCE_PCT      5       /* 过/欠压保护与稳定判定窗口 ±5% */
+/* 最高电压、电流上限、OVP/UVP 容差、OCP 由上位机设置（cfg.c，默认 20V / 3A / ±5% / 3.5A 50ms） */
+#define FW_VERSION              0x0020  /* 0xMMmp：v0.2.0 */
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
-#define OCP_CURRENT_MA          3500
-#define OCP_TIME_MS             50
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */
 #define VOLTAGE_COMP_ENABLE     0       /* 压降补偿：预留，暂不启用（见备忘录） */

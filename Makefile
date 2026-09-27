@@ -29,7 +29,7 @@ ARCH := -march=rv32imc_zba_zbb_zbc_zbs_xw -mabi=ilp32 -msmall-data-limit=8 -mno-
 CFLAGS := $(EXTRA_DEFS) $(ARCH) -Os -std=gnu99 -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections \
           -fno-common -Wall -Wextra -Wno-unused-parameter -g $(INC)
 ASFLAGS := $(ARCH) -x assembler-with-cpp $(INC)
-LDFLAGS := $(ARCH) -T sdk/Ld/Link.ld -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(BUILD)/$(TARGET).map \
+LDFLAGS := $(ARCH) -T $(BUILD)/link.ld -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(BUILD)/$(TARGET).map \
            --specs=nano.specs --specs=nosys.specs -Wl,--print-memory-usage
 
 OBJS := $(addprefix $(BUILD)/,$(SRC_C:.c=.o)) $(addprefix $(BUILD)/,$(SRC_S:.S=.o))
@@ -47,7 +47,13 @@ $(BUILD)/%.o: %.S
 	@echo AS $<
 	@$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/$(TARGET).elf: $(OBJS)
+# 程序区 0xBF00，其上为设置（2 页）与记录（128 页），见 src/flash_io.h
+$(BUILD)/link.ld: sdk/Ld/Link.ld
+	@mkdir -p $(dir $@)
+	@sed 's/LENGTH = 64K/LENGTH = 0xBF00/' $< > $@
+	@grep -q "LENGTH = 0xBF00" $@
+
+$(BUILD)/$(TARGET).elf: $(OBJS) $(BUILD)/link.ld
 	@echo LD $@
 	@$(CC) $(LDFLAGS) $(OBJS) -o $@
 
