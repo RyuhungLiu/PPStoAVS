@@ -77,5 +77,5 @@ SWDIO → DIO test point (PA3/SWIO), GND → GND, WCH-LinkE 5V → VBUS.
   corrupts BMC and the front never receives Source_Capabilities.
 
 Diagnostic build: `make BUILD=build_diag EXTRA_DEFS=-DFE_DIAG`. When the front falls back to non-PD,
-Fixed PDOs 5.05–5.30 V carry front-end counters in their current field (10 mA = 1): RX events,
-SOP messages, TX OK, TX fail, `PORT_CC2` register, last SOP×100 + length.
+Fixed PDOs 5.05–5.30 V carry front-end counters in their current field (10 mA = 1):
+IRQs, RX events, SOP messages, Hard Resets received, TX OK, last SOP×100 + length.

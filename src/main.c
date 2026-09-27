@@ -49,11 +49,13 @@ int main(void)
 
     watchdog_init();
 
+#ifndef FE_DIAG     /* 诊断构建：不留调试窗口，上电立即接管前端（重烧用断电擦除） */
     while (millis() < BOOT_DEBUG_WINDOW_MS)
     {
         be_process();
         watchdog_feed();
     }
+#endif
     fe_init();
 
     while (1)

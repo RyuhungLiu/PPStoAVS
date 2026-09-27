@@ -118,8 +118,8 @@ static void rebuild_back_caps(void)
 #ifdef FE_DIAG
         /* 诊断（FE_DIAG）：把前端计数编码进 5.05~5.30V 的电流字段（10mA 单位） */
         const pd_phy_t *d = &pd_phy_fe;
-        uint16_t v[6] = {d->dbg_rx_act, d->dbg_sop0, d->dbg_tx_ok, d->dbg_tx_fail,
-                         d->regs->PORT_CC2, (uint16_t)(d->dbg_last_sop * 100 + d->dbg_last_len)};
+        (void)d;
+        const uint16_t *v = fe_dbg_v;
         for (uint8_t i = 0; i < 6; i++)
         {
             uint16_t x = v[i] > 1023 ? 1023 : v[i];

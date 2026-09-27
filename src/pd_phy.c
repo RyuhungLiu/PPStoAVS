@@ -77,10 +77,11 @@ void pd_phy_hw_init(void)
     /* 使用 USBPD 功能时需开启 ISINKEN（RM §15.2.15 注） */
     PWR->CTLR |= PWR_ISINKEN;
 
-    /* CC 引脚高阈值输入 */
+    /* 按 WCH EVT：Source 端（USBPD0）开高阈值输入，Sink 端（USBPD1）保持默认阈值 */
     EXTEN->EXTEN_KEYR = EXTEN_KEY1;
     EXTEN->EXTEN_KEYR = EXTEN_KEY2;
-    EXTEN->EXTEN_CTLR0 |= EXTEN_USBPD0_CC_HVT | EXTEN_USBPD1_CC_HVT | EXTEN_USBPD0_CC_REF | EXTEN_USBPD1_CC_REF;
+    EXTEN->EXTEN_CTLR0 = (EXTEN->EXTEN_CTLR0 & ~EXTEN_USBPD1_CC_HVT) |
+                         EXTEN_USBPD0_CC_HVT | EXTEN_USBPD0_CC_REF | EXTEN_USBPD1_CC_REF;
     EXTEN->EXTEN_CTLR0 |= EXTEN_WR_LOCK;
 
     GPIO_InitTypeDef gpio = {0};
@@ -108,11 +109,15 @@ void pd_phy_init(pd_phy_t *p, USBPD_TypeDef *regs, IRQn_Type irqn, uint8_t power
 
 void pd_phy_set_cc(pd_phy_t *p, uint8_t cc_sel)
 {
+    NVIC_DisableIRQ(p->irqn);
     p->cc_sel = cc_sel;
     if (cc_sel)
         p->regs->CONFIG |= CC_SEL;
     else
         p->regs->CONFIG &= ~CC_SEL;
+    /* 接收在 BMC_START 时锁定 CC 通道：切换后必须重新启动接收（Sink 端不会先发送来触发重启） */
+    phy_set_rx(p);
+    NVIC_EnableIRQ(p->irqn);
 }
 
 void pd_phy_reset_protocol(pd_phy_t *p)
@@ -181,12 +186,14 @@ static void phy_isr(pd_phy_t *p)
 {
     USBPD_TypeDef *r = p->regs;
 
+    p->dbg_irq++;
     if (r->STATUS & IF_RX_ACT)
     {
         uint8_t status = r->STATUS;
         uint16_t rx_len = r->BMC_BYTE_CNT;
         r->STATUS = IF_RX_ACT;
         p->dbg_rx_act++;
+        p->dbg_rx_sel[p->cc_sel & 1]++;
         p->dbg_last_len = rx_len;
         p->dbg_last_sop = status & BMC_AUX_Mask;
 
@@ -214,6 +221,7 @@ static void phy_isr(pd_phy_t *p)
                     p->q_head = next;
                 }
 
+                delay_us(30);   /* tInterFrameGap ≥ 25us（同 WCH EVT） */
                 uint16_t goodcrc = pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
                 p->tx_buf[0] = goodcrc & 0xFF;
                 p->tx_buf[1] = goodcrc >> 8;
@@ -237,6 +245,7 @@ static void phy_isr(pd_phy_t *p)
     {
         uint8_t status = r->STATUS;
         r->STATUS = IF_RX_RESET;
+        p->dbg_rx_reset++;
         if ((status & BMC_AUX_Mask) == BMC_AUX_SOP1_HRST)
         {
             p->hard_reset_rcvd = true;

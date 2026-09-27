@@ -70,8 +70,9 @@ static void set_state(be_state_t s)
 static void set_rp(uint8_t pu)
 {
     USBPD_TypeDef *r = phy->regs;
-    r->PORT_CC1 = (r->PORT_CC1 & ~(CC_PU_Mask | CC_PD | PORT_CE)) | pu;
-    r->PORT_CC2 = (r->PORT_CC2 & ~(CC_PU_Mask | CC_PD | PORT_CE)) | pu;
+    /* 接收期间保持比较器 CE=1、0.66V（WCH EVT） */
+    r->PORT_CC1 = (r->PORT_CC1 & ~(CC_PU_Mask | CC_PD | PORT_CVS_Mask)) | PORT_CE | PORT_CVS_066 | pu;
+    r->PORT_CC2 = (r->PORT_CC2 & ~(CC_PU_Mask | CC_PD | PORT_CVS_Mask)) | PORT_CE | PORT_CVS_066 | pu;
 }
 
 /*

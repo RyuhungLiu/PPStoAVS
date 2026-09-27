@@ -55,6 +55,67 @@ static bool bridge_req_waiting;     /* 协议桥请求等待 SinkTxOK */
 static uint32_t bridge_req_ts;
 static fe_req_status_t req_status = FE_REQ_IDLE;
 
+#ifdef FE_DIAG
+/*
+ * 诊断：等待能力报文期间
+ *  - 每 400ms 在 CC_SEL=1/0 之间切换接收通道
+ *  - 每 10ms 用 0.66V 比较器快速采样两个 CC 口，统计电平翻转（BMC 是否到达引脚）
+ *  - 不发 Hard Reset，3s 后直接进入 LEGACY 以便把计数编码进后端 PDO
+ */
+uint16_t fe_dbg_v[6];
+static uint32_t dbg_smp_ts;
+
+/*
+ * 诊断：等待能力报文期间，每 10ms 快速轮询 USBPD1 自身的接收状态
+ *  v[0] IF_RX_BIT 置位次数   v[1] IF_RX_BYTE 置位次数   v[2] 出现过的 RX_STATE 位图
+ *  v[3] PA3 0.66V 比较器翻转  v[4] CONTROL 寄存器        v[5] (CONFIG >> 6) & 0x3FF
+ *  不发 Hard Reset，3s 后进入 LEGACY 把计数编码进后端 PDO
+ */
+static void diag_wait_caps(void)
+{
+    uint32_t now = millis();
+    if (now - dbg_smp_ts < 10)
+        return;
+    dbg_smp_ts = now;
+
+    USBPD_TypeDef *r = phy->regs;
+    for (uint16_t i = 0; i < 400; i++)
+    {
+        uint8_t st = r->STATUS;
+        if (st & IF_RX_BIT)
+        {
+            fe_dbg_v[0]++;
+            r->STATUS = IF_RX_BIT;
+        }
+        if (st & IF_RX_BYTE)
+        {
+            fe_dbg_v[1]++;
+            r->STATUS = IF_RX_BYTE;
+        }
+        fe_dbg_v[2] |= 1u << ((r->CONTROL >> 2) & 7);
+    }
+
+    volatile uint8_t *reg = pd_phy_port_reg(phy, 1);
+    uint8_t saved = *reg;
+    *reg = (saved & ~PORT_CVS_Mask) | PORT_CE | PORT_CVS_066;
+    delay_us(2);
+    uint8_t lastc = *reg & CC_CMPO;
+    for (uint16_t i = 0; i < 400; i++)
+    {
+        uint8_t v = *reg & CC_CMPO;
+        if (v != lastc)
+        {
+            fe_dbg_v[3]++;
+            lastc = v;
+        }
+    }
+    *reg = saved;
+
+    fe_dbg_v[4] = r->CONTROL;
+    fe_dbg_v[5] = (r->CONFIG >> 6) & 0x3FF;
+}
+#endif
+
 static void set_state(fe_state_t s)
 {
     state = s;
@@ -72,7 +133,7 @@ static bool cc_above(uint8_t cvs)
     *reg = (*reg & ~PORT_CVS_Mask) | PORT_CE | cvs;
     delay_us(5);
     bool above = (*reg & CC_CMPO) != 0;
-    *reg &= ~PORT_CE;
+    *reg = (*reg & ~PORT_CVS_Mask) | PORT_CE | PORT_CVS_066;   /* 恢复接收用的比较器设置 */
     return above;
 }
 
@@ -248,8 +309,9 @@ void fe_init(void)
     AFIO->PCFR1 = (AFIO->PCFR1 & ~AFIO_SWCFG_Mask) | AFIO_SWCFG_DISABLE;
 
     pd_phy_init(phy, USBPD1, USBPD1_IRQn, 0 /* Sink */, 0 /* UFP */);
-    phy->regs->PORT_CC1 &= ~(CC_PD | CC_PU_Mask);             /* CC3 不使用 */
-    phy->regs->PORT_CC2 = (phy->regs->PORT_CC2 & ~CC_PU_Mask) | CC_PD; /* CC4R：Rd */
+    phy->regs->PORT_CC1 = 0;                                  /* CC3 不使用 */
+    /* CC4R：Rd；BMC 接收经 CC 比较器，接收期间保持 CE=1、0.66V（WCH EVT USBPD_SNK/SRC 均如此） */
+    phy->regs->PORT_CC2 = CC_PD | PORT_CE | PORT_CVS_066;
     pd_phy_set_cc(phy, 1);
 
     last_rx_id = 0xFF;
@@ -284,6 +346,15 @@ void fe_process(void)
     switch (state)
     {
     case FE_ST_WAIT_CAPS:
+#ifdef FE_DIAG
+        diag_wait_caps();
+        if (elapsed > T_LEGACY_MS)
+        {
+            set_state(FE_ST_LEGACY);
+            bridge_on_front_caps();
+        }
+        break;
+#endif
         if (!hard_reset_sent && elapsed > T_SINK_WAIT_CAP_MS)
         {
             hard_reset_sent = true;
