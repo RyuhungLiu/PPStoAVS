@@ -50,7 +50,9 @@ Protection: front VBUS outside ±5 % (3 samples) or current > 3.5 A for 50 ms �
 - **SDK bug** — `PWR_CTLR_ISINKEN` is defined as `0x0100` in the SDK header; the reference manual, SVD and
   the SDK's own `ch32m030_pwr.c` use bit 10. USB PD needs ISINKEN, so the code uses bit 10.
 - **ADC reference** is VDD33 (3.1–3.5 V spec). The ±5 % window may trip falsely; tune `ADC_VREF_MV`.
-- **No output VBUS sensing** and no active discharge (HVOD2/DSCG not connected).
+- **No output VBUS sensing** and no active discharge (HVOD2/DSCG not connected). On detach the firmware
+  keeps the switch on, returns the charger to 5 V, then switches off (≤ 650 ms), so up to ~5 V can remain
+  on the receptacle instead of vSafe0V. A bleeder resistor or DSCG circuit is needed for full compliance.
 - **Gate turn-off** — Vgs can briefly approach −VBUS when the gate is pulled low.
 - **AVS small steps** must finish within 50 ms; this relies on the charger's PPS response time.
 - **PD2.0 devices** also receive the AVS APDO in the first Source_Capabilities.

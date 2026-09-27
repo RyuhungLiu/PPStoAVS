@@ -1,4 +1,5 @@
 #include "be_source.h"
+#include "analog.h"
 #include "board.h"
 #include "bridge.h"
 #include "pd_phy.h"
@@ -9,6 +10,9 @@
 #define T_CC_DEBOUNCE_MS        150     /* tCCDebounce 100~200ms */
 #define T_DETACH_POLL_MS        10
 #define N_DETACH_DEBOUNCE       2       /* tPDDebounce 10~20ms */
+#define N_DETACH_RX_SKIP        2       /* 接收忙最多推迟 2 次检测，防止 RX_STATE 卡住导致永远检测不到拔出 */
+#define T_DETACH_DISCHARGE_MS   650     /* tVBUSOFF：拔出后先把前端降到 5V 再关 MOS */
+#define VBUS_DISCHARGED_MV      5750    /* 前端 VBUS 已回到 vSafe5V 附近（含 ADC 误差） */
 #define T_VBUS_ON_SETTLE_MS     50      /* 打开 MOS 后等待 VBUS 建立，再发首条能力报文（tFirstSourceCap 250ms 内） */
 #define T_SEND_CAPS_MS          150     /* tTypeCSendSourceCap 100~200ms */
 #define N_CAPS_COUNT            50
@@ -23,6 +27,7 @@
 #define PORT_CVS_Mask           (3u << 5)
 #define PORT_CVS_022            (1u << 5)
 #define PORT_CVS_066            (2u << 5)
+#define PORT_CVS_123            (3u << 5)
 #define PORT_RX_STATE_Mask      (7u << 2)
 
 typedef enum
@@ -39,6 +44,7 @@ typedef enum
     BE_ST_HARD_RESET_WAIT,
     BE_ST_HARD_RESET_RECOVER,
     BE_ST_NO_PD,
+    BE_ST_DETACH_DISCHARGE,
 } be_state_t;
 
 typedef enum
@@ -55,6 +61,7 @@ static uint32_t state_ts;
 static uint32_t poll_ts;
 static int8_t attach_cc;
 static uint8_t open_count;
+static uint8_t rx_skip_count;
 static uint8_t caps_count;
 static uint8_t hard_reset_count;
 static bool has_contract;
@@ -77,9 +84,11 @@ static void set_rp(uint8_t pu)
 
 /*
  * 用 80uA 上拉判断 CC 状态（比较器最高只有 1.23V，330uA 下无法区分 Rd 与悬空）：
- *   Rd 5.1k：0.28~0.56V → 高于 0.22V、低于 0.66V
- *   Ra 1k  ：< 0.22V
- *   悬空   ：被拉到高电平
+ *   Rd 5.1k        ：0.28~0.56V
+ *   Rd 电压钳位型  ：约 0.9~1.3V（无电设备的 dead-battery Rd，如电量耗尽的 iPhone 实测 0.9V）
+ *   Ra 1k          ：< 0.22V
+ *   悬空           ：被拉到 VDD33
+ * 规范 Default USB Rp 下 vRd 上限 1.6V；比较器最高档 1.23V，因此以 1.23V 作为 Rd/悬空分界。
  */
 static cc_state_t cc_sense(uint8_t cc_sel)
 {
@@ -89,14 +98,14 @@ static cc_state_t cc_sense(uint8_t cc_sel)
     *reg = (saved & ~(CC_PU_Mask | PORT_CVS_Mask)) | CC_PU_80 | PORT_CE | PORT_CVS_022;
     delay_us(20);
     bool above_022 = (*reg & CC_CMPO) != 0;
-    *reg = (*reg & ~PORT_CVS_Mask) | PORT_CVS_066;
-    delay_us(5);
-    bool above_066 = (*reg & CC_CMPO) != 0;
+    *reg = (*reg & ~PORT_CVS_Mask) | PORT_CVS_123;
+    delay_us(10);
+    bool above_123 = (*reg & CC_CMPO) != 0;
     *reg = saved;
 
     if (!above_022)
         return CC_RA;
-    if (!above_066)
+    if (!above_123)
         return CC_RD;
     return CC_OPEN;
 }
@@ -129,6 +138,23 @@ static void go_unattached(void)
     hard_reset_count = 0;
     attach_cc = -1;
     set_state(BE_ST_UNATTACHED);
+}
+
+/*
+ * 设备拔出：后端 VBUS 没有放电电路（DSCG 未接），直接关 MOS 会把高压留在母座上。
+ * 先保持 MOS 导通、让前端回到 5V（充电器负责放电），前端 VBUS 回到 vSafe5V 或超时后再关断。
+ */
+static void on_detach(void)
+{
+    bridge_on_back_reset();
+    set_rp(CC_PU_80);
+    pd_phy_reset_protocol(phy);
+    has_contract = false;
+    attach_cc = -1;
+    if (power_sw_is_on())
+        set_state(BE_ST_DETACH_DISCHARGE);
+    else
+        go_unattached();
 }
 
 static void start_hard_reset(bool send)
@@ -268,6 +294,7 @@ static void poll_attach(void)
         last_rx_id = 0xFF;
         set_rp(CC_PU_330);
         open_count = 0;
+        rx_skip_count = 0;
         hard_reset_count = 0;
         set_state(BE_ST_WAIT_VSAFE5V);
     }
@@ -275,13 +302,17 @@ static void poll_attach(void)
 
 static bool poll_detach(void)
 {
-    if (phy->regs->CONTROL & PORT_RX_STATE_Mask)
+    if ((phy->regs->CONTROL & PORT_RX_STATE_Mask) && rx_skip_count < N_DETACH_RX_SKIP)
+    {
+        rx_skip_count++;
         return false;   /* 正在接收，下次再查 */
+    }
+    rx_skip_count = 0;
     if (cc_sense(attach_cc) == CC_OPEN)
     {
         if (++open_count >= N_DETACH_DEBOUNCE)
         {
-            go_unattached();
+            on_detach();
             return true;
         }
     }
@@ -309,6 +340,14 @@ void be_process(void)
             poll_ts = now;
             poll_attach();
         }
+        return;
+    }
+
+    if (state == BE_ST_DETACH_DISCHARGE)
+    {
+        bool front_5v = bridge_front_ready_for_vsafe5v() && analog_vbus_mv() < VBUS_DISCHARGED_MV;
+        if (front_5v || now - state_ts >= T_DETACH_DISCHARGE_MS)
+            go_unattached();
         return;
     }
 
