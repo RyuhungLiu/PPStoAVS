@@ -14,7 +14,8 @@ typedef enum
 } bridge_result_t;
 
 /* 前端回调 */
-fe_target_t bridge_on_front_caps(void);     /* 收到充电器能力（含 DPS 重新广播），返回应立即请求的目标 */
+/* 收到充电器能力（含 Soft Reset 后重新广播），返回应立即请求的目标；*for_bridge = 该请求属于进行中的转换 */
+fe_target_t bridge_on_front_caps(bool *for_bridge);
 void bridge_on_front_reset(void);           /* 前端 Hard Reset / Soft Reset */
 
 /* 上位机修改设置后调用：重建后端能力，必要时让后端 Hard Reset */
@@ -30,8 +31,14 @@ void bridge_start_transition(void);
 bridge_result_t bridge_poll_transition(void);
 void bridge_on_back_contract(void);         /* 已向设备发出 PS_RDY */
 void bridge_on_back_reset(void);            /* 后端断开或 Hard Reset：停止监测，前端回 5V */
+void bridge_on_back_detach(void);           /* 设备拔出（Lab 二次握手状态清零） */
 
 bool bridge_take_back_caps_dirty(void);     /* DPS 等原因需要重新广播 */
+
+/* Lab：后端 AVS 二次握手 */
+bool bridge_rear_query_wanted(void);        /* 需要向设备查询 Sink_Capabilities_Extended */
+void bridge_on_rear_sink_modes(int16_t modes);  /* 设备的 Sink Modes；-1 = 不支持或未回复 */
+uint8_t bridge_rear_avs_2nd_state(void);    /* 0 未启用/不适用，1 等待查询，2 设备不支持 AVS，3 已改为广播 AVS */
 bool bridge_take_back_hard_reset(void);     /* 当前合约失效或保护动作 */
 
 bool bridge_flash_safe(void);               /* 没有进行中的转换，可以做 Flash 操作 */

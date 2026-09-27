@@ -6,3 +6,4 @@ void analog_init(void);
 void analog_calibrate_current_zero(void);   /* MOS 关断（零电流）时调用 */
 uint16_t analog_vbus_mv(void);              /* 前端 VBUS */
 uint16_t analog_current_ma(void);           /* 输出电流（R4 低侧） */
+uint16_t analog_fe_cc_mv(void);             /* 前端 CC 电压（单次采样，不影响 PD 接收） */

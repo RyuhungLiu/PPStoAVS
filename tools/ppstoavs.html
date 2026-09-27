@@ -55,6 +55,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
 .tag { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px; font-weight: 600;
   background: var(--soft); color: var(--muted); white-space: nowrap; }
+.tag:empty { display: none; }
 .tag.ok { background: var(--ok-soft); color: var(--ok); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .tag.bad { background: var(--bad-soft); color: var(--bad); }
@@ -190,7 +191,7 @@ td.nw { white-space: nowrap; }
     </div>
     <div class="grid2">
       <div class="card"><h3 data-i18n="chargerCaps"></h3><div class="scroll" id="frontCaps"></div></div>
-      <div class="card"><h3 data-i18n="rearCaps"></h3><div class="scroll" id="rearCaps"></div></div>
+      <div class="card"><h3><span data-i18n="rearCaps"></span><span class="tag" id="avs2Tag"></span></h3><div class="scroll" id="rearCaps"></div></div>
     </div>
   </div>
 
@@ -252,7 +253,16 @@ td.nw { white-space: nowrap; }
     </div>
 
     <div class="card">
-      <h3><span data-i18n="rearCaps"></span><span class="tag" data-i18n="nowTag"></span></h3>
+      <h3><span data-i18n="secLab"></span><span class="tag warn">Lab</span></h3>
+      <div class="small muted" style="margin:-4px 0 12px" data-i18n="labD"></div>
+      <div style="display:grid;gap:12px">
+        <label class="check"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndD"></span></div></label>
+        <label class="check"><input type="checkbox" id="be2nd"><div><b data-i18n="be2nd"></b><span data-i18n="be2ndD"></span></div></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3><span data-i18n="rearCaps"></span><span class="tag" data-i18n="nowTag"></span><span class="tag" id="avs2Tag2"></span></h3>
       <div class="scroll" id="rearCaps2"></div>
     </div>
 
@@ -333,12 +343,25 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Auto-recovered" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
-    rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received"], side: ["Front", "Rear"],
-    merged: "adjusted ×", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
+    rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
+    feSt: ["waiting caps", "waiting Accept", "waiting PS_RDY", "ready", "non-PD", "Wait retry", "Soft Reset"],
+    beSt: ["unattached", "attach", "vSafe5V", "startup", "sending caps", "waiting Request", "transition", "ready",
+           "SinkTx wait", "Hard Reset", "recover", "non-PD", "discharge", "2nd handshake", "2nd handshake"],
+    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY",
+    merged: "adjusted ×", waitN: "charger Wait ×", txWait: "waited SinkTxOK ", txTimeout: "SinkTxNG, sent after timeout", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
     on: "on", off: "off", pps: "PPS log", fix12s: "12 V",
+    secLab: "Lab mode", labD: "Experimental features for testing chargers and devices.",
+    fe2nd: "Front (plug): tell the charger AVS is supported",
+    fe2ndD: "When the charger asks for Sink_Capabilities_Extended, reply with Sink Modes = AVS. Chargers with a second handshake then re-advertise AVS in place of PPS. Off: reply Not_Supported.",
+    be2nd: "Rear (receptacle): offer PPS first, AVS only after the device declares it",
+    be2ndD: "Imitates the charger second handshake: after the first contract, ask the device for Sink_Capabilities_Extended and re-advertise with AVS only if Sink Modes has AVS. Modes a/c only. Reset when the device is unplugged.",
+    avs2: ["", "2nd handshake: waiting", "2nd handshake: device has no AVS", "2nd handshake: AVS given"],
+    stQuery: "2nd handshake", fe2s: "front 2nd", be2s: "rear 2nd",
+    avs2Ev: "AVS 2nd handshake", avs2Fe: "Front · replied Sink_Capabilities_Extended", avs2Be: "Rear · device Sink Modes",
+    avs2Yes: "AVS supported → AVS offered", avs2No: "no AVS → PPS kept", avs2None: "Rear · device did not reply → PPS kept",
   },
   zh: {
     connect: "連線", disconnect: "中斷連線", connected: "已連線", notConnected: "未連線",
@@ -377,12 +400,26 @@ const T = {
     crcBad: "頁 CRC 錯誤", dropped: "筆記錄因每段上限被捨棄",
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
-          6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備" },
+          6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
+          13: "AVS 二次握手", 14: "已自動恢復" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
-    rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset"], side: ["前端", "後端"],
-    merged: "微調 ×", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
+    rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
+    feSt: ["等能力", "等 Accept", "等 PS_RDY", "就緒", "非 PD", "Wait 重試", "Soft Reset 中"],
+    beSt: ["未插入", "偵測中", "等 5V", "啟動", "發送能力", "等請求", "轉換中", "就緒",
+           "SinkTx 等待", "Hard Reset", "恢復中", "非 PD", "放電中", "二次握手", "二次握手"],
+    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回",
+    merged: "微調 ×", waitN: "充電器 Wait ×", txWait: "等 SinkTxOK ", txTimeout: "SinkTxNG 逾時仍送出", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
     on: "開", off: "關", pps: "PPS 記錄", fix12s: "12V 轉換",
+    secLab: "Lab 模式", labD: "實驗功能，用於測試充電器與設備的行為。",
+    fe2nd: "前端（公頭）：向充電器宣告支援 AVS",
+    fe2ndD: "充電器查詢 Sink_Capabilities_Extended 時回覆 Sink Modes = AVS。支援二次握手的充電器會重新廣播，用 AVS 取代 PPS。關閉時回覆 Not_Supported。",
+    be2nd: "後端（母座）：先給 PPS，設備宣告支援 AVS 後才給 AVS",
+    be2ndD: "模擬充電器的二次握手：第一次協商後向設備查詢 Sink_Capabilities_Extended，Sink Modes 有 AVS 才重新廣播 AVS。只在方式 a/c 有作用；設備拔出後重新開始。",
+    avs2: ["", "二次握手：等待查詢", "二次握手：設備不支援 AVS", "二次握手：已給 AVS"],
+    stQuery: "二次握手中", fe2s: "前端二次握手", be2s: "後端二次握手",
+    avs2Ev: "AVS 二次握手", avs2Fe: "前端 · 已回覆 Sink_Capabilities_Extended", avs2Be: "後端 · 設備 Sink Modes",
+    avs2Yes: "支援 AVS → 改為廣播 AVS", avs2No: "不支援 AVS → 維持 PPS", avs2None: "後端 · 設備沒有回覆 → 維持 PPS",
   },
 };
 let lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
@@ -489,7 +526,8 @@ async function refreshInfo() {
 async function refreshStatus() {
   const a = await request(0x02, [0]);
   const n = a[17];
-  state.status = { fe: a[0], be: a[1], flags: a[2], vbus: u16(a, 3), ibus: u16(a, 5), feRdo: u32(a, 7), beRdo: u32(a, 11), beMv: u16(a, 15) };
+  state.status = { fe: a[0], be: a[1], flags: a[2], vbus: u16(a, 3), ibus: u16(a, 5), feRdo: u32(a, 7), beRdo: u32(a, 11), beMv: u16(a, 15),
+    cc: state.info && state.info.proto >= 3 ? u16(a, 18 + n * 4) : null };
   state.frontCaps = Array.from({ length: n }, (_, i) => u32(a, 18 + i * 4));
   const b = await request(0x02, [1]);
   const m = b[0];
@@ -519,12 +557,14 @@ function setTab(name) {
 /* ================= status ================= */
 function feState(s) {
   if (s.flags & 1) return [t("stLegacy"), "warn"];
-  return [[t("stWait"), ""], [t("stNeg"), "acc"], [t("stNeg"), "acc"], [t("stReady"), "ok"]][s.fe] ?? [String(s.fe), ""];
+  return [[t("stWait"), ""], [t("stNeg"), "acc"], [t("stNeg"), "acc"], [t("stReady"), "ok"], [t("stLegacy"), "warn"],
+    [t("stNeg"), "acc"], [t("stReset"), "warn"]][s.fe] ?? [String(s.fe), ""];
 }
 function beState(s) {
   if (!(s.flags & 2)) return [t("stNone"), ""];
   const map = { 1: [t("stDetect"), ""], 7: (s.flags & 8) ? [t("stReady"), "ok"] : [t("stNeg"), "acc"], 8: [t("stUpdate"), "acc"],
-    9: [t("stReset"), "warn"], 10: [t("stReset"), "warn"], 11: [t("stNoPd"), "warn"], 12: [t("stDischarge"), "warn"] };
+    9: [t("stReset"), "warn"], 10: [t("stReset"), "warn"], 11: [t("stNoPd"), "warn"], 12: [t("stDischarge"), "warn"],
+    13: [t("stQuery"), "acc"], 14: [t("stQuery"), "acc"] };
   return map[s.be] ?? [t("stNeg"), "acc"];
 }
 function setTag(id, [text, cls]) { const el = $(id); el.textContent = text; el.className = "tag " + (cls || ""); }
@@ -550,14 +590,16 @@ function renderStatus() {
   if (!s || !dev) {
     ["feBig", "vbusBig", "beBig"].forEach((id) => ($(id).textContent = "—"));
     ["feSub", "vbusSub", "beSub"].forEach((id) => ($(id).textContent = ""));
-    ["feTag", "swTag", "beTag"].forEach((id) => setTag(id, ["", ""]));
+    ["feTag", "swTag", "beTag", "avs2Tag", "avs2Tag2"].forEach((id) => setTag(id, ["", ""]));
     $("frontCaps").innerHTML = capsTable([], 0); $("rearCaps").innerHTML = capsTable([], 0, []); $("rearCaps2").innerHTML = capsTable([], 0, []);
     return;
   }
   setTag("feTag", feState(s));
   const fr = (s.flags & 16) ? decodeRdo(s.feRdo, state.frontCaps) : null;
   $("feBig").textContent = fr ? fmtV(fr.mv) : (s.flags & 1) ? "5.0 V" : "—";
-  $("feSub").textContent = fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract");
+  /* CC 电压：Rp 3A ≥ 1.23V = SinkTxOK，1.5A = SinkTxNG（PD 3.0 冲突避免） */
+  const cc = s.cc != null && !(s.flags & 1) ? ` · CC ${(s.cc / 1000).toFixed(2)} V ${s.cc >= 1230 ? "TxOK" : "TxNG"}` : "";
+  $("feSub").textContent = (fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract")) + cc;
 
   setTag("swTag", (s.flags & 4) ? [t("swOn"), "ok"] : [t("swOff"), ""]);
   $("vbusBig").textContent = fmtV(s.vbus);
@@ -568,6 +610,8 @@ function renderStatus() {
   $("beBig").textContent = br ? fmtV(s.beMv || br.mv) : "—";
   $("beSub").textContent = br ? `${br.type} · ${fmtA(br.ma)} · #${br.pos}` : t("noContract");
 
+  const a2 = (s.flags >> 5) & 3;
+  ["avs2Tag", "avs2Tag2"].forEach((id) => setTag(id, [t("avs2")[a2], a2 === 3 ? "ok" : a2 === 2 ? "warn" : "acc"]));
   $("frontCaps").innerHTML = capsTable(state.frontCaps, fr ? fr.pos : 0);
   const rear = capsTable(state.rearCaps, br ? br.pos : 0, state.rearSrc);
   $("rearCaps").innerHTML = rear; $("rearCaps2").innerHTML = rear;
@@ -589,7 +633,7 @@ function readForm() {
   const radio = (name) => Number((document.querySelector(`input[name=${name}]:checked`) || { value: 0 }).value);
   return { mode: radio("mode"), hide, maxMv: radio("maxMv"), maxMa: Math.round(Number($("maxMa").value) / 50) * 50,
     ovp: Number($("ovp").value), uvp: Number($("uvp").value), ocpMa: Number($("ocpMa").value), ocpMs: Number($("ocpMs").value),
-    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) };
+    flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -597,6 +641,7 @@ function writeForm(c) {
   document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
+  $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8);
   updateDirty();
 }
 const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
@@ -688,7 +733,8 @@ function pdoChips(caps, src, fcaps) {
   }).join("") + `</div>`;
 }
 function cfgText(c) {
-  const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : ""].filter(Boolean).join(", ");
+  const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
+    c.flags & 8 ? t("be2s") : ""].filter(Boolean).join(", ");
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` +
     (flags ? ` · ${flags}` : "");
 }
@@ -721,14 +767,27 @@ function decodeRecords(records) {
       case 8: {
         const back = decodeRdo(u32(d, 0), rcaps), front = decodeRdo(u32(d, 4), fcaps);
         const res = d[12], rep = d[13];
+        const tx = d.length >= 18 && d[17] ? ` · ${d[17] === 255 ? t("txTimeout") : t("txWait") + d[17] + " ms"}` : "";
+        const extra = d.length >= 17 && res !== 1 ? ` · ${u16(d, 14)} ms` + (d[16] ? ` · ${t("waitN")}${d[16]}` : "") + tx : "";
         text = res === 1 ? `${t("devS")} ${rdoText(back)} · ${t("res")[1]}`   /* 拒绝时没有前端请求 */
           : `${t("devS")} ${rdoText(back)} → ${t("chgS")} ${rdoText(front)} · ${t("vbus")} ${fmtV(u16(d, 10))} · ${t("res")[res] ?? res}` +
-            (rep ? ` · ${t("merged")}${rep + 1}` : "");
+            (rep ? ` · ${t("merged")}${rep + 1}` : "") + extra;
         cls = res === 0 ? "ok" : "bad"; cat = res === 0 ? "req" : "bad";
         break; }
       case 9: text = `${t("prot")[d[0]] ?? d[0]} · ${t("vbus")} ${fmtV(u16(d, 1))} · ${t("current")} ${fmtA(u16(d, 3))} · ${t("target")} ${fmtV(u16(d, 5))}`; cls = "bad"; cat = "bad"; break;
-      case 10: text = `${t("side")[d[0]] ?? d[0]} · ${t("rst")[d[1]] ?? d[1]}`; cls = "warn"; cat = "bad"; break;
+      case 10: {
+        text = `${t("side")[d[0]] ?? d[0]} · ${t("rst")[d[1]] ?? d[1]}`;
+        if (d.length >= 5) text += ` · ${t("stateAt")} ${(d[0] ? t("beSt") : t("feSt"))[d[2]] ?? d[2]} · ${t("rxErr")} ${u16(d, 3)}`;
+        cls = "warn"; cat = "bad"; break; }
+      case 14: text = d[1] === 1 ? t("note1") : `${t("side")[d[0]] ?? d[0]} · ${d[1]}`; cls = "warn"; cat = "bad"; break;
       case 11: text = cfgText(cfgFromBytes(d)); cls = "acc"; break;
+      case 13: {
+        const modes = "0x" + d[2].toString(16).toUpperCase().padStart(2, "0");
+        if (d[1] === 0) text = `${t("avs2Fe")} (Sink Modes ${modes})`;
+        else if (d[1] === 1) text = `${t("avs2Be")} ${modes} · ${d[2] & 0x20 ? t("avs2Yes") : t("avs2No")}`;
+        else text = t("avs2None");
+        cls = d[1] === 1 && d[2] & 0x20 ? "ok" : d[1] === 0 ? "acc" : "warn"; cat = "caps";
+        break; }
       default: text = Array.from(d, (x) => x.toString(16).padStart(2, "0")).join(" ");
     }
     return { t: r.t, type: r.type, name: t("ev")[r.type] ?? "type " + r.type, text, html: html ?? esc(text), cls, cat };

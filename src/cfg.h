@@ -23,7 +23,9 @@ typedef enum
 /* flags 位 */
 #define CFG_FIX12           (1u << 0)   /* 充电器没有 12V 时，用 PPS（优先）或 AVS 提供 12V Fixed，PDO 位置不够就不提供 */
 #define CFG_LOG_PPS         (1u << 1)   /* 记录设备的 PPS 请求（默认不记录：PPS 会频繁调压） */
-#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS)
+#define CFG_FE_AVS_2ND      (1u << 2)   /* Lab：充电器查询 Sink_Capabilities_Extended 时声明支持 AVS，触发二次握手 */
+#define CFG_BE_AVS_2ND      (1u << 3)   /* Lab：后端先给 PPS，设备声明支持 AVS 后才给 AVS（模拟二次握手） */
+#define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND)
 
 /* 上位机协议直接收发此结构（小端，16 字节） */
 typedef struct __attribute__((packed))
@@ -36,7 +38,7 @@ typedef struct __attribute__((packed))
     uint8_t  uvp_pct;       /* 1 ~ 20 */
     uint16_t ocp_ma;        /* 500 ~ 5000 */
     uint16_t ocp_ms;        /* 1 ~ 1000 */
-    uint8_t  flags;         /* CFG_FIX12 / CFG_LOG_PPS */
+    uint8_t  flags;         /* CFG_* 标志 */
     uint8_t  reserved[3];
 } cfg_t;
 

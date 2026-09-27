@@ -139,21 +139,17 @@ bool pd_phy_rx_pop(pd_phy_t *p, pd_rx_msg_t *out)
     return true;
 }
 
-bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs)
+static bool send_frame(pd_phy_t *p, uint16_t header, const uint8_t *payload, uint8_t payload_len)
 {
     p->last_act_ms = millis();
-    uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
-    uint8_t len = 2 + num_objs * 4;
+    uint8_t len = 2 + payload_len;
 
     for (uint8_t attempt = 0; attempt <= N_RETRY_COUNT; attempt++)
     {
         NVIC_DisableIRQ(p->irqn);
         p->tx_buf[0] = header & 0xFF;
         p->tx_buf[1] = header >> 8;
-        for (uint8_t i = 0; i < num_objs; i++)
-        {
-            pd_put_u32(&p->tx_buf[2 + i * 4], objs[i]);
-        }
+        memcpy(&p->tx_buf[2], payload, payload_len);
         p->goodcrc_rcvd = false;
         phy_tx_blocking(p, len, UPD_SOP0);
         NVIC_EnableIRQ(p->irqn);
@@ -173,6 +169,28 @@ bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t
     /* 未收到 GoodCRC：MessageID 仍然递增，避免对方把下一条当作重发丢弃 */
     p->tx_msg_id = (p->tx_msg_id + 1) & 0x7;
     return false;
+}
+
+bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs)
+{
+    uint8_t payload[PD_MAX_DATA_OBJS * 4];
+    for (uint8_t i = 0; i < num_objs; i++)
+        pd_put_u32(&payload[i * 4], objs[i]);
+    uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
+    return send_frame(p, header, payload, num_objs * 4);
+}
+
+bool pd_phy_send_ext(pd_phy_t *p, uint8_t msg_type, const uint8_t *data, uint8_t size)
+{
+    uint8_t payload[PD_MAX_DATA_OBJS * 4] = {0};
+    uint16_t ext = (1u << 15) | size;       /* Chunked = 1，Chunk Number 0 */
+    payload[0] = ext & 0xFF;
+    payload[1] = ext >> 8;
+    memcpy(&payload[2], data, size);
+    uint8_t num_objs = (2 + size + 3) / 4;  /* 按 4 字节补零 */
+    uint16_t header = (1u << 15) |
+                      pd_build_header(msg_type, num_objs, p->tx_msg_id, p->power_role, p->data_role, p->revision);
+    return send_frame(p, header, payload, num_objs * 4);
 }
 
 void pd_phy_send_hard_reset(pd_phy_t *p)

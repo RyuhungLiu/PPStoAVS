@@ -57,6 +57,8 @@ bool pd_phy_rx_pop(pd_phy_t *p, pd_rx_msg_t *out);
 
 /* 发送一条 SOP 报文，等待 GoodCRC，失败按 nRetryCount=2 重发；返回是否收到 GoodCRC */
 bool pd_phy_send(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs);
+/* 扩展报文，单个 chunk（data ≤ 26 字节） */
+bool pd_phy_send_ext(pd_phy_t *p, uint8_t msg_type, const uint8_t *data, uint8_t size);
 void pd_phy_send_hard_reset(pd_phy_t *p);
 
 volatile uint8_t *pd_phy_port_reg(pd_phy_t *p, uint8_t cc_sel);

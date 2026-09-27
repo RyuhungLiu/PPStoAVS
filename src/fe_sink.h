@@ -19,6 +19,7 @@ typedef enum
     FE_REQ_BUSY,
     FE_REQ_OK,
     FE_REQ_FAIL,
+    FE_REQ_ABORTED,     /* 被充电器 Soft Reset 或新的能力报文打断，电压未变，可重发 */
 } fe_req_status_t;
 
 void fe_init(void);
@@ -42,3 +43,6 @@ extern uint16_t fe_dbg_v[6];
 
 bool fe_request(const fe_target_t *t);  /* 由协议桥发起；忙时返回 false */
 fe_req_status_t fe_request_status(void);
+uint8_t fe_request_waits(void);         /* 最近一次请求收到 Wait 的次数 */
+uint8_t fe_request_txwait(void);        /* 最近一次协议桥请求等 SinkTxOK 的 ms；FE_TXWAIT_TIMEOUT = 超时仍发送 */
+#define FE_TXWAIT_TIMEOUT       255

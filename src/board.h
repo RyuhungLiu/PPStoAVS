@@ -30,6 +30,7 @@
 #define ADC_VREF_MV             3300                /* VDD33 标称值，实测偏差可在此校正 */
 
 #define ISP_ADC_CHANNEL         ADC_Channel_10      /* OPA4(ISP2) 输出在内部接 ADC_IN10 */
+#define FE_CC_ADC_CHANNEL       ADC_Channel_16      /* PA3/ADC_IN16：前端 CC 电压（判断 SinkTxOK/NG） */
 #define ISP_GPIO_PORT           GPIOA
 #define ISP_GPIO_PINS           (GPIO_Pin_10 | GPIO_Pin_11)
 #define ISP_GAIN                55

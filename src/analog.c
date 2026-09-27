@@ -72,6 +72,12 @@ uint16_t analog_vbus_mv(void)
     return code * ADC_VREF_MV * VBUS_DIVIDER_NUM / 4096;
 }
 
+/* 单次采样：正好采在 BMC 报文上时读数低于 Rp 电平 */
+uint16_t analog_fe_cc_mv(void)
+{
+    return (uint32_t)adc_read(FE_CC_ADC_CHANNEL) * ADC_VREF_MV / 4096;
+}
+
 /* ISP 接 GND_1（负电压），OPA4 输出 = 1.6V − I × 5mΩ × 55，电流越大输出越低 */
 uint16_t analog_current_ma(void)
 {

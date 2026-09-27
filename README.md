@@ -68,6 +68,16 @@ if the current contract is no longer offered, the device is Hard Reset.
 Example — charger `5/9/15/20 V Fixed, PPS 5–11 V, AVS 9–20 V, PPS 4.5–21 V` in mode c:
 `5/9/15/20 V Fixed, AVS 9–20 V (#6), PPS 5–11 V (#5), PPS 4.5–20 V (#7)` — 7 PDOs, so no 12 V conversion.
 
+### Lab mode: AVS second handshake
+
+Some chargers first advertise PPS, query the sink with `Get_Sink_Cap_Extended`, and re-advertise with SPR AVS
+in place of PPS when the sink's Sink Modes has the AVS bit (bit 5). Two independent switches:
+
+- **Front (plug)** — reply to the charger's `Get_Sink_Cap_Extended` with Sink Modes = AVS, so such chargers
+  switch to AVS. Off: reply `Not_Supported`, charger keeps PPS.
+- **Rear (receptacle)** — imitate that charger: offer Fixed + PPS first; after the first contract, query the device
+  and re-advertise with AVS only if it declares AVS support. Applies to modes a/c; restarts when the device is unplugged.
+
 ## Host tool
 
 Plug the front Type-C into a PC (no charger needed; the board runs from the PC's 5 V) and open

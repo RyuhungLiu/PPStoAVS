@@ -1,6 +1,8 @@
 #include "fe_sink.h"
+#include "analog.h"
 #include "board.h"
 #include "bridge.h"
+#include "cfg.h"
 #include "evlog.h"
 #include "pd_phy.h"
 #include "timebase.h"
@@ -9,7 +11,13 @@
 #define T_LEGACY_MS             3000    /* Hard Reset 后仍无能力报文 → 按非 PD 充电器处理 */
 #define T_SENDER_RESPONSE_MS    30
 #define T_PS_TRANSITION_MS      550
+#define T_AVS_TRANSITION_MS     750     /* AVS 大步进 tAvsSrcTransLarge ≤ 700ms */
 #define T_SINK_TX_WAIT_MS       100     /* SinkTxNG 持续过久时仍然发送，避免死锁 */
+#define T_KEEPALIVE_NG_MS       1000    /* 保活到期后 SinkTxNG 持续过久也照发（tPPSTimeout ≥ 12s） */
+#define SINK_TX_OK_MV           1230    /* vRd-1.5 ≤ 1.16V，vRd-3.0 ≥ 1.31V */
+#define T_SINK_REQUEST_MS       100     /* tSinkRequest：收到 Wait 后等待再重发 */
+#define N_WAIT_RETRY            3
+#define T_KEEPALIVE_RETRY_MS    1000    /* 保活请求失败后的重试间隔，避免连续重发 */
 
 /* 参考手册 §15.2.15：CC 比较器 */
 #define PORT_CE                 (1u << 7)
@@ -28,6 +36,8 @@ typedef enum
     FE_ST_WAIT_PS_RDY,
     FE_ST_READY,
     FE_ST_LEGACY,
+    FE_ST_WAIT_RETRY,   /* 充电器回复 Wait，tSinkRequest 后重发同一请求 */
+    FE_ST_SOFT_RESET,   /* 已发出 Soft Reset，等待 Accept */
 } fe_state_t;
 
 typedef enum
@@ -53,9 +63,11 @@ static uint32_t pending_rdo;
 static fe_target_t contract;
 static fe_target_t pending;
 static req_origin_t pending_origin;
+static uint8_t wait_count;          /* 当前请求收到 Wait 的次数 */
 
 static bool bridge_req_waiting;     /* 协议桥请求等待 SinkTxOK */
 static uint32_t bridge_req_ts;
+static uint8_t txwait;              /* 协议桥请求等 SinkTxOK 的时间（记录用） */
 static fe_req_status_t req_status = FE_REQ_IDLE;
 
 #ifdef FE_DIAG
@@ -140,12 +152,16 @@ static bool cc_above(uint8_t cvs)
     return above;
 }
 
-/* PD3.0 冲突避免：源端 Rp=3A 表示 SinkTxOK，1.5A 表示 SinkTxNG */
+/*
+ * PD3.0 冲突避免：源端 Rp=3A 表示 SinkTxOK，1.5A 表示 SinkTxNG。
+ * 用 ADC（PA3/ADC_IN16）量 CC 电压，不改接收用的比较器门限，不会破坏正在接收的报文；
+ * 正好采在 BMC 报文上时读数低于门限，按 NG 处理（此时本来也不该发送）
+ */
 static bool sink_tx_ok(void)
 {
     if (phy->revision < PD_REV_30)
         return true;
-    return cc_above(PORT_CVS_123);
+    return analog_fe_cc_mv() >= SINK_TX_OK_MV;
 }
 
 static void send_ctrl(uint8_t type)
@@ -172,7 +188,14 @@ static void send_request(const fe_target_t *t, req_origin_t origin)
     pending = *t;
     pending_rdo = rdo;
     pending_origin = origin;
+    wait_count = 0;
     pd_phy_send(phy, MSG_TYPE_Request, 1, &rdo);
+    set_state(FE_ST_WAIT_ACCEPT);
+}
+
+static void resend_pending(void)
+{
+    pd_phy_send(phy, MSG_TYPE_Request, 1, &pending_rdo);
     set_state(FE_ST_WAIT_ACCEPT);
 }
 
@@ -183,7 +206,12 @@ static void request_finished(bool ok)
         contract = pending;
         contract_rdo = pending_rdo;
         has_contract = true;
+        hard_reset_sent = false;
         keepalive_ts = millis();
+    }
+    else if (pending_origin == ORIGIN_KEEPALIVE)
+    {
+        keepalive_ts = millis() - PPS_KEEPALIVE_MS + T_KEEPALIVE_RETRY_MS;
     }
     if (pending_origin == ORIGIN_CAPS)
     {
@@ -199,8 +227,24 @@ static void request_finished(bool ok)
 
 static void log_reset(uint8_t kind)
 {
-    ev_reset_t e = {0, kind};
+    ev_reset_t e = {0, kind, (uint8_t)state, phy->dbg_rx_reset};
     evlog_add(EV_RESET, &e, sizeof(e));
+}
+
+/*
+ * 等不到 Accept：先发 Soft Reset（不改变电压），充电器重新广播后协议桥重发请求；
+ * Soft Reset 也没有 Accept 才 Hard Reset
+ */
+static void send_soft_reset(void)
+{
+    log_reset(RST_SOFT_SENT);
+    pd_phy_reset_protocol(phy);
+    last_rx_id = 0xFF;
+    if (req_status == FE_REQ_BUSY)
+        req_status = FE_REQ_ABORTED;
+    bridge_req_waiting = false;
+    send_ctrl(MSG_TYPE_Soft_Reset);
+    set_state(FE_ST_SOFT_RESET);
 }
 
 static void do_hard_reset(void)
@@ -229,13 +273,23 @@ static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
     evlog_add(EV_FE_CAPS, raw, num_caps * 4);
     phy->revision = (h->revision < PD_REV_30) ? h->revision : PD_REV_30;
 
-    /* 如有协议桥请求正在进行，被新的能力报文打断 */
+    /* 如有协议桥请求正在进行，被新的能力报文打断（协议桥可重发） */
     if (req_status == FE_REQ_BUSY)
-        req_status = FE_REQ_FAIL;
+        req_status = FE_REQ_ABORTED;
     bridge_req_waiting = false;
 
-    fe_target_t t = bridge_on_front_caps();
-    send_request(&t, ORIGIN_CAPS);
+    bool for_bridge;
+    fe_target_t t = bridge_on_front_caps(&for_bridge);
+    if (for_bridge)
+    {
+        /* 转换进行中（如充电器 Soft Reset 后重新广播）：直接用设备的新目标回应，回应能力报文不受 SinkTx 限制 */
+        req_status = FE_REQ_BUSY;
+        send_request(&t, ORIGIN_BRIDGE);
+    }
+    else
+    {
+        send_request(&t, ORIGIN_CAPS);
+    }
 }
 
 static void send_sink_caps(void)
@@ -244,6 +298,30 @@ static void send_sink_caps(void)
     objs[0] = pd_build_fixed_pdo(5000, 3000, 0);
     objs[1] = pd_build_pps_apdo(3300, 21000, 3000);
     pd_phy_send(phy, MSG_TYPE_Sink_Capabilities, 2, objs);
+}
+
+/*
+ * Lab（CFG_FE_AVS_2ND）：充电器查询 Sink_Capabilities_Extended 时声明支持 AVS（Sink Modes bit5）。
+ * 支持二次握手的充电器会重新广播，用 SPR AVS 取代 PPS（实测抓包：先 PPS → 查询 → 改广播 AVS）。
+ */
+static void send_sink_caps_ext(void)
+{
+    const cfg_t *c = cfg();
+    uint8_t d[SKEDB_LEN] = {0};
+    uint8_t pdp = (uint32_t)c->max_mv * c->max_ma / 1000000;
+    d[0] = 0x09;                    /* VID 0x1209 */
+    d[1] = 0x12;
+    d[2] = 0x01;                    /* PID 0x0001 */
+    d[8] = FW_VERSION & 0xFF;       /* FW Version */
+    d[9] = 1;                       /* HW Version */
+    d[10] = 1;                      /* SKEDB Version */
+    d[SKEDB_SINK_MODES] = SINK_MODE_AVS;    /* 与实测支持 AVS 的受电端一致，只声明 AVS */
+    d[18] = 15;                     /* SPR Sink Minimum PDP：5V 3A */
+    d[19] = pdp;                    /* SPR Sink Operational PDP */
+    d[20] = pdp;                    /* SPR Sink Maximum PDP */
+    pd_phy_send_ext(phy, MSG_TYPE_Sink_Capabilities_Extended, d, sizeof(d));
+    ev_avs_2nd_t e = {0, AVS2_FE_SKEDB_SENT, d[SKEDB_SINK_MODES]};
+    evlog_add(EV_AVS_2ND, &e, sizeof(e));
 }
 
 static void handle_msg(const pd_rx_msg_t *m)
@@ -257,7 +335,8 @@ static void handle_msg(const pd_rx_msg_t *m)
         last_rx_id = 0xFF;
         send_ctrl(MSG_TYPE_Accept);
         if (req_status == FE_REQ_BUSY)
-            req_status = FE_REQ_FAIL;
+            req_status = FE_REQ_ABORTED;
+        bridge_req_waiting = false;
         set_state(FE_ST_WAIT_CAPS);
         return;
     }
@@ -297,12 +376,19 @@ static void handle_msg(const pd_rx_msg_t *m)
     case MSG_TYPE_Accept:
         if (state == FE_ST_WAIT_ACCEPT)
             set_state(FE_ST_WAIT_PS_RDY);
+        else if (state == FE_ST_SOFT_RESET)
+            set_state(FE_ST_WAIT_CAPS);
         break;
     case MSG_TYPE_Reject:
     case MSG_TYPE_Wait:
         if (state == FE_ST_WAIT_ACCEPT)
         {
-            if (has_contract)
+            if (h.msg_type == MSG_TYPE_Wait && wait_count < N_WAIT_RETRY)
+            {
+                wait_count++;
+                set_state(FE_ST_WAIT_RETRY);    /* 充电器忙（如请求过快），稍后重发 */
+            }
+            else if (has_contract)
                 request_finished(false);
             else
                 do_hard_reset();
@@ -310,10 +396,25 @@ static void handle_msg(const pd_rx_msg_t *m)
         break;
     case MSG_TYPE_PS_RDY:
         if (state == FE_ST_WAIT_PS_RDY)
+        {
             request_finished(true);
+        }
+        else if (state == FE_ST_WAIT_ACCEPT)
+        {
+            /* 漏收了 Accept：PS_RDY 说明充电器已接受并完成转换 */
+            ev_note_t e = {0, NOTE_FE_ACCEPT_MISSED};
+            evlog_add(EV_NOTE, &e, sizeof(e));
+            request_finished(true);
+        }
         break;
     case MSG_TYPE_Get_Sink_Cap:
         send_sink_caps();
+        break;
+    case MSG_TYPE_Get_Sink_Cap_Extended:
+        if (cfg()->flags & CFG_FE_AVS_2ND)
+            send_sink_caps_ext();
+        else
+            send_not_supported();
         break;
     case MSG_TYPE_GoodCRC:
     case MSG_TYPE_GotoMin:
@@ -349,7 +450,8 @@ static void enter_legacy(void)
     set_state(FE_ST_LEGACY);
     uint16_t ma = fe_legacy_current_ma();
     evlog_add(EV_FE_LEGACY, &ma, sizeof(ma));
-    bridge_on_front_caps();
+    bool for_bridge;
+    bridge_on_front_caps(&for_bridge);
 }
 
 void fe_process(void)
@@ -399,26 +501,44 @@ void fe_process(void)
 
     case FE_ST_WAIT_ACCEPT:
         if (elapsed > T_SENDER_RESPONSE_MS)
+        {
+            if (has_contract)
+                send_soft_reset();
+            else
+                do_hard_reset();
+        }
+        break;
+
+    case FE_ST_SOFT_RESET:
+        if (elapsed > T_SENDER_RESPONSE_MS)
             do_hard_reset();
         break;
 
     case FE_ST_WAIT_PS_RDY:
-        if (elapsed > T_PS_TRANSITION_MS)
+        if (elapsed > (pending.type == SPR_AVS_PDO ? T_AVS_TRANSITION_MS : T_PS_TRANSITION_MS))
             do_hard_reset();
+        break;
+
+    case FE_ST_WAIT_RETRY:
+        if (elapsed >= T_SINK_REQUEST_MS && (sink_tx_ok() || elapsed >= T_SINK_REQUEST_MS + T_SINK_TX_WAIT_MS))
+            resend_pending();
         break;
 
     case FE_ST_READY:
         if (bridge_req_waiting)
         {
-            if (sink_tx_ok() || millis() - bridge_req_ts > T_SINK_TX_WAIT_MS)
+            uint32_t waited = millis() - bridge_req_ts;
+            bool ok = sink_tx_ok();
+            if (ok || waited > T_SINK_TX_WAIT_MS)
             {
                 bridge_req_waiting = false;
+                txwait = ok ? (uint8_t)waited : FE_TXWAIT_TIMEOUT;
                 send_request(&pending, ORIGIN_BRIDGE);
             }
         }
         else if (has_contract && contract.type == PPS_PDO && millis() - keepalive_ts > PPS_KEEPALIVE_MS)
         {
-            if (sink_tx_ok())
+            if (sink_tx_ok() || millis() - keepalive_ts > PPS_KEEPALIVE_MS + T_KEEPALIVE_NG_MS)
                 send_request(&contract, ORIGIN_KEEPALIVE);
         }
         break;
@@ -497,10 +617,21 @@ bool fe_request(const fe_target_t *t)
     req_status = FE_REQ_BUSY;
     bridge_req_waiting = true;
     bridge_req_ts = millis();
+    txwait = 0;
     return true;
 }
 
 fe_req_status_t fe_request_status(void)
 {
     return req_status;
+}
+
+uint8_t fe_request_waits(void)
+{
+    return wait_count;
+}
+
+uint8_t fe_request_txwait(void)
+{
+    return txwait;
 }

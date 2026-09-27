@@ -22,6 +22,7 @@
 #define T_SRC_RECOVER_MS        800     /* tSrcRecover 0.66~1s */
 #define T_SINK_TX_MS            20      /* tSinkTx 16~20ms */
 #define N_HARD_RESET_COUNT      2
+#define T_QUERY_DELAY_MS        200     /* Lab 二次握手：合约建立后稍等再查询设备 */
 
 /* 参考手册 §15.2.15 端口寄存器 */
 #define PORT_CE                 (1u << 7)
@@ -46,6 +47,8 @@ typedef enum
     BE_ST_HARD_RESET_RECOVER,
     BE_ST_NO_PD,
     BE_ST_DETACH_DISCHARGE,
+    BE_ST_QUERY_TX_WAIT,        /* Lab 二次握手：SinkTxNG 后查询 Sink_Capabilities_Extended */
+    BE_ST_QUERY_WAIT,
 } be_state_t;
 
 typedef enum
@@ -131,7 +134,7 @@ static bool send_caps(void)
 
 static void log_reset(uint8_t kind)
 {
-    ev_reset_t e = {1, kind};
+    ev_reset_t e = {1, kind, (uint8_t)state, phy->dbg_rx_reset};
     evlog_add(EV_RESET, &e, sizeof(e));
 }
 
@@ -139,6 +142,7 @@ static void go_unattached(void)
 {
     power_sw_set(false);
     bridge_on_back_reset();
+    bridge_on_back_detach();
     set_rp(CC_PU_80);
     pd_phy_reset_protocol(phy);
     has_contract = false;
@@ -212,7 +216,18 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     if (h.extended)
     {
-        send_not_supported();
+        if (h.msg_type == MSG_TYPE_Sink_Capabilities_Extended)
+        {
+            if (state == BE_ST_QUERY_WAIT)
+            {
+                bridge_on_rear_sink_modes(m->len >= 4 + SKEDB_SINK_MODES + 1 ? m->data[4 + SKEDB_SINK_MODES] : -1);
+                set_state(BE_ST_READY);
+            }
+        }
+        else
+        {
+            send_not_supported();
+        }
         return;
     }
 
@@ -248,11 +263,17 @@ static void handle_msg(const pd_rx_msg_t *m)
                 set_state(BE_ST_WAIT_REQUEST);
         }
         break;
+    case MSG_TYPE_Reject:
+    case MSG_TYPE_Not_Supported:
+        if (state == BE_ST_QUERY_WAIT)
+        {
+            bridge_on_rear_sink_modes(-1);
+            set_state(BE_ST_READY);
+        }
+        break;
     case MSG_TYPE_GoodCRC:
     case MSG_TYPE_Accept:
-    case MSG_TYPE_Reject:
     case MSG_TYPE_PS_RDY:
-    case MSG_TYPE_Not_Supported:
     case MSG_TYPE_Ping:
     case MSG_TYPE_GotoMin:
         break;
@@ -270,7 +291,8 @@ static bool attached_state(void)
 static bool pd_active_state(void)
 {
     return state == BE_ST_SEND_CAPS || state == BE_ST_WAIT_REQUEST || state == BE_ST_TRANSITION ||
-           state == BE_ST_READY || state == BE_ST_SINK_TX_WAIT || state == BE_ST_NO_PD;
+           state == BE_ST_READY || state == BE_ST_SINK_TX_WAIT || state == BE_ST_NO_PD ||
+           state == BE_ST_QUERY_TX_WAIT || state == BE_ST_QUERY_WAIT;
 }
 
 static void poll_attach(void)
@@ -472,6 +494,43 @@ void be_process(void)
             /* 源端主动发起 AMS：先置 SinkTxNG（Rp 1.5A），等待 tSinkTx */
             set_rp(CC_PU_180);
             set_state(BE_ST_SINK_TX_WAIT);
+        }
+        else if (elapsed >= T_QUERY_DELAY_MS && bridge_rear_query_wanted())
+        {
+            if (phy->revision < PD_REV_30)
+            {
+                bridge_on_rear_sink_modes(-1);  /* PD2.0 没有该报文，也不支持 APDO */
+            }
+            else
+            {
+                set_rp(CC_PU_180);
+                set_state(BE_ST_QUERY_TX_WAIT);
+            }
+        }
+        break;
+
+    case BE_ST_QUERY_TX_WAIT:
+        if (elapsed >= T_SINK_TX_MS)
+        {
+            bool ok = pd_phy_send(phy, MSG_TYPE_Get_Sink_Cap_Extended, 0, NULL);
+            set_rp(CC_PU_330);
+            if (ok)
+            {
+                set_state(BE_ST_QUERY_WAIT);
+            }
+            else
+            {
+                bridge_on_rear_sink_modes(-1);
+                set_state(BE_ST_READY);
+            }
+        }
+        break;
+
+    case BE_ST_QUERY_WAIT:
+        if (elapsed > T_SENDER_RESPONSE_MS)
+        {
+            bridge_on_rear_sink_modes(-1);
+            set_state(BE_ST_READY);
         }
         break;
 

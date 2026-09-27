@@ -10,6 +10,7 @@
 #define T_FRONT_REQ_START_MS    500     /* 前端忙（保活等）时等待其空闲的最长时间 */
 #define T_FRONT_DONE_MS         1000    /* Accept + PS_RDY 的总时限（前端自身另有 tPSTransition 超时） */
 #define T_VERIFY_MS             200
+#define T_RETRY_BUDGET_MS       300     /* 前端被打断后重发的截止时间（设备 tPSTransition ≥ 450ms） */
 
 typedef struct
 {
@@ -32,6 +33,11 @@ static uint8_t logged_len = 0xFF;
 static bool back_caps_dirty;
 static bool back_hard_reset;
 
+/* Lab：后端 AVS 二次握手（CFG_BE_AVS_2ND）——先给 PPS，设备在 Sink_Capabilities_Extended 中声明支持 AVS 后才给 AVS */
+static bool avs_held;           /* 本可提供 AVS，但尚未确认设备支持 */
+static bool rear_queried;       /* 本次连接已查询过设备 */
+static bool rear_avs_ok;        /* 设备已声明支持 AVS */
+
 /* 后端当前合约 */
 static bool back_has_contract;
 static uint16_t back_mv, back_ma;
@@ -45,6 +51,11 @@ static fe_target_t tr_target;
 static pdo_type_t tr_back_type;
 static uint16_t tr_mv, tr_op_ma;
 static uint32_t tr_rdo;
+static uint32_t tr_start_ts;        /* 回复设备 Accept 的时刻 */
+static bool tr_front_sent;          /* 本次转换向充电器发过请求 */
+static uint8_t tr_txwait;
+
+static bool map_back_request(uint32_t rdo);
 static uint32_t tr_ts, tr_sample_ts;
 static uint8_t tr_stable;
 
@@ -139,11 +150,13 @@ static int8_t find_native_avs(const pdo_t *c, uint8_t n)
  *  - 12V 转换（CFG_FIX12）：充电器没有 12V 时由覆盖 12V 的 PPS（优先）或原生 AVS 提供
  *  - 个数 ≤ 7，优先级 Fixed > AVS > PPS（保留最高电压高的）> 12V 转换
  *  - 顺序：Fixed（电压升序）、AVS、PPS（最高电压升序）
+ *  - Lab 后端二次握手：确认设备支持 AVS 之前不给 AVS、改给全部 PPS
  */
 static void build_back_caps(void)
 {
     const cfg_t *c = cfg();
     back_n = 0;
+    avs_held = false;
 
     uint8_t n;
     const pdo_t *fc = fe_caps(&n);
@@ -223,7 +236,11 @@ static void build_back_caps(void)
             int8_t f20 = find_mv(fixed, nf, 20000);
             uint16_t avs_max = (avs_tier(src->max_mv) == 2 && f20 >= 0) ? 20000 : 15000;
             bool drop20 = avs_max < 20000 && f20 >= 0;
-            if (nf - drop20 < PD_MAX_DATA_OBJS)
+            if (nf - drop20 < PD_MAX_DATA_OBJS && (c->flags & CFG_BE_AVS_2ND) && !rear_avs_ok)
+            {
+                avs_held = true;
+            }
+            else if (nf - drop20 < PD_MAX_DATA_OBJS)
             {
                 if (drop20)
                 {
@@ -246,10 +263,10 @@ static void build_back_caps(void)
         }
     }
 
-    /* 3. PPS 透传 */
+    /* 3. PPS 透传（二次握手第一阶段用 PPS 代替 AVS） */
     back_entry_t pps[PD_MAX_DATA_OBJS];
     uint8_t np = 0;
-    if (want_pps)
+    if (want_pps || avs_held)
     {
         for (uint8_t i = 0; i < n; i++)
         {
@@ -399,9 +416,25 @@ static fe_target_t reevaluate(void)
     return front_5v_target();
 }
 
-fe_target_t bridge_on_front_caps(void)
+/*
+ * 转换进行中（设备已收到 Accept、在等 PS_RDY）时前端收到能力报文（充电器 Soft Reset 后重新广播等）：
+ * 直接用设备的新目标回应。实测先恢复旧电压、再主动发起新请求，充电器会再次 Soft Reset；
+ * 回应能力报文则每次都被接受。能力表变化或超出时限时仍保持当前合约，由转换流程判失败
+ */
+fe_target_t bridge_on_front_caps(bool *for_bridge)
 {
-    return reevaluate();
+    fe_target_t t = reevaluate();
+    *for_bridge = false;
+    if ((tr_state == TR_FRONT_REQ || tr_state == TR_FRONT_WAIT) && !back_caps_dirty && !back_hard_reset &&
+        millis() - tr_start_ts < T_RETRY_BUDGET_MS && map_back_request(tr_rdo))
+    {
+        tr_state = TR_FRONT_WAIT;
+        tr_front_sent = true;
+        tr_ts = millis();
+        *for_bridge = true;
+        return tr_target;
+    }
+    return t;
 }
 
 void bridge_on_cfg_changed(void)
@@ -458,18 +491,19 @@ static void log_request(uint8_t result)
         .vbus_mv = analog_vbus_mv(),
         .result = result,
         .repeat = 0,
+        .ms = result == REQ_REJECT ? 0 : (uint16_t)(millis() - tr_start_ts),
+        .waits = (result != REQ_REJECT && tr_front_sent) ? fe_request_waits() : 0,
+        .txwait = result != REQ_REJECT ? tr_txwait : 0,
     };
     evlog_request(&r, tr_back_type != FPDO);
 }
 
-bool bridge_eval_back_request(uint32_t rdo)
+/* 把设备 RDO 映射为前端目标（写入 tr_*）；超出能力返回 false */
+static bool map_back_request(uint32_t rdo)
 {
     uint8_t pos = pd_rdo_pos(rdo);
-    tr_rdo = rdo;
-    tr_mv = 0;
-
     if (pos == 0 || pos > back_n)
-        goto reject;
+        return false;
 
     const back_entry_t *e = &entries[pos - 1];
     uint16_t mv, op_ma;
@@ -478,7 +512,7 @@ bool bridge_eval_back_request(uint32_t rdo)
     case FPDO:
         op_ma = pd_rdo_fixed_op_ma(rdo);
         if (op_ma > e->ma)
-            goto reject;
+            return false;
         mv = e->mv;
         break;
 
@@ -487,7 +521,7 @@ bool bridge_eval_back_request(uint32_t rdo)
         mv = pd_rdo_pps_mv(rdo);
         op_ma = pd_rdo_avs_ma(rdo);
         if (mv < e->min_mv || mv > e->mv || op_ma > e->ma || op_ma == 0)
-            goto reject;
+            return false;
         break;
 
     case SPR_AVS_PDO:
@@ -496,15 +530,15 @@ bool bridge_eval_back_request(uint32_t rdo)
         mv = pd_rdo_avs_mv(rdo) / 100 * 100;
         op_ma = pd_rdo_avs_ma(rdo);
         if (mv < 9000 || mv > e->mv)
-            goto reject;
+            return false;
         uint16_t limit = (mv < 15000) ? e->ma : (mv > 15000) ? e->ma20 : (e->ma > e->ma20 ? e->ma : e->ma20);
         if (op_ma > limit)
-            goto reject;
+            return false;
         break;
     }
 
     default:
-        goto reject;
+        return false;
     }
 
     tr_back_type = e->type;
@@ -512,8 +546,14 @@ bool bridge_eval_back_request(uint32_t rdo)
     tr_op_ma = op_ma;
     tr_target = front_target(e, mv, op_ma);
     return true;
+}
 
-reject:
+bool bridge_eval_back_request(uint32_t rdo)
+{
+    tr_rdo = rdo;
+    tr_mv = 0;
+    if (map_back_request(rdo))
+        return true;
     log_request(REQ_REJECT);
     return false;
 }
@@ -522,6 +562,9 @@ void bridge_start_transition(void)
 {
     const fe_target_t *c = fe_contract();
     tr_ts = millis();
+    tr_start_ts = tr_ts;
+    tr_front_sent = false;
+    tr_txwait = 0;
     if (fe_is_legacy() ||
         (c && c->type == tr_target.type && c->pos == tr_target.pos && c->mv == tr_target.mv &&
          c->ma == tr_target.ma))
@@ -544,6 +587,7 @@ bridge_result_t bridge_poll_transition(void)
     case TR_FRONT_REQ:
         if (fe_request(&tr_target))
         {
+            tr_front_sent = true;
             tr_state = TR_FRONT_WAIT;
             tr_ts = now;
         }
@@ -558,6 +602,9 @@ bridge_result_t bridge_poll_transition(void)
     case TR_FRONT_WAIT:
     {
         fe_req_status_t s = fe_request_status();
+        uint8_t w = fe_request_txwait();
+        if (w > tr_txwait)
+            tr_txwait = w;
         if (s == FE_REQ_OK)
         {
             tr_state = TR_VERIFY;
@@ -565,7 +612,13 @@ bridge_result_t bridge_poll_transition(void)
             tr_stable = 0;
             tr_sample_ts = 0;
         }
-        else if (s == FE_REQ_FAIL || now - tr_ts > T_FRONT_DONE_MS)
+        else if (s == FE_REQ_ABORTED && now - tr_start_ts < T_RETRY_BUDGET_MS && map_back_request(tr_rdo))
+        {
+            /* 充电器 Soft Reset 或重新广播：电压未变，前端恢复后按新能力表重发 */
+            tr_state = TR_FRONT_REQ;
+            tr_ts = now;
+        }
+        else if (s == FE_REQ_FAIL || s == FE_REQ_ABORTED || now - tr_ts > T_FRONT_DONE_MS)
         {
             tr_state = TR_IDLE;
             log_request(REQ_FRONT_FAIL);
@@ -612,8 +665,46 @@ void bridge_on_back_contract(void)
     ocp_active = false;
 }
 
+bool bridge_rear_query_wanted(void)
+{
+    return avs_held && !rear_queried;
+}
+
+void bridge_on_rear_sink_modes(int16_t modes)
+{
+    rear_queried = true;
+    ev_avs_2nd_t e = {1, modes < 0 ? AVS2_BE_NO_SKEDB : AVS2_BE_SKEDB_RCVD, modes < 0 ? 0 : (uint8_t)modes};
+    evlog_add(EV_AVS_2ND, &e, sizeof(e));
+    if (modes >= 0 && (modes & SINK_MODE_AVS))
+    {
+        rear_avs_ok = true;
+        reevaluate();       /* 重新广播，加入 AVS */
+    }
+}
+
+uint8_t bridge_rear_avs_2nd_state(void)
+{
+    if (rear_avs_ok)
+        return 3;
+    if (!avs_held)
+        return 0;
+    return rear_queried ? 2 : 1;
+}
+
+/* 设备拔出：二次握手从头开始。Hard Reset 不重置，否则 PPS 合约 → 改给 AVS → Hard Reset 会循环 */
+void bridge_on_back_detach(void)
+{
+    rear_queried = false;
+    if (rear_avs_ok)
+    {
+        rear_avs_ok = false;
+        rebuild_back_caps();
+    }
+}
+
 void bridge_on_back_reset(void)
 {
+
     back_has_contract = false;
     back_hard_reset = false;
     back_rdo_logged = 0;

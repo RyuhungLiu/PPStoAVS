@@ -32,6 +32,8 @@ typedef enum
     EV_RESET        = 10,   /* ev_reset_t */
     EV_CFG          = 11,   /* cfg_t：设置已修改 */
     EV_BE_CAPS      = 12,   /* uint32_t pdo[n] + uint8_t src[n]：后端能力（生成或变化时，不论设备是否插入）及对应充电器位置 */
+    EV_AVS_2ND      = 13,   /* ev_avs_2nd_t：AVS 二次握手（Lab） */
+    EV_NOTE         = 14,   /* ev_note_t：协议异常但已自动恢复 */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -64,6 +66,9 @@ typedef struct __attribute__((packed))
     uint16_t vbus_mv;       /* 完成时实测前端 VBUS */
     uint8_t  result;        /* req_result_t */
     uint8_t  repeat;        /* 同一 PPS/AVS 档位的连续微调合并次数 */
+    uint16_t ms;            /* 从回复设备 Accept 到结束的时间 */
+    uint8_t  waits;         /* 充电器回复 Wait 的次数 */
+    uint8_t  txwait;        /* 前端等 SinkTxOK 的 ms（最大一次）；255 = 超时仍发送 */
 } ev_request_t;
 
 typedef enum
@@ -86,13 +91,41 @@ typedef enum
     RST_HARD_SENT   = 0,
     RST_HARD_RCVD   = 1,
     RST_SOFT_RCVD   = 2,
+    RST_SOFT_SENT   = 3,
 } rst_kind_t;
 
 typedef struct __attribute__((packed))
 {
-    uint8_t side;           /* 0 = 前端，1 = 后端 */
-    uint8_t kind;           /* rst_kind_t */
+    uint8_t  side;          /* 0 = 前端，1 = 后端 */
+    uint8_t  kind;          /* rst_kind_t */
+    uint8_t  state;         /* 当时的状态机状态（fe/be_state_code） */
+    uint16_t rx_err;        /* 该端口累计 RX_RESET 次数 */
 } ev_reset_t;
+
+typedef enum
+{
+    NOTE_FE_ACCEPT_MISSED = 1,  /* 前端漏收 Accept，已由 PS_RDY 补回 */
+} note_code_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t side;
+    uint8_t code;           /* note_code_t */
+} ev_note_t;
+
+typedef enum
+{
+    AVS2_FE_SKEDB_SENT  = 0,    /* 前端：回复充电器 Sink_Capabilities_Extended（声明支持 AVS） */
+    AVS2_BE_SKEDB_RCVD  = 1,    /* 后端：收到设备 Sink_Capabilities_Extended，modes 为 Sink Modes */
+    AVS2_BE_NO_SKEDB    = 2,    /* 后端：设备不支持或未回复，维持 PPS */
+} avs_2nd_kind_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t side;           /* 0 = 前端，1 = 后端 */
+    uint8_t kind;           /* avs_2nd_kind_t */
+    uint8_t modes;          /* Sink Modes */
+} ev_avs_2nd_t;
 
 typedef struct __attribute__((packed))
 {

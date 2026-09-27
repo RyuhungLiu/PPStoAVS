@@ -57,6 +57,18 @@ typedef enum
 
 typedef enum
 {
+    MSG_TYPE_Sink_Capabilities_Extended = 0b01111,
+} pd_ext_msg_t;
+
+/* Sink_Capabilities_Extended（SKEDB，24 字节）中的 Sink Modes（byte 17） */
+#define SKEDB_LEN               24
+#define SKEDB_SINK_MODES        17
+#define SINK_MODE_PPS           (1u << 0)
+#define SINK_MODE_VBUS          (1u << 1)
+#define SINK_MODE_AVS           (1u << 5)
+
+typedef enum
+{
     FPDO        = 0b0000,
     BPDO        = 0b0100,
     VPDO        = 0b1000,
