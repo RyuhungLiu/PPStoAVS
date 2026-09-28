@@ -160,6 +160,12 @@ td.nw { white-space: nowrap; }
 .pdos { display: flex; flex-wrap: wrap; gap: 4px; }
 .pdo { border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 12px; white-space: nowrap; background: var(--soft); }
 .pdo i { font-style: normal; color: var(--muted); }
+.simrow { display: grid; grid-template-columns: 28px 120px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.simrow:last-child { border-bottom: 0; }
+.simrow select { width: 100%; }
+.simrow input[type=number] { width: 76px; }
+.simsub { font-weight: 600; margin: 12px 0 6px; }
+@media (max-width: 640px) { .simrow { grid-template-columns: 24px 1fr auto; } .simrow .simf { grid-column: 1 / -1; order: 1; } }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 13px; }
 .kv > div:nth-child(odd) { color: var(--muted); }
 .bat { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; max-width: 220px; }
@@ -174,13 +180,14 @@ td.nw { white-space: nowrap; }
     <div class="conn"><span class="dot" id="connDot"></span><span id="connText"></span><span id="devInfo"></span></div>
     <span class="spacer"></span>
     <span id="msg"></span>
-    <select id="lang" aria-label="Language"><option value="zh">繁體中文</option><option value="en">English</option></select>
+    <select id="lang" aria-label="Language"><option value="zh">繁體中文</option><option value="zhs">简体中文</option><option value="en">English</option></select>
     <button class="btn primary" id="btnConnect"></button>
   </div>
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="status" data-i18n="tabStatus"></button>
     <button class="tab" role="tab" data-tab="settings" data-i18n="tabSettings"></button>
     <button class="tab" role="tab" data-tab="log" data-i18n="tabLog"></button>
+    <button class="tab" role="tab" data-tab="sim" data-i18n="tabSim"></button>
   </nav>
 </div>
 
@@ -341,6 +348,13 @@ td.nw { white-space: nowrap; }
             <input type="number" id="fixcA" min="0.5" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="fixcRange"></span></div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fixcL"></ul></details>
         </div>
+        <div class="lab" id="lab-ppsc">
+          <label class="labhead"><input type="checkbox" id="ppsc"><div><b data-i18n="ppsc"></b><span data-i18n="ppscS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
+          <div class="labin inline" id="ppscIn"><input type="number" id="ppscLo" min="3.3" max="20.9" step="0.1"><span class="muted">–</span>
+            <input type="number" id="ppscHi" min="3.4" max="21" step="0.1"><span class="muted">V</span>
+            <input type="number" id="ppscA" min="0.5" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="ppscRange"></span></div>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ppscL"></ul></details>
+        </div>
       </div>
     </div>
 
@@ -360,6 +374,25 @@ td.nw { white-space: nowrap; }
   </div>
 
   <!-- ===== 記錄 ===== -->
+  <!-- ===== 轉換模擬 ===== -->
+  <div class="view" id="view-sim" hidden>
+    <div class="card">
+      <h3 data-i18n="simIn"></h3>
+      <div class="small muted" data-i18n="simNote" style="margin-bottom:8px"></div>
+      <div id="simRows"></div>
+      <div class="inline" style="margin-top:12px">
+        <button class="btn" id="simAdd" data-i18n="simAdd"></button>
+        <button class="btn" id="simReset" data-i18n="simReset"></button>
+        <button class="btn" id="simLoad" data-i18n="simLoad"></button>
+      </div>
+    </div>
+    <div class="card">
+      <h3><span data-i18n="simOut"></span></h3>
+      <div class="small muted" id="simCfg" style="margin-bottom:8px"></div>
+      <div id="simResult"></div>
+    </div>
+  </div>
+
   <div class="view" id="view-log" hidden>
     <div class="card">
       <div class="logbar">
@@ -463,6 +496,14 @@ const T = {
       "Identity passthrough: Discover Identity answers, VID/PID in the extended info and the charger's Manufacturer_Info come from the other side. Some devices enable vendor-specific behaviour when they see a known charger ID; turn this off if anything misbehaves.",
       "Needs PD 3.0 on both sides. The status page shows the device's battery; charger info appears in Records while powered by a charger."],
     identS: ["Charger", "Device"],
+    tabSim: "Simulator", simIn: "Charger PDOs", simOut: "Offered to device (simulated)",
+    simNote: "Enter the charger's PDOs. The result uses the options currently selected on the Settings page (applied or not) and the same rules as the firmware.",
+    simAdd: "Add PDO", simReset: "Defaults", simLoad: "Load current charger", simDel: "Remove",
+    simT_fix: "Fixed", simT_pps: "PPS", simT_savs: "SPR AVS", simT_eavs: "EPR AVS",
+    simVmin: "V min", simVmax: "V max", simA15: "A 9–15 V", simA20: "A 15–20 V",
+    simUsing: "Settings:", simHeld: "Before the device declares AVS (Lab rear 2nd handshake)", simAvsOk: "After the device declares AVS",
+    simNoCaps: "Connect the converter while it is powered by a charger to load its PDOs.",
+    offlineEdit: "Not connected — changes here only affect the simulator",
     labFront: "Front · charger side", labRear: "Rear · device side", labMore: "Details",
     tagHw: "HW revision", tag5a: "5 A / EPR", tagAC: "modes a/c", tagBC: "modes b/c", tagNeedEm: "needs E-Marker", tagNo12: "not with 12 V",
     fe2nd: "AVS second handshake (front)", fe2ndS: "Tell the charger the converter supports AVS.",
@@ -502,6 +543,13 @@ const T = {
       "Voltage compensation now applies to every level. It cannot go above the PPS maximum, so with PPS 5–20 V there is no compensation at 20 V.",
       "Fixed levels are requested at the PPS maximum current, so the charger's current limiting is not used (OCP still applies), and UVP is still checked.",
       "The converter sends the PPS keep-alive request every 5 s. Works in all modes."],
+    ppsc: "Custom PPS", ppscS: "Add one PPS with your own voltage range and current.", ppscRange: "3.3–21.0 V · 0.5–5 A", ppscs: "PPS",
+    ppscBad: "Custom PPS: the minimum voltage must be lower than the maximum.",
+    ppscL: ["Source: the charger PPS covering the whole range (highest current first). Without one, the charger's SPR AVS when the range starts at 9 V or higher; requests are then rounded to 100 mV.",
+      "Not offered when nothing covers the whole range. The maximum voltage is capped at the max voltage setting.",
+      "Current = min(setting, source current, current limit). The device's current limit in each request is passed to the charger (PPS current limiting).",
+      "Offered in every mode and placed among the PPS PDOs by maximum voltage. It takes a slot before PPS passthrough and converted Fixed PDOs; a passthrough PPS with the same maximum voltage is replaced.",
+      "Voltage compensation applies, capped at the source PDO's maximum."],
     fixc: "Custom Fixed", fixcS: "Add one non-standard Fixed voltage and current, made from PPS.", fixcRange: "5.1–20.0 V · 0.5–5 A",
     fixcL: ["Source: the PPS covering the voltage (highest current first); without PPS, the charger's SPR AVS (9 V and up only).",
       "Current = min(setting, source current, current limit).",
@@ -593,6 +641,14 @@ const T = {
       "身份透傳：Discover Identity 的回覆、擴充資訊裡的 VID/PID、充電器的 Manufacturer_Info 都用對方的。部分設備看到特定充電器 ID 會啟用廠商私有功能；如有異常請關閉。",
       "兩端都要支援 PD 3.0。狀態頁顯示設備電量；充電器資訊在接充電器時讀取，可在記錄中查看。"],
     identS: ["充電器", "設備"],
+    tabSim: "轉換模擬", simIn: "充電器 PDO", simOut: "輸出給設備（模擬）",
+    simNote: "輸入充電器的 PDO。結果依「設定」頁目前所選的選項（不論是否已套用），與韌體使用相同的轉換規則。",
+    simAdd: "新增 PDO", simReset: "預設", simLoad: "載入目前充電器", simDel: "刪除",
+    simT_fix: "Fixed", simT_pps: "PPS", simT_savs: "SPR AVS", simT_eavs: "EPR AVS",
+    simVmin: "V 最低", simVmax: "V 最高", simA15: "A 9–15V", simA20: "A 15–20V",
+    simUsing: "設定：", simHeld: "設備聲明支援 AVS 之前（Lab 後端二次握手）", simAvsOk: "設備聲明支援 AVS 之後",
+    simNoCaps: "要在轉換器接著充電器時連線，才能載入充電器的 PDO。",
+    offlineEdit: "未連線：這裡的修改只用於轉換模擬",
     labFront: "前端 · 充電器側", labRear: "後端 · 設備側", labMore: "詳細說明",
     tagHw: "需硬體改版", tag5a: "5A / EPR", tagAC: "方式 a/c", tagBC: "方式 b/c", tagNeedEm: "需 E-Marker", tagNo12: "與 12V 轉換互斥",
     fe2nd: "AVS 二次握手（前端）", fe2ndS: "向充電器宣告轉換器支援 AVS。",
@@ -632,6 +688,13 @@ const T = {
       "電壓補償對所有擋位生效，但不能超過 PPS 最高電壓：例如 PPS 5–20V 時 20V 擋位無法補償。",
       "Fixed 擋位以 PPS 最大電流請求，不使用充電器的限流功能（過流保護照常），欠壓保護照常檢查。",
       "轉換器每 5 秒發送 PPS 保活請求。所有透傳方式都適用。"],
+    ppsc: "自訂 PPS", ppscS: "增加一個自訂電壓範圍與電流的 PPS 擋位。", ppscRange: "3.3–21.0V · 0.5–5A", ppscs: "PPS",
+    ppscBad: "自訂 PPS：最低電壓必須低於最高電壓。",
+    ppscL: ["來源：完整覆蓋該電壓範圍的充電器 PPS（電流大者優先）；沒有時，範圍從 9V 以上開始才用充電器的 SPR AVS，請求電壓按 100mV 四捨五入。",
+      "沒有來源能完整覆蓋時不提供。最高電壓不超過「最高電壓」設定。",
+      "電流 = min(設定值, 來源電流, 電流上限)。設備每次請求的限流值會轉給充電器（PPS 限流）。",
+      "所有透傳方式都提供，依最高電壓排在 PPS 之間；位置優先於 PPS 透傳與轉換 Fixed，同最高電壓的透傳 PPS 會被取代。",
+      "電壓補償照常生效，但不超過來源 PDO 的最高電壓。"],
     fixc: "自訂 Fixed", fixcS: "增加一個非標準的 Fixed 電壓與電流，由 PPS 轉換。", fixcRange: "5.1–20.0V · 0.5–5A",
     fixcL: ["來源：覆蓋該電壓的 PPS（電流大者優先）；沒有 PPS 時用充電器的 SPR AVS（僅 9V 以上）。",
       "電流 = min(設定值, 來源電流, 電流上限)。",
@@ -649,8 +712,19 @@ const T = {
     avs2Yes: "支援 AVS → 改為廣播 AVS", avs2No: "不支援 AVS → 維持 PPS", avs2None: "後端 · 設備沒有回覆 → 維持 PPS",
   },
 };
-let lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+/* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
+T.zhs = (() => {
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删";
+  const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
+  const phr = [["韌體", "固件"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
+  const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
+  const walk = (v) => typeof v === "string" ? cv(v) : Array.isArray(v) ? v.map(walk) : typeof v === "function" ? (...a) => walk(v(...a)) : v;
+  return Object.fromEntries(Object.entries(T.zh).map(([k, v]) => [k, walk(v)]));
+})();
+const navLang = (navigator.language || "").toLowerCase();
+let lang = navLang.startsWith("zh") ? (/^zh-(cn|sg|hans)/.test(navLang) ? "zhs" : "zh") : "en";
 try { lang = localStorage.getItem("lang") || lang; } catch (e) {}
+if (!T[lang]) lang = "en";
 const t = (k) => T[lang][k] ?? T.en[k] ?? k;
 
 /* ================= helpers ================= */
@@ -781,13 +855,17 @@ function renderConn() {
   const i = state.info;
   $("devInfo").textContent = dev && i ? `· ${t("fw")} ${fmtFw(i.fw)} · ${t("sessionN")(i.session)}` : "";
   $("guide").hidden = !!dev;
-  document.querySelectorAll("#view-settings input, #view-settings button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
+  /* 設定表單離線也可修改（供轉換模擬）；套用等按鈕需要連線 */
+  document.querySelectorAll("#view-settings button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
+  document.querySelectorAll("#view-settings input").forEach((el) => (el.disabled = false));
+  applyCurLimits(); applyComp(); applyInfo();
   if (dev) updateDirty();
 }
 function setTab(name) {
   state.tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-  ["status", "settings", "log"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  ["status", "settings", "log", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  if (name === "sim") renderSim();
   try { localStorage.setItem("tab", name); } catch (e) {}
 }
 
@@ -806,7 +884,7 @@ function beState(s) {
 }
 function setTag(id, [text, cls]) { const el = $(id); el.textContent = text; el.className = "tag " + (cls || ""); }
 
-function capsTable(caps, activePos, src) {
+function capsTable(caps, activePos, src, fcaps = state.frontCaps) {
   if (!caps.length) return `<div class="empty">${dev ? t("none") : t("notAvail")}</div>`;
   let h = `<table><tr><th>#</th><th>${t("colType")}</th><th>${t("colVolt")}</th><th>${t("colCur")}</th>${src ? `<th>${t("colSrc")}</th>` : ""}</tr>`;
   caps.forEach((raw, i) => {
@@ -814,7 +892,7 @@ function capsTable(caps, activePos, src) {
     let srcCell = "";
     if (src) {
       const k = src[i];
-      const fp = k && state.frontCaps[k - 1] ? decodePdo(state.frontCaps[k - 1]) : null;
+      const fp = k && fcaps[k - 1] ? decodePdo(fcaps[k - 1]) : null;
       srcCell = `<td class="nw">${fp ? `#${k} ${fp.type}` : t("none")}${fp && fp.type !== p.type ? ` <span class="tag acc">${t("converted")}</span>` : ""}</td>`;
     }
     h += `<tr class="${activePos === i + 1 ? "hl" : ""}" title="0x${raw.toString(16).toUpperCase().padStart(8, "0")}">` +
@@ -905,19 +983,243 @@ function renderPdInfo() {
   ]);
 }
 
+/* ================= PDO 轉換模擬 ================= */
+/* SIM-BEGIN：移植自韌體 bridge.c build_back_caps()，韌體修改轉換規則時必須同步 */
+const P_FIX = 0, P_PPS = 12, P_EAVS = 13, P_SAVS = 14;
+function pdoParse(v) {
+  v >>>= 0;
+  const hi = v >>> 28, t = (hi & 12) !== 12 ? hi & 12 : hi;
+  const p = { type: t, raw: v, min: 0, max: 0, ma: 0, ma20: 0, pdp: 0 };
+  if (t === P_FIX) { p.min = p.max = ((v >>> 10) & 0x3FF) * 50; p.ma = (v & 0x3FF) * 10; }
+  else if (t === 8) { p.max = ((v >>> 20) & 0x3FF) * 50; p.min = ((v >>> 10) & 0x3FF) * 50; p.ma = (v & 0x3FF) * 10; }
+  else if (t === P_PPS) { p.max = ((v >>> 17) & 0xFF) * 100; p.min = ((v >>> 8) & 0xFF) * 100; p.ma = (v & 0x7F) * 50; }
+  else if (t === P_SAVS) { p.min = 9000; p.max = (v & 0x3FF) ? 20000 : 15000; p.ma = ((v >>> 10) & 0x3FF) * 10; p.ma20 = (v & 0x3FF) * 10; }
+  else if (t === P_EAVS) { p.min = ((v >>> 8) & 0xFF) * 100; p.max = ((v >>> 17) & 0x1FF) * 100; p.pdp = v & 0xFF; p.ma = 5000; }
+  return p;
+}
+const fixRaw = (mv, ma, fl = 0) => (fl | (Math.floor(mv / 50) << 10) | Math.floor(ma / 10)) >>> 0;
+const ppsRaw = (lo, hi, ma) => ((0xC << 28) | (Math.floor(hi / 100) << 17) | (Math.floor(lo / 100) << 8) | Math.floor(ma / 50)) >>> 0;
+const savsRaw = (ma15, ma20) => ((0xE << 28) | (Math.floor(ma15 / 10) << 10) | Math.floor(ma20 / 10)) >>> 0;
+const eavsRaw = (lo, hi, pdp) => ((0xD << 28) | (Math.floor(hi / 100) << 17) | (Math.floor(lo / 100) << 8) | (pdp & 0xFF)) >>> 0;
+/*
+ * c：設定（readForm 格式）；raws：充電器 PDO；o.eprMode：前端處於 EPR 模式；o.rearAvsOk：設備已聲明支援 AVS（Lab 後端二次握手）
+ * 返回 { pdos, src, held }：後端 PDO、各自對應的充電器位置（1 起）、AVS 是否因二次握手暫扣
+ */
+function simBuild(c, raws, o = {}) {
+  const min = Math.min, MAXN = 7;
+  const fc = raws.map(pdoParse), n = fc.length;
+  const flags = c.flags ?? 0, flags2 = c.flags2 ?? 0;
+  if (n === 0) { const ma = min(500, c.maxMa); return { pdos: [fixRaw(5000, ma)], src: [1], held: false }; }
+  const hidden = (mv) => (mv === 9000 && c.hide & 1) || (mv === 12000 && c.hide & 2) || (mv === 15000 && c.hide & 4) || (mv === 20000 && c.hide & 8);
+  const findMv = (list, mv) => list.findIndex((e) => e.mv === mv);
+  const insertSorted = (list, e) => {
+    if (list.length >= MAXN || findMv(list, e.mv) >= 0) return;
+    let i = list.length; while (i > 0 && list[i - 1].mv > e.mv) i--;
+    list.splice(i, 0, e);
+  };
+  const avsTier = (mv) => (mv >= 20000 && c.maxMv >= 20000 ? 2 : mv >= 15000 ? 1 : 0);
+  const nativeAvs = () => fc.findIndex((p) => p.type === P_SAVS && p.ma > 0);
+  const ppsCovering = (mv) => { let b = -1; fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= mv && p.max >= mv && (b < 0 || p.ma > fc[b].ma)) b = i; }); return b; };
+  const E = (type, fe, pos, lo, mv, ma, ma20 = 0) => ({ type, fe, pos, lo, mv, ma, ma20 });
+  const wantAvs = c.mode === 0 || c.mode === 2, wantPps = c.mode === 1 || c.mode === 2;
+  let held = false;
+
+  /* 1. 充電器 Fixed */
+  let fixed = [];
+  fc.forEach((p, i) => { if (p.type === P_FIX && p.raw !== 0 && p.max <= c.maxMv && !hidden(p.max)) insertSorted(fixed, E(P_FIX, P_FIX, i + 1, p.max, p.max, min(p.ma, c.maxMa))); });
+  /* 1b. Lab 強制 PPS */
+  const force = !!(flags2 & 4);
+  if (force) fixed.forEach((f) => { const k = ppsCovering(f.mv); if (k >= 0) { f.fe = P_PPS; f.pos = k + 1; f.ma = min(fc[k].ma, c.maxMa); } });
+
+  /* 2. AVS */
+  let avs = null;
+  const f15 = findMv(fixed, 15000);
+  if (wantAvs && f15 >= 0) {
+    let ppsTier = 0, ppsI = 0;
+    fc.forEach((p, i) => {
+      if (p.type !== P_PPS || p.min > 9000) return;
+      const tr = avsTier(p.max);
+      if (tr > ppsTier || (tr === ppsTier && tr > 0 && p.ma > fc[ppsI].ma)) { ppsTier = tr; ppsI = i; }
+    });
+    const nat = nativeAvs(), natTier = nat >= 0 ? avsTier(fc[nat].max) : 0;
+    let epr = -1;
+    if (flags & 64 && o.eprMode) epr = fc.findIndex((p) => p.type === P_EAVS && p.min <= 15000 && p.max >= 20000 && p.pdp > 0);
+    const f9 = findMv(fixed, 9000);
+    let src = null, srcPos = 0, s15 = 0, s20 = 0;
+    if (epr >= 0 && c.maxMv >= 20000 && findMv(fixed, 20000) >= 0) {
+      src = fc[epr]; srcPos = epr + 1; s15 = f9 >= 0 ? fixed[f9].ma : fixed[f15].ma; s20 = min(5000, Math.floor(src.pdp * 1000000 / 20000));
+    } else if (natTier > 0 && (force ? natTier > ppsTier : natTier >= ppsTier)) {
+      src = fc[nat]; srcPos = nat + 1; s15 = src.ma; s20 = src.ma20;
+    } else if (ppsTier > 0) {
+      src = fc[ppsI]; srcPos = ppsI + 1; s15 = s20 = src.ma;
+    }
+    if (src) {
+      const f20 = findMv(fixed, 20000);
+      const avsMax = avsTier(src.max) === 2 && f20 >= 0 ? 20000 : 15000;
+      const fromEpr = src.type === P_EAVS, drop20 = avsMax < 20000 && f20 >= 0 ? 1 : 0;
+      if (fixed.length - drop20 < MAXN && flags & 8 && !o.rearAvsOk) held = true;
+      else if (fixed.length - drop20 < MAXN) {
+        if (drop20) fixed.splice(f20, 1);
+        const ma15 = min(fixed[f15].ma, s15);
+        let ma20 = 0;
+        if (fromEpr) ma20 = min(s20, c.maxMa);
+        else {
+          fixed[f15].ma = ma15;
+          if (avsMax === 20000) { const k20 = findMv(fixed, 20000); ma20 = min(fixed[k20].ma, s20); fixed[k20].ma = ma20; }
+        }
+        avs = E(P_SAVS, src.type, srcPos, 9000, avsMax, ma15, ma20);
+      }
+    }
+  }
+
+  /* 3. PPS 透傳（二次握手第一階段用 PPS 代替 AVS） */
+  let pps = [];
+  if (wantPps || held) {
+    fc.forEach((p, i) => {
+      if (p.type !== P_PPS || p.min >= c.maxMv) return;
+      const e = E(P_PPS, P_PPS, i + 1, p.min, min(p.max, c.maxMv), min(p.ma, c.maxMa));
+      const k = findMv(pps, e.mv);
+      if (k < 0) insertSorted(pps, e);
+      else if (e.ma > pps[k].ma || (e.ma === pps[k].ma && e.lo < pps[k].lo)) pps[k] = e;
+    });
+    const nat = nativeAvs();
+    if (flags & 16 && nat >= 0 && fc[nat].max > 9000) {
+      const a = fc[nat], mv = min(a.max, c.maxMv);
+      const ma = mv > 15000 && a.ma20 ? min(a.ma, a.ma20) : a.ma;
+      insertSorted(pps, E(P_PPS, P_SAVS, nat + 1, 5000, mv, min(ma, c.maxMa)));
+    }
+  }
+  /* 3b. Lab 自訂 PPS */
+  let custom = null;
+  if (flags2 & 8 && c.ppsLo != null) {
+    const lo = c.ppsLo * 100, hi = min(c.ppsHi * 100, c.maxMv);
+    let best = -1;
+    if (lo < hi) fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= lo && p.max >= hi && (best < 0 || p.ma > fc[best].ma)) best = i; });
+    let srcMa = best >= 0 ? fc[best].ma : 0;
+    if (best < 0 && lo >= 9000 && lo < hi) {
+      const a = nativeAvs();
+      if (a >= 0 && fc[a].max >= hi) { best = a; srcMa = hi > 15000 && fc[a].ma20 ? min(fc[a].ma, fc[a].ma20) : fc[a].ma; }
+    }
+    if (best >= 0 && srcMa > 0) {
+      custom = E(P_PPS, fc[best].type, best + 1, lo, hi, min(srcMa, c.ppsMa50 * 50, c.maxMa));
+      const k = findMv(pps, hi); if (k >= 0) pps.splice(k, 1);
+    }
+  }
+  const room = MAXN - fixed.length - (avs ? 1 : 0) - (custom ? 1 : 0);
+  if (pps.length > room) pps = pps.slice(pps.length - room);
+  if (custom) insertSorted(pps, custom);
+
+  /* 4. 轉換 Fixed：12V 轉換或自訂 Fixed */
+  let convMv = 0, convMa = c.maxMa;
+  if (flags & 1 && !hidden(12000)) convMv = 12000;
+  else if (flags & 128) { convMv = c.fixDv * 100; convMa = min(convMa, c.fixMa50 * 50); }
+  if (convMv && convMv <= c.maxMv && findMv(fixed, convMv) < 0 && fixed.length + (avs ? 1 : 0) + pps.length < MAXN) {
+    let best = ppsCovering(convMv), srcMa = best >= 0 ? fc[best].ma : 0;
+    if (best < 0) {
+      const a = nativeAvs();
+      if (a >= 0 && convMv >= 9000 && convMv <= fc[a].max) { best = a; srcMa = convMv > 15000 ? fc[a].ma20 : fc[a].ma; }
+    }
+    if (best >= 0 && srcMa > 0) insertSorted(fixed, E(P_FIX, fc[best].type, best + 1, convMv, convMv, min(srcMa, convMa)));
+  }
+
+  /* 5. 輸出 */
+  const all = [];
+  const unc = fc[0] && fc[0].type === P_FIX && (fc[0].raw >>> 27) & 1 ? 1 << 27 : 0;
+  fixed.forEach((f, k) => all.push([fixRaw(f.mv, f.ma, k === 0 ? unc : 0), f.pos]));
+  if (avs) all.push([savsRaw(avs.ma, avs.ma20), avs.pos]);
+  pps.forEach((p) => all.push([ppsRaw(p.lo, p.mv, p.ma), p.pos]));
+  const out = all.slice(0, MAXN);
+  return { pdos: out.map((x) => x[0]), src: out.map((x) => x[1]), held };
+}
+/* SIM-END */
+
+const SIM_DEFAULT = [["fix", 5, 3], ["fix", 9, 3], ["fix", 15, 3], ["fix", 20, 3], ["pps", 3.3, 21, 3]];
+const SIM_FIELDS = { fix: ["V", "A"], pps: ["simVmin", "simVmax", "A"], savs: ["simVmax", "simA15", "simA20"], eavs: ["simVmin", "simVmax", "W"] };
+let simRows = [];
+try { simRows = JSON.parse(localStorage.getItem("simRows")) || []; } catch (e) {}
+if (!Array.isArray(simRows) || !simRows.length) simRows = SIM_DEFAULT.map((r) => r.slice());
+function simSave() { try { localStorage.setItem("simRows", JSON.stringify(simRows)); } catch (e) {} }
+function simRaw(r) {
+  const [tp, a = 0, b = 0, d = 0] = r, mv = (x) => Math.round(x * 1000), ma = (x) => Math.round(x * 1000);
+  if (tp === "fix") return fixRaw(mv(a), ma(b));
+  if (tp === "pps") return ppsRaw(mv(a), mv(b), ma(d));
+  if (tp === "savs") return savsRaw(ma(b), a >= 20 ? ma(d) : 0);
+  return eavsRaw(mv(a), mv(b), Math.round(d));
+}
+function simRowsHtml() {
+  const lbl = (k) => (k.length <= 1 ? k : t(k));
+  $("simRows").innerHTML = simRows.map((r, i) => {
+    const f = SIM_FIELDS[r[0]];
+    const inputs = f.map((k, j) => `<label class="inline" style="gap:4px"><input type="number" step="${k === "W" ? 1 : 0.05}" min="0" data-i="${i}" data-j="${j + 1}" value="${r[j + 1] ?? ""}"><span class="muted">${esc(lbl(k))}</span></label>`).join("");
+    return `<div class="simrow"><div class="muted">#${i + 1}</div>` +
+      `<select data-i="${i}">${["fix", "pps", "savs", "eavs"].map((k) => `<option value="${k}"${k === r[0] ? " selected" : ""}>${t("simT_" + k)}</option>`).join("")}</select>` +
+      `<div class="inline simf">${inputs}</div><button class="btn" data-del="${i}" aria-label="${esc(t("simDel"))}">×</button></div>`;
+  }).join("");
+}
+function renderSim() {
+  if (state.tab !== "sim") return;
+  if (!$("simRows").childElementCount && simRows.length) simRowsHtml();
+  const c = readForm();
+  const raws = simRows.map(simRaw);
+  const eprMode = !!(c.flags & 32) && raws.some((v) => v >>> 28 === 0xD);
+  $("simCfg").textContent = `${t("simUsing")} ${cfgText(c)}`;
+  const r1 = simBuild(c, raws, { eprMode, rearAvsOk: false });
+  let h = r1.held ? `<div class="simsub">${t("simHeld")}</div>` : "";
+  h += capsTable(r1.pdos, 0, r1.src, raws);
+  if (r1.held) {
+    const r2 = simBuild(c, raws, { eprMode, rearAvsOk: true });
+    h += `<div class="simsub">${t("simAvsOk")}</div>` + capsTable(r2.pdos, 0, r2.src, raws);
+  }
+  $("simResult").innerHTML = h;
+}
+$("simRows").addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset.j) { simRows[+el.dataset.i][+el.dataset.j] = Number(el.value); simSave(); renderSim(); }
+});
+$("simRows").addEventListener("change", (e) => {
+  const el = e.target;
+  if (el.tagName === "SELECT") {
+    const d = { fix: [9, 3], pps: [5, 11, 3], savs: [20, 3, 3], eavs: [15, 28, 140] }[el.value];
+    simRows[+el.dataset.i] = [el.value, ...d]; simSave(); simRowsHtml(); renderSim();
+  }
+});
+$("simRows").addEventListener("click", (e) => {
+  const i = e.target.dataset.del;
+  if (i != null) { simRows.splice(+i, 1); simSave(); simRowsHtml(); renderSim(); }
+});
+$("simAdd").onclick = () => { if (simRows.length < 11) { simRows.push(["fix", 12, 3]); simSave(); simRowsHtml(); renderSim(); } };
+$("simReset").onclick = () => { simRows = SIM_DEFAULT.map((r) => r.slice()); simSave(); simRowsHtml(); renderSim(); };
+$("simLoad").onclick = () => {
+  if (!dev || !state.frontCaps.length) { msg(t("simNoCaps")); return; }
+  const r = [], k3 = (x) => Math.round(x / 10) / 100;
+  state.frontCaps.forEach((v) => {
+    const p = pdoParse(v);
+    if (v === 0) return;
+    if (p.type === P_FIX) r.push(["fix", p.max / 1000, k3(p.ma)]);
+    else if (p.type === P_PPS) r.push(["pps", p.min / 1000, p.max / 1000, k3(p.ma)]);
+    else if (p.type === P_SAVS) r.push(["savs", p.max / 1000, k3(p.ma), k3(p.ma20)]);
+    else if (p.type === P_EAVS) r.push(["eavs", p.min / 1000, p.max / 1000, p.pdp]);
+  });
+  simRows = r; simSave(); simRowsHtml(); renderSim();
+};
+$("view-settings").addEventListener("input", () => renderSim());
+$("view-settings").addEventListener("change", () => renderSim());
+
 /* ================= settings ================= */
 /* hasComp：20 字節格式（韌體 v0.6.0 / 協議 v5 起）才有補償欄位 */
-function cfgFromBytes(p, hasComp) {
+/* hasPps：24 字節格式（韌體 v0.7.0 / 協議 v6 起）才有自訂 PPS 欄位 */
+function cfgFromBytes(p, hasComp, hasPps) {
   return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0,
     fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0, compMode: hasComp ? p[16] : null, compVal: hasComp ? u16(p, 18) : 0,
-    flags2: hasComp ? p[15] : null };
+    flags2: hasComp ? p[15] : null, ppsLo: hasPps ? p[20] : null, ppsHi: hasPps ? p[21] : null, ppsMa50: hasPps ? p[22] : null };
 }
 function cfgToBytes(c) {
-  const b = new Uint8Array(20);
+  const b = new Uint8Array(24);
   b[0] = c.mode; b[1] = c.hide; b[2] = c.maxMv & 0xFF; b[3] = c.maxMv >> 8; b[4] = c.maxMa & 0xFF; b[5] = c.maxMa >> 8;
   b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
   b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0; b[15] = c.flags2 ?? 0;
   b[16] = c.compMode ?? 0; b[18] = (c.compVal ?? 0) & 0xFF; b[19] = (c.compVal ?? 0) >> 8;
+  b[20] = c.ppsLo ?? 0; b[21] = c.ppsHi ?? 0; b[22] = c.ppsMa50 ?? 0;
   return Array.from(b);
 }
 function readForm() {
@@ -932,7 +1234,11 @@ function readForm() {
     fixMa50: $("fixc").checked ? Math.round(Number($("fixcA").value) * 20) || 0 : state.cfg?.fixMa50 ?? 0,
     compMode: state.cfg && state.cfg.compMode == null ? null : radio("compMode"), compVal: Math.round(Number($("compVal").value)) || 0,
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
-    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) };
+    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0),
+    /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
+    ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
+    ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
+    ppsMa50: state.cfg && state.cfg.ppsMa50 == null ? null : $("ppsc").checked ? Math.round(Number($("ppscA").value) * 20) || 0 : state.cfg?.ppsMa50 ?? 60 };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -945,13 +1251,15 @@ function writeForm(c) {
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
   $("compVal").value = c.compVal ?? 0;
   $("infoPt").checked = !((c.flags2 ?? 0) & 1); $("idPt").checked = !!((c.flags2 ?? 0) & 2); $("forcePps").checked = !!((c.flags2 ?? 0) & 4);
+  $("ppsc").checked = !!((c.flags2 ?? 0) & 8); $("ppscLo").value = ((c.ppsLo || 33) / 10).toFixed(1);
+  $("ppscHi").value = ((c.ppsHi || 160) / 10).toFixed(1); $("ppscA").value = ((c.ppsMa50 || 60) / 20).toFixed(2);
   applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
   updateDirty();
 }
 const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
 function updateDirty() {
   const d = isDirty();
-  $("dirtyText").textContent = state.cfg ? (d ? t("dirty") : t("clean")) : "";
+  $("dirtyText").textContent = state.cfg ? (d ? t("dirty") : t("clean")) : dev ? "" : t("offlineEdit");
   $("dirtyText").style.color = d ? "var(--warn)" : "";
   $("btnApply").disabled = !dev || !d; $("btnRevert").disabled = !dev || !d;
 }
@@ -964,12 +1272,14 @@ function renderCfgState() {
 async function loadCfg(force) {
   const p = await request(0x10);
   const wasDirty = isDirty();
-  const v5 = !!state.info && state.info.proto >= 5;
-  state.cfg = cfgFromBytes(p, v5); state.cfgSaving = !!p[v5 ? 20 : 16];
+  const v5 = !!state.info && state.info.proto >= 5, v6 = !!state.info && state.info.proto >= 6;
+  state.cfg = cfgFromBytes(p, v5, v6); state.cfgSaving = !!p[v6 ? 24 : v5 ? 20 : 16];
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
 }
 async function applyCfg(defaults) {
+  const f = readForm();
+  if (!defaults && $("ppsc").checked && !(f.ppsLo < f.ppsHi)) { msg(t("ppscBad")); return; }
   try {
     if (defaults) await request(0x12); else await request(0x11, cfgToBytes(readForm()));
     await loadCfg(true);
@@ -1040,7 +1350,8 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : ""].filter(Boolean).join(", ");
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "",
+    (c.flags2 ?? 0) & 8 ? `${t("ppscs")} ${(c.ppsLo / 10).toFixed(1)}–${(c.ppsHi / 10).toFixed(1)} V ${fmtA(c.ppsMa50 * 50)}` : ""].filter(Boolean).join(", ");
   const comp = c.compMode === 1 ? ` · ${t("compVs")} ${c.compVal} mV` : c.compMode === 2 ? ` · ${t("compRs")} ${c.compVal} mΩ` : "";
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` + comp +
     (flags ? ` · ${flags}` : "");
@@ -1055,7 +1366,7 @@ function decodeRecords(records) {
         const f = d[2], why = [];
         if (f & 0x08) why.push("POR"); if (f & 0x04) why.push("PIN"); if (f & 0x10) why.push("SW");
         if (f & 0x40) { why.push("WWDG"); cls = "warn"; } if (f & 0x80) why.push("LPWR");
-        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3), d.length >= 23))}`;
+        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3), d.length >= 23, d.length >= 27))}`;
         cls = cls || "acc";
         break; }
       case 2: case 7: case 12: {
@@ -1092,7 +1403,7 @@ function decodeRecords(records) {
           : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
         const info = code === 2 || code === 3 || code === 5 || code === 6 || code === 7;
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
-      case 11: text = cfgText(cfgFromBytes(d, d.length >= 20)); cls = "acc"; break;
+      case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24)); cls = "acc"; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 13: {
         const modes = "0x" + d[2].toString(16).toUpperCase().padStart(2, "0");
@@ -1145,7 +1456,7 @@ function exportLog() {
 
 /* ================= render all / i18n ================= */
 function applyI18n() {
-  document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
+  document.documentElement.lang = { zh: "zh-Hant", zhs: "zh-Hans" }[lang] || "en";
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-list]").forEach((el) => {
     el.replaceChildren(...(t(el.dataset.i18nList) || []).map((x) => Object.assign(document.createElement("li"), { textContent: x })));
@@ -1153,7 +1464,7 @@ function applyI18n() {
   $("lang").value = lang;
   renderAll();
 }
-function renderAll() { renderConn(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); }
+function renderAll() { renderConn(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); simRowsHtml(); renderSim(); }
 function loadSessionsLabelsOnly() {
   const sel = $("sessionSel");
   Array.from(sel.options).forEach((o) => {
@@ -1183,15 +1494,18 @@ function applyLabDeps() {
   $("eprAvs").disabled = !a5; if (!a5) $("eprAvs").checked = false;
   $("lab-eprAvs").classList.toggle("off", !a5);
   $("fixcIn").hidden = !$("fixc").checked;
+  $("ppscIn").hidden = !$("ppsc").checked;
 }
 /* 資訊透傳：身份透傳依附於資訊透傳；舊韌體沒有這個功能 */
 function applyInfo() {
   const old = !!state.cfg && state.cfg.flags2 == null;
-  $("infoPt").disabled = old || !dev;
+  $("infoPt").disabled = old;
   const on = $("infoPt").checked && !old;
-  $("idPt").disabled = !on || !dev; if (!on) $("idPt").checked = false;
+  $("idPt").disabled = !on; if (!on) $("idPt").checked = false;
   $("idPtRow").classList.toggle("off", !on);
-  $("forcePps").disabled = old || !dev; $("lab-forcePps").classList.toggle("off", old);
+  $("forcePps").disabled = old; $("lab-forcePps").classList.toggle("off", old);
+  const oldPps = !!state.cfg && state.cfg.ppsLo == null;
+  ["ppsc", "ppscLo", "ppscHi", "ppscA"].forEach((id) => ($(id).disabled = oldPps)); $("lab-ppsc").classList.toggle("off", oldPps);
 }
 $("infoPt").addEventListener("change", applyInfo);
 /* 電壓補償：單位、範圍隨方式變化；舊韌體沒有這個功能 */
@@ -1210,6 +1524,7 @@ document.querySelectorAll("input[name=compMode]").forEach((r) => r.addEventListe
   applyComp(); updateDirty();
 }));
 /* 自訂 Fixed 與 12V 轉換互斥 */
+$("ppsc").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
 $("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });
@@ -1237,7 +1552,11 @@ setInterval(async () => {
 
 let startTab = "status";
 try { startTab = localStorage.getItem("tab") || startTab; } catch (e) {}
-setTab(["status", "settings", "log"].includes(startTab) ? startTab : "status");
+setTab(["status", "settings", "log", "sim"].includes(startTab) ? startTab : "status");
+/* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
+const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
+  compMode: 2, compVal: 15, flags2: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60 };
+writeForm(CFG_DEFAULT);
 applyI18n();
 
 if (!("hid" in navigator)) {

@@ -148,6 +148,21 @@ or from the charger's SPR AVS (9 V and up) when there is no PPS. Its current is 
 It is not offered if the charger already has that Fixed voltage, if it exceeds the max voltage, or if all 7 PDO slots
 are used. It cannot be combined with 12 V conversion.
 
+### Lab mode: custom PPS
+
+Adds one PPS APDO with a user-set range of 3.3–21.0 V (100 mV steps) and a current of 0.5–5 A.
+- **Source**
+  - The charger PPS covering the whole range, highest current first.
+  - Otherwise the charger's SPR AVS, if the range starts at 9 V or higher; requests are then rounded to 100 mV.
+  - Not offered when nothing covers the range.
+- **Limits**
+  - The maximum is capped at the max voltage setting.
+  - Current = min(setting, source current, current limit). The device's per-request current limit is passed to the charger.
+- **Placement**
+  - Offered in every mode, among the PPS PDOs by maximum voltage.
+  - It takes a slot before PPS passthrough and converted Fixed PDOs, and replaces a passthrough PPS with the same maximum.
+- The configuration grows to 24 bytes (host protocol v6). Earlier settings are migrated.
+
 ### Lab mode: force PPS
 
 Every Fixed level that a charger PPS covers is served from that PPS instead of the charger's Fixed. The PPS with the highest current
@@ -169,6 +184,11 @@ Plug the front Type-C into a PC (no charger needed; the board runs from the PC's
   (logged whenever they change, attached or not), every request (device RDO → charger RDO, voltage, result),
   resets, protection trips, attach/detach. Consecutive PPS/AVS steps on the same PDO are merged into one
   record with a repeat count. Successful device PPS requests are not logged unless enabled. Export as JSON.
+- **Simulator** — enter charger PDOs (Fixed / PPS / SPR AVS / EPR AVS; 5 rows by default, or load the
+  connected charger's) and see the PDOs the device would be offered under the current, not yet applied,
+  settings. Same rules as the firmware. Works offline.
+
+Languages: English, 繁體中文, 简体中文.
 
 Device: VID `1209` / PID `0001` (pid.codes test ID), vendor usage page `0xFF00`, 64-byte reports.
 Protocol is documented in [`src/host.h`](src/host.h).

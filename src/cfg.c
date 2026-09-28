@@ -3,7 +3,9 @@
 #include <stddef.h>
 #include <string.h>
 
-#define CFG_MAGIC           0x32464350u     /* 'PCF2'：cfg_t 20 字节（v0.6.0 起） */
+#define CFG_MAGIC           0x33464350u     /* 'PCF3'：cfg_t 24 字节（v0.7.0 起） */
+#define CFG_MAGIC_V2        0x32464350u     /* 'PCF2'：cfg_t 前 20 字节（v0.6.x） */
+#define CFG_V2_SIZE         20
 #define CFG_MAGIC_V1        0x47464350u     /* 'PCFG'：cfg_t 前 16 字节（v0.2.0 ~ v0.5.0） */
 #define CFG_V1_SIZE         16
 
@@ -13,19 +15,10 @@ typedef struct
     uint32_t seq;
     cfg_t    cfg;
     uint32_t crc;           /* magic ~ cfg */
-    uint32_t pad[24];
+    uint32_t pad[23];
 } cfg_page_t;
 
-/* 旧格式，仅用于读取升级前保存的设置 */
-typedef struct
-{
-    uint32_t magic;
-    uint32_t seq;
-    uint8_t  cfg[CFG_V1_SIZE];
-    uint32_t crc;
-} cfg_page_v1_t;
-
-_Static_assert(sizeof(cfg_t) == 20, "cfg_t size");
+_Static_assert(sizeof(cfg_t) == 24, "cfg_t size");
 _Static_assert(sizeof(cfg_page_t) == FLASH_PAGE_SIZE, "cfg_page_t size");
 
 static cfg_t cur;
@@ -46,15 +39,22 @@ static bool page_valid(const cfg_page_t *p)
     return p->magic == CFG_MAGIC && p->crc == crc32_calc(p, offsetof(cfg_page_t, crc)) && cfg_valid(&p->cfg);
 }
 
-/* 旧格式：前 16 字节照旧，新增字段取默认值 */
-static bool page_v1_load(const cfg_page_t *page, cfg_t *out)
+/* 旧格式（magic、seq、cfg 前 size 字节、crc）：已有字段照旧，新增字段取默认值 */
+static bool page_old_load(const cfg_page_t *page, uint32_t magic, uint8_t size, cfg_t *out)
 {
-    const cfg_page_v1_t *p = (const cfg_page_v1_t *)page;
-    if (p->magic != CFG_MAGIC_V1 || p->crc != crc32_calc(p, offsetof(cfg_page_v1_t, crc)))
+    const uint8_t *b = (const uint8_t *)page;
+    uint32_t crc;
+    memcpy(&crc, b + 8 + size, 4);
+    if (page->magic != magic || crc != crc32_calc(b, 8 + size))
         return false;
     cfg_defaults(out);
-    memcpy(out, p->cfg, CFG_V1_SIZE);
+    memcpy(out, b + 8, size);
     return cfg_valid(out);
+}
+
+static bool page_legacy_load(const cfg_page_t *page, cfg_t *out)
+{
+    return page_old_load(page, CFG_MAGIC_V2, CFG_V2_SIZE, out) || page_old_load(page, CFG_MAGIC_V1, CFG_V1_SIZE, out);
 }
 
 void cfg_defaults(cfg_t *c)
@@ -70,6 +70,9 @@ void cfg_defaults(cfg_t *c)
     c->ocp_ms = 50;
     c->comp_mode = CFG_COMP_R;
     c->comp_val = 15;       /* 15mΩ：背靠背 MOS + 5mΩ 采样电阻 + 走线 */
+    c->pps_min_dv = 33;     /* 自订 PPS 建议值：3.3~16V 3A（未启用） */
+    c->pps_max_dv = 160;
+    c->pps_ma50 = 60;
 }
 
 bool cfg_valid(const cfg_t *c)
@@ -81,6 +84,10 @@ bool cfg_valid(const cfg_t *c)
         ((c->flags & CFG_FIX12) || c->fix_dv < CFG_FIX_DV_MIN || c->fix_dv > CFG_FIX_DV_MAX || c->fix_ma50 < 10 ||
          c->fix_ma50 > 100))
         return false;   /* 自订 Fixed 与 12V 转换互斥 */
+    if ((c->flags2 & CFG2_PPS_CUSTOM) &&
+        (c->pps_min_dv < CFG_PPS_DV_MIN || c->pps_max_dv > CFG_PPS_DV_MAX || c->pps_max_dv <= c->pps_min_dv ||
+         c->pps_ma50 < 10 || c->pps_ma50 > 100))
+        return false;
     if (c->comp_mode > CFG_COMP_R || (c->comp_mode == CFG_COMP_V && c->comp_val > CFG_COMP_V_MAX) ||
         (c->comp_mode == CFG_COMP_R && c->comp_val > CFG_COMP_R_MAX))
         return false;
@@ -107,7 +114,7 @@ void cfg_init(void)
             cur_seq = p->seq;
             cur_slot = s;
         }
-        else if (page_v1_load(p, &v1) && p->seq >= cur_seq)
+        else if (page_legacy_load(p, &v1) && p->seq >= cur_seq)
         {
             cur = v1;
             cur_seq = p->seq;
@@ -128,6 +135,7 @@ bool cfg_set(const cfg_t *c)
     cur = *c;
     cur.flags2 &= CFG2_MASK;
     cur.reserved2 = 0;
+    cur.reserved3 = 0;
     save_state = SAVE_ERASE;    /* 保存中途再次修改：从擦除重新开始 */
     return true;
 }

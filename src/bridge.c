@@ -378,15 +378,58 @@ static void build_back_caps(void)
             back_entry_t e = {PPS_PDO, SPR_AVS_PDO, nat + 1, 5000, mv, min_u16(ma, c->max_ma), 0};
             insert_sorted(pps, &np, &e);    /* 同一最高电压已有充电器 PPS 则不插入 */
         }
-        uint8_t room = PD_MAX_DATA_OBJS - nf - has_avs;
-        if (np > room)
+    }
+
+    /*
+     * 3b. Lab 自订 PPS：由完整覆盖该电压范围、电流最大的充电器 PPS 提供；没有时 9V 起的范围可由 SPR AVS 提供
+     * （请求按 100mV 四舍五入）。最高电压不超过最高电压设置；各模式都提供，位置优先于 PPS 透传与转换 Fixed
+     */
+    bool has_custom = false;
+    back_entry_t custom;
+    if (c->flags2 & CFG2_PPS_CUSTOM)
+    {
+        uint16_t lo = c->pps_min_dv * 100, hi = min_u16(c->pps_max_dv * 100, c->max_mv);
+        int8_t best = -1;
+        for (uint8_t i = 0; i < n && lo < hi; i++)
         {
-            /* 位置不够：保留最高电压高的 */
-            for (uint8_t k = 0; k < room; k++)
-                pps[k] = pps[np - room + k];
-            np = room;
+            if (fc[i].type == PPS_PDO && fc[i].min_mv <= lo && fc[i].max_mv >= hi &&
+                (best < 0 || fc[i].max_ma > fc[best].max_ma))
+                best = i;
+        }
+        uint16_t src_ma = best >= 0 ? fc[best].max_ma : 0;
+        if (best < 0 && lo >= 9000 && lo < hi)
+        {
+            int8_t a = find_native_avs(fc, n);
+            if (a >= 0 && fc[a].max_mv >= hi)
+            {
+                best = a;
+                src_ma = (hi > 15000 && fc[a].max_ma_20v) ? min_u16(fc[a].max_ma, fc[a].max_ma_20v) : fc[a].max_ma;
+            }
+        }
+        if (best >= 0 && src_ma > 0)
+        {
+            back_entry_t e = {PPS_PDO, fc[best].type, best + 1, lo, hi, min_u16(min_u16(src_ma, c->pps_ma50 * 50), c->max_ma), 0};
+            custom = e;
+            has_custom = true;
+            int8_t k = find_mv(pps, np, hi);
+            if (k >= 0)
+            {
+                for (; k + 1 < np; k++)     /* 同一最高电压的透传 PPS 让位 */
+                    pps[k] = pps[k + 1];
+                np--;
+            }
         }
     }
+    uint8_t room = PD_MAX_DATA_OBJS - nf - has_avs - has_custom;
+    if (np > room)
+    {
+        /* 位置不够：保留最高电压高的 */
+        for (uint8_t k = 0; k < room; k++)
+            pps[k] = pps[np - room + k];
+        np = room;
+    }
+    if (has_custom)
+        insert_sorted(pps, &np, &custom);
 
     /* 4. 转换 Fixed：12V 转换或 Lab 自订 Fixed（互斥） */
     uint16_t conv_mv = 0, conv_ma = c->max_ma;

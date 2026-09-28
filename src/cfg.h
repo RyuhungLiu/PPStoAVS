@@ -35,7 +35,10 @@ typedef enum
 #define CFG2_NO_INFO        (1u << 0)   /* 关闭 PD 信息透传（电量、充电器/设备信息） */
 #define CFG2_ID_PT          (1u << 1)   /* 身份透传：Discover Identity、VID/PID、厂商信息用对方的 */
 #define CFG2_FORCE_PPS      (1u << 2)   /* Lab：强制 PPS——后端所有档位（Fixed、AVS）尽量由充电器 PPS 提供，可做压降补偿、切换不经 Fixed */
-#define CFG2_MASK           (CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS)
+#define CFG2_PPS_CUSTOM     (1u << 3)   /* Lab：自订 PPS（pps_min_dv ~ pps_max_dv、pps_ma50），由覆盖该范围的充电器 PPS（或 9V 起的 AVS）提供 */
+#define CFG2_MASK           (CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS | CFG2_PPS_CUSTOM)
+#define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
+#define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */
 #define CFG_FIX_DV_MAX      200
 #define CFG_MAX_MA          3000
@@ -43,7 +46,7 @@ typedef enum
 #define CFG_OCP_MAX_MA      5000
 #define CFG_OCP_MAX_MA_5A   5500        /* 电流检测约 5.8A 饱和 */
 
-/* 上位机协议直接收发此结构（小端，16 字节） */
+/* 上位机协议直接收发此结构（小端，24 字节） */
 typedef struct __attribute__((packed))
 {
     uint8_t  mode;          /* cfg_mode_t */
@@ -61,6 +64,10 @@ typedef struct __attribute__((packed))
     uint8_t  comp_mode;     /* cfg_comp_t：压降补偿 */
     uint8_t  reserved2;
     uint16_t comp_val;      /* V 补偿：mV（0 ~ 1000）；R 补偿：mΩ（0 ~ 500） */
+    uint8_t  pps_min_dv;    /* CFG2_PPS_CUSTOM：最低电压，100mV 单位（33 ~ 209） */
+    uint8_t  pps_max_dv;    /* CFG2_PPS_CUSTOM：最高电压，100mV 单位（> 最低，≤ 210） */
+    uint8_t  pps_ma50;      /* CFG2_PPS_CUSTOM：电流，50mA 单位（10 ~ 100） */
+    uint8_t  reserved3;
 } cfg_t;
 
 typedef enum
