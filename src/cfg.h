@@ -31,6 +31,11 @@ typedef enum
 #define CFG_FIX_CUSTOM      (1u << 7)   /* Lab：自订非标准 Fixed（fix_dv/fix_ma50），由 PPS（优先）或 AVS 提供；与 CFG_FIX12 互斥 */
 #define CFG_FLAGS_MASK      (CFG_FIX12 | CFG_LOG_PPS | CFG_FE_AVS_2ND | CFG_BE_AVS_2ND | CFG_AVS_TO_PPS | CFG_FE_EMARKER | \
                              CFG_EPR_AVS | CFG_FIX_CUSTOM)
+/* flags2 位（0 为默认值：旧版设置迁移后行为不变） */
+#define CFG2_NO_INFO        (1u << 0)   /* 关闭 PD 信息透传（电量、充电器/设备信息） */
+#define CFG2_ID_PT          (1u << 1)   /* 身份透传：Discover Identity、VID/PID、厂商信息用对方的 */
+#define CFG2_FORCE_PPS      (1u << 2)   /* Lab：强制 PPS——后端所有档位（Fixed、AVS）尽量由充电器 PPS 提供，可做压降补偿、切换不经 Fixed */
+#define CFG2_MASK           (CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS)
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */
 #define CFG_FIX_DV_MAX      200
 #define CFG_MAX_MA          3000
@@ -52,8 +57,21 @@ typedef struct __attribute__((packed))
     uint8_t  flags;         /* CFG_* 标志 */
     uint8_t  fix_dv;        /* CFG_FIX_CUSTOM：电压，100mV 单位（51 ~ 200） */
     uint8_t  fix_ma50;      /* CFG_FIX_CUSTOM：电流，50mA 单位（10 ~ 100） */
-    uint8_t  reserved;
+    uint8_t  flags2;        /* CFG2_*（旧版此字节恒为 0，位定义按 0 = 默认） */
+    uint8_t  comp_mode;     /* cfg_comp_t：压降补偿 */
+    uint8_t  reserved2;
+    uint16_t comp_val;      /* V 补偿：mV（0 ~ 1000）；R 补偿：mΩ（0 ~ 500） */
 } cfg_t;
+
+typedef enum
+{
+    CFG_COMP_OFF = 0,
+    CFG_COMP_V   = 1,       /* 固定电压补偿 */
+    CFG_COMP_R   = 2,       /* 随电流补偿：I × R */
+} cfg_comp_t;
+
+#define CFG_COMP_V_MAX      1000
+#define CFG_COMP_R_MAX      500
 
 void cfg_init(void);                    /* 从 Flash 读取，无效则用默认值 */
 const cfg_t *cfg(void);

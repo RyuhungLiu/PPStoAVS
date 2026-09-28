@@ -11,7 +11,9 @@
  *                              flags：bit0 前端非 PD，bit1 后端已插入，bit2 MOS 导通，bit3 后端合约，bit4 前端合约，
  *                                     bit6..5 后端 AVS 二次握手（0 不适用，1 等待查询，2 设备不支持，3 已给 AVS）
  *                      part 1：n u8, 后端能力 PDO[n], 对应充电器位置 src u8[n]（0 = 无）
- * 0x10 CFG_GET      → cfg_t（16 字节）, save_pending u8
+ *                      part 2：n u8, 前端 EPR 能力 PDO[n]（8 号起）
+ *                      part 3：PD 信息透传（设备电量、双方身份，格式见 pdinfo_status）
+ * 0x10 CFG_GET      → cfg_t（20 字节）, save_pending u8
  * 0x11 CFG_SET cfg  → 校验失败返回 BAD_ARG；成功立即生效并排队保存
  * 0x12 CFG_DEFAULT  → 恢复默认设置
  * 0x20 LOG_SESSIONS → current u16, ram_mask u8（bit0 当前页，bit1/2 待写页），n u8, {session u16, first_idx u8, pages u8}[n]
@@ -20,6 +22,6 @@
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  4
+#define HOST_PROTO_VERSION  5
 
 void host_process(void);

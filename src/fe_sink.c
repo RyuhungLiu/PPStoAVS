@@ -4,6 +4,7 @@
 #include "bridge.h"
 #include "cfg.h"
 #include "evlog.h"
+#include "pdinfo.h"
 #include "pd_phy.h"
 #include "timebase.h"
 
@@ -58,6 +59,8 @@ static pd_phy_t *const phy = &pd_phy_fe;
 
 static fe_state_t state;
 static uint32_t state_ts;
+static uint8_t query;               /* 信息透传：进行中的查询 PI_Q_*，0 = 无 */
+static uint32_t alert_out;          /* 待转发给充电器的设备 Alert */
 static uint32_t keepalive_ts;
 static bool hard_reset_sent;
 static uint8_t last_rx_id;
@@ -154,6 +157,8 @@ static void diag_wait_caps(void)
 
 static void set_state(fe_state_t s)
 {
+    if (s != FE_ST_READY)
+        query = 0;      /* 被打断的查询留在队列里，回到 READY 后再问 */
     state = s;
     state_ts = millis();
 }
@@ -260,6 +265,7 @@ static void request_finished(bool ok)
         contract = pending;
         contract_rdo = pending_rdo;
         has_contract = true;
+        pdinfo_chg_start(phy->revision >= PD_REV_30);
         hard_reset_sent = false;
         keepalive_ts = millis();
     }
@@ -308,6 +314,7 @@ static void do_hard_reset(void)
     pd_phy_reset_protocol(phy);
     cable_reset();
     epr_reset();
+    pdinfo_chg_reset();
     last_rx_id = 0xFF;
     has_contract = false;
     num_caps = 0;
@@ -359,6 +366,116 @@ static void handle_source_caps(const pd_rx_msg_t *m, const pd_header_t *h)
     handle_caps(&m->data[2], h->num_objs, h->revision);
 }
 
+/* ---- 信息透传：查询充电器、代答充电器对设备的查询 ---- */
+
+static bool send_query(uint8_t q)
+{
+    static const uint8_t port_ref[2] = {0, 0};     /* Manufacturer Info Target = 端口 */
+    uint32_t vdm = VDM_DISC_IDENT_REQ;
+    switch (q)
+    {
+    case PI_Q_IDENT:
+        return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
+    case PI_Q_EXTCAPS:
+        return pd_phy_send(phy, MSG_TYPE_Get_Source_Cap_Extended, 0, NULL);
+    case PI_Q_SIDO:
+        return pd_phy_send(phy, MSG_TYPE_Get_Source_Info, 0, NULL);
+    case PI_Q_STATUS:
+        return pd_phy_send(phy, MSG_TYPE_Get_Status, 0, NULL);
+    default:
+        return pd_phy_send_ext(phy, MSG_TYPE_Get_Manufacturer_Info, port_ref, sizeof(port_ref));
+    }
+}
+
+static void query_end(void)
+{
+    pdinfo_chg_query_done(query);
+    query = 0;
+    set_state(FE_ST_READY);
+}
+
+/* 收到对查询 q 的应答（或拒绝）时结束查询 */
+static bool query_is(uint8_t q)
+{
+    return state == FE_ST_READY && query == q;
+}
+
+static void send_sink_caps_ext(void);
+
+static void answer_sink_caps_ext(void)
+{
+    uint8_t d[SKEDB_LEN];
+    if (pdinfo_fe_skedb(d))
+    {
+        pd_phy_send_ext(phy, MSG_TYPE_Sink_Capabilities_Extended, d, sizeof(d));
+        if (cfg()->flags & CFG_FE_AVS_2ND)
+        {
+            ev_avs_2nd_t e = {0, AVS2_FE_SKEDB_SENT, d[SKEDB_SINK_MODES]};
+            evlog_add(EV_AVS_2ND, &e, sizeof(e));
+        }
+    }
+    else if (cfg()->flags & CFG_FE_AVS_2ND)
+    {
+        send_sink_caps_ext();
+    }
+    else
+    {
+        send_not_supported();
+    }
+}
+
+static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
+{
+    uint32_t vdm = pd_get_u32(&m->data[2]);
+    if (!VDM_STRUCTURED(vdm))
+        return;
+    if (VDM_CMD_TYPE(vdm) != 0)
+    {
+        /* 充电器对 Discover Identity 的应答 */
+        if (query_is(PI_Q_IDENT) && VDM_IS_DISC_IDENT(vdm) && VDM_CMD_TYPE(vdm) != VDM_BUSY)
+        {
+            if (VDM_CMD_TYPE(vdm) == VDM_ACK && n > 1)
+            {
+                uint32_t vdo[PI_MAX_VDOS];
+                uint8_t k = n - 1 > PI_MAX_VDOS ? PI_MAX_VDOS : n - 1;
+                for (uint8_t i = 0; i < k; i++)
+                    vdo[i] = pd_get_u32(&m->data[6 + 4 * i]);
+                pdinfo_chg_ident(vdo, k);
+            }
+            query_end();
+        }
+        return;
+    }
+    if (VDM_IS_DISC_IDENT(vdm) && pdinfo_id_on())
+    {
+        /* 身份透传：回设备的身份；设备的还没读到就回 BUSY 让充电器稍后再问 */
+        static uint8_t logged_reply;
+        pi_ident_t id;
+        uint32_t o[1 + PI_MAX_VDOS];
+        uint8_t reply;
+        if (pdinfo_fe_ident(&id))
+        {
+            reply = VDM_ACK;
+            o[0] = VDM_REPLY(vdm, VDM_ACK);
+            memcpy(&o[1], id.vdo, id.n * 4);
+            pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1 + id.n, o);
+        }
+        else
+        {
+            reply = pdinfo_fe_ident_pending() ? VDM_BUSY : VDM_NAK;
+            o[0] = VDM_REPLY(vdm, reply);
+            pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, o);
+        }
+        if (reply != logged_reply)
+        {
+            logged_reply = reply;
+            log_note(NOTE_FE_IDENT, reply);
+        }
+        return;
+    }
+    send_not_supported();
+}
+
 /* 扩展报文：EPR_Source_Capabilities 分块拼接、Extended_Control，其余回 Not_Supported */
 static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
 {
@@ -401,6 +518,53 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
     }
     if (h->msg_type == MSG_TYPE_Extended_Control && avail >= 1 && d[0] == ECDB_EPR_KEEPALIVE_ACK)
         return;
+    if (ext & EXT_REQUEST_CHUNK)
+        return;
+
+    uint8_t size = EXT_DATA_SIZE(ext) < avail ? EXT_DATA_SIZE(ext) : avail;
+    switch (h->msg_type)
+    {
+    case MSG_TYPE_Source_Capabilities_Extended:
+        if (query_is(PI_Q_EXTCAPS))
+        {
+            pdinfo_chg_scedb(d, size);
+            query_end();
+        }
+        return;
+    case MSG_TYPE_Status:
+        if (query_is(PI_Q_STATUS))
+        {
+            pdinfo_chg_status(d, size);
+            query_end();
+        }
+        return;
+    case MSG_TYPE_Manufacturer_Info:
+        if (query_is(PI_Q_MIDB))
+        {
+            pdinfo_chg_midb(d, size);
+            query_end();
+        }
+        return;
+    case MSG_TYPE_Get_Battery_Cap:
+        if (pdinfo_on())
+        {
+            uint8_t bcdb[9];
+            pdinfo_fe_bcap(size ? d[0] : 0, bcdb);
+            pd_phy_send_ext(phy, MSG_TYPE_Battery_Capabilities, bcdb, sizeof(bcdb));
+            return;
+        }
+        break;
+    case MSG_TYPE_Get_Battery_Status:
+        if (pdinfo_on())
+        {
+            uint32_t bsdo = pdinfo_fe_bsdo(size ? d[0] : 0);
+            pd_phy_send(phy, MSG_TYPE_Battery_Status, 1, &bsdo);
+            return;
+        }
+        break;
+    default:
+        break;
+    }
     send_not_supported();
 }
 
@@ -552,8 +716,14 @@ static void handle_msg(const pd_rx_msg_t *m)
             handle_source_caps(m, &h);
             break;
         case MSG_TYPE_Vendor_Defined:
-            if ((pd_get_u32(&m->data[2]) >> 15) & 1)    /* 结构化 VDM */
-                send_not_supported();
+            handle_vdm(m, h.num_objs);
+            break;
+        case MSG_TYPE_Source_Info:
+            if (query_is(PI_Q_SIDO))
+            {
+                pdinfo_chg_sido(pd_get_u32(&m->data[2]));
+                query_end();
+            }
             break;
         case MSG_TYPE_EPR_Mode:
         {
@@ -602,7 +772,9 @@ static void handle_msg(const pd_rx_msg_t *m)
         break;
     case MSG_TYPE_Reject:
     case MSG_TYPE_Wait:
-        if (state == FE_ST_WAIT_ACCEPT)
+        if (query && h.msg_type == MSG_TYPE_Reject)
+            query_end();
+        else if (state == FE_ST_WAIT_ACCEPT)
         {
             if (h.msg_type == MSG_TYPE_Wait && wait_count < N_WAIT_RETRY)
             {
@@ -631,15 +803,15 @@ static void handle_msg(const pd_rx_msg_t *m)
         send_sink_caps();
         break;
     case MSG_TYPE_Get_Sink_Cap_Extended:
-        if (cfg()->flags & CFG_FE_AVS_2ND)
-            send_sink_caps_ext();
-        else
-            send_not_supported();
+        answer_sink_caps_ext();
+        break;
+    case MSG_TYPE_Not_Supported:
+        if (query)
+            query_end();
         break;
     case MSG_TYPE_GoodCRC:
     case MSG_TYPE_GotoMin:
     case MSG_TYPE_Ping:
-    case MSG_TYPE_Not_Supported:
         break;
     default:
         send_not_supported();
@@ -660,6 +832,7 @@ void fe_init(void)
 
     last_rx_id = 0xFF;
     cable_reset();
+    pdinfo_chg_reset();
     has_contract = false;
     num_caps = 0;
     hard_reset_sent = false;
@@ -686,6 +859,7 @@ void fe_process(void)
         pd_phy_reset_protocol(phy);
         cable_reset();
         epr_reset();
+        pdinfo_chg_reset();
         last_rx_id = 0xFF;
         has_contract = false;
         num_caps = 0;
@@ -763,7 +937,14 @@ void fe_process(void)
         break;
 
     case FE_ST_READY:
-        if (bridge_req_waiting)
+        if (!alert_out)
+            alert_out = pdinfo_fe_take_alert();
+        if (query)
+        {
+            if (elapsed > T_SENDER_RESPONSE_MS)
+                query_end();    /* 充电器没回：放弃这一项 */
+        }
+        else if (bridge_req_waiting)
         {
             uint32_t waited = millis() - bridge_req_ts;
             bool ok = sink_tx_ok();
@@ -795,6 +976,21 @@ void fe_process(void)
                 pd_phy_send(phy, MSG_TYPE_EPR_Mode, 1, &d);
                 set_state(FE_ST_EPR_ENTER);
             }
+        }
+        else if (alert_out && elapsed > T_SENDER_RESPONSE_MS && sink_tx_ok())
+        {
+            /* 设备电池状态变化：转发 Alert，充电器随后读取电池状态 */
+            if (phy->revision >= PD_REV_30)
+                pd_phy_send(phy, MSG_TYPE_Alert, 1, &alert_out);
+            alert_out = 0;
+        }
+        else if (has_contract && elapsed > T_SENDER_RESPONSE_MS && pdinfo_chg_next_query() && sink_tx_ok())
+        {
+            query = pdinfo_chg_next_query();
+            if (send_query(query))
+                set_state(FE_ST_READY);     /* 从现在开始计 tSenderResponse */
+            else
+                query_end();
         }
         break;
 

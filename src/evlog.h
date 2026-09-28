@@ -34,6 +34,7 @@ typedef enum
     EV_BE_CAPS      = 12,   /* uint32_t pdo[n] + uint8_t src[n]：后端能力（生成或变化时，不论设备是否插入）及对应充电器位置 */
     EV_AVS_2ND      = 13,   /* ev_avs_2nd_t：AVS 二次握手（Lab） */
     EV_NOTE         = 14,   /* ev_note_t：协议异常但已自动恢复 */
+    EV_IDENT        = 15,   /* ev_ident_t：读到充电器 / 设备的身份（Discover Identity） */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -109,6 +110,7 @@ typedef enum
     NOTE_FE_EPR_ENTERED   = 3,  /* 前端进入 EPR 模式 */
     NOTE_FE_EPR_FAILED    = 4,  /* 充电器拒绝进入 EPR，data = 原因码 */
     NOTE_FE_EPR_EXIT      = 5,  /* 前端退出 EPR 模式 */
+    NOTE_FE_IDENT         = 6,  /* 身份透传：回复充电器的 Discover Identity，data = 1 ACK、2 NAK、3 BUSY（相同回复只记一次） */
 } note_code_t;
 
 typedef struct __attribute__((packed))
@@ -131,6 +133,14 @@ typedef struct __attribute__((packed))
     uint8_t kind;           /* avs_2nd_kind_t */
     uint8_t modes;          /* Sink Modes */
 } ev_avs_2nd_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  side;          /* 0 = 充电器（前端读到），1 = 设备（后端读到） */
+    uint16_t vid;
+    uint16_t pid;
+    uint16_t bcd;           /* bcdDevice */
+} ev_ident_t;
 
 typedef struct __attribute__((packed))
 {

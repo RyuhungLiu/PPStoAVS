@@ -58,10 +58,27 @@ typedef enum
 
 typedef enum
 {
+    MSG_TYPE_Source_Capabilities_Extended = 0b00001,
+    MSG_TYPE_Status                     = 0b00010,
+    MSG_TYPE_Get_Battery_Cap            = 0b00011,
+    MSG_TYPE_Get_Battery_Status         = 0b00100,
+    MSG_TYPE_Battery_Capabilities       = 0b00101,
+    MSG_TYPE_Get_Manufacturer_Info      = 0b00110,
+    MSG_TYPE_Manufacturer_Info          = 0b00111,
     MSG_TYPE_Sink_Capabilities_Extended = 0b01111,
     MSG_TYPE_Extended_Control           = 0b10000,
     MSG_TYPE_EPR_Source_Capabilities    = 0b10001,
 } pd_ext_msg_t;
+
+/* 结构化 VDM：[31:16] SVID，[15] 结构化，[14:13] 版本，[7:6] 命令类型，[4:0] 命令 */
+#define VDM_DISC_IDENT_REQ      ((0xFF00u << 16) | (1u << 15) | (1u << 13) | 1u)    /* PD SID、VDM 2.0、Discover Identity */
+#define VDM_STRUCTURED(v)       (((v) >> 15) & 1)
+#define VDM_CMD_TYPE(v)         (((v) >> 6) & 3)    /* 0 REQ，1 ACK，2 NAK，3 BUSY */
+#define VDM_IS_DISC_IDENT(v)    (((v) >> 16) == 0xFF00 && ((v) & 0x1F) == 1)
+#define VDM_REPLY(v, type)      (((v) & ~0xC0u) | ((uint32_t)(type) << 6))
+#define VDM_ACK                 1
+#define VDM_NAK                 2
+#define VDM_BUSY                3
 
 /* 扩展报文头（Extended Message Header） */
 #define EXT_CHUNKED             (1u << 15)

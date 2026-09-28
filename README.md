@@ -70,13 +70,45 @@ if the current contract is no longer offered, the device is Hard Reset.
 Example — charger `5/9/15/20 V Fixed, PPS 5–11 V, AVS 9–20 V, PPS 4.5–21 V` in mode c:
 `5/9/15/20 V Fixed, AVS 9–20 V (#6), PPS 5–11 V (#5), PPS 4.5–20 V (#7)` — 7 PDOs, so no 12 V conversion.
 
+### Voltage compensation
+
+When the front contract is PPS or AVS, the voltage requested from the charger is raised to cancel the drop across the
+converter and cable. A charger Fixed PDO cannot be compensated.
+
+- **V**: adds a fixed 0–1000 mV.
+- **R** (default, 15 mΩ): adds output current × 0–500 mΩ, updated every 0.5 s from the measured current.
+  15 mΩ is roughly the converter's own drop, +45 mV at 3 A.
+
+Compensation is limited to +1 V and to the source PDO's maximum voltage. It is rounded to the charger's step (PPS 20 mV,
+AVS 100 mV). OVP/UVP are checked against the compensated voltage.
+
+### PD info passthrough
+
+On by default. The converter reads each side's PD info and answers the other side's queries from that copy
+(the spec allows only 15 ms, too short to ask the other side live). Both sides must be PD 3.0.
+
+- **Device → charger**
+  - `Battery_Capabilities` and `Battery_Status`; the device's battery `Alert` is forwarded, so chargers with a screen can show
+    the phone's battery.
+  - `Sink_Capabilities_Extended`. Its Sink Modes describe the converter: PPS, plus AVS only with the Lab front
+    second handshake. PDP is capped to the current limit.
+- **Charger → device**
+  - `Source_Capabilities_Extended`, `Source_Info` and `Status`.
+  - PDP values are rewritten to what the rear actually offers.
+- **Identity passthrough** (separate switch, off by default)
+  - `Discover Identity` answers, VID/PID in the extended info, and the charger's `Manufacturer_Info` come from the
+    other side.
+  - When off, the converter's own VID/PID (1209:0001) is used.
+
+The status page shows the device's identity and battery. The identities read from both sides are also recorded.
+
 ### Lab mode: AVS second handshake
 
 Some chargers first advertise PPS, query the sink with `Get_Sink_Cap_Extended`, and re-advertise with SPR AVS
 in place of PPS when the sink's Sink Modes has the AVS bit (bit 5). Two independent switches:
 
 - **Front (plug)** — reply to the charger's `Get_Sink_Cap_Extended` with Sink Modes = AVS, so such chargers
-  switch to AVS. Off: reply `Not_Supported`, charger keeps PPS.
+  switch to AVS. Off: no AVS bit (the device's Sink_Capabilities_Extended without AVS, or `Not_Supported`), charger keeps PPS.
 - **Rear (receptacle)** — imitate that charger: offer Fixed + PPS first; after the first contract, query the device
   and re-advertise with AVS only if it declares AVS support. Applies to modes a/c; restarts when the device is unplugged.
 
@@ -115,13 +147,21 @@ or from the charger's SPR AVS (9 V and up) when there is no PPS. Its current is 
 It is not offered if the charger already has that Fixed voltage, if it exceeds the max voltage, or if all 7 PDO slots
 are used. It cannot be combined with 12 V conversion.
 
+### Lab mode: force PPS
+
+Every Fixed level that a charger PPS covers is served from that PPS instead of the charger's Fixed. The PPS with the highest current
+is used first, and the Fixed current offered becomes the PPS current. AVS is translated from PPS when a PPS covers the same
+range as the charger's native AVS. The front contract is then always PPS, so voltage compensation applies to every level. It is
+still capped at the PPS maximum, so there is no compensation at 20 V with PPS 5–20 V. Voltages no PPS covers still use the
+charger's Fixed. Works in all modes.
+
 ## Host tool
 
 Plug the front Type-C into a PC (no charger needed; the board runs from the PC's 5 V) and open
 [`tools/ppstoavs.html`](tools/ppstoavs.html) in desktop Chrome or Edge (WebHID). No driver or install.
 
-- **Status** — charger → converter → device overview (contracts, VBUS, current, switch), charger PDOs and
-  the rear PDOs with the charger PDO each one comes from.
+- **Status** — charger → converter → device overview (contracts, VBUS, current, switch), charger PDOs,
+  the rear PDOs with the charger PDO each one comes from, and the device's identity and battery.
 - **Settings** — mode, 12 V conversion, max voltage (15/20 V), current limit (≤ 3 A), hidden Fixed PDOs,
   OVP/UVP %, OCP mA/ms, PPS request logging. Applied immediately and saved to flash.
 - **Records** — the last power sessions (up to 64 records each): charger PDOs, the PDOs offered to the device

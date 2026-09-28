@@ -119,7 +119,7 @@ td.nw { white-space: nowrap; }
 .labs { display: grid; gap: 8px; }
 .lab { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .lab:has(.labhead input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.lab.off { opacity: .55; }
+.lab.off, .check.off { opacity: .55; }
 .labhead { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .labhead input { margin-top: 3px; }
 .labhead b { font-weight: 600; }
@@ -160,6 +160,10 @@ td.nw { white-space: nowrap; }
 .pdos { display: flex; flex-wrap: wrap; gap: 4px; }
 .pdo { border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 12px; white-space: nowrap; background: var(--soft); }
 .pdo i { font-style: normal; color: var(--muted); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 13px; }
+.kv > div:nth-child(odd) { color: var(--muted); }
+.bat { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; max-width: 220px; }
+.bat > div { height: 100%; background: var(--ok); }
 #msg { font-size: 12px; color: var(--bad); }
 </style>
 </head>
@@ -209,6 +213,10 @@ td.nw { white-space: nowrap; }
     <div class="grid2">
       <div class="card"><h3 data-i18n="chargerCaps"></h3><div class="scroll" id="frontCaps"></div></div>
       <div class="card"><h3><span data-i18n="rearCaps"></span><span class="tag" id="avs2Tag"></span></h3><div class="scroll" id="rearCaps"></div></div>
+    </div>
+    <div class="grid2" id="infoCards">
+      <div class="card"><h3><span data-i18n="infoDev"></span><span class="tag" id="batTag"></span></h3><div id="infoDev"></div></div>
+      <div class="card"><h3 data-i18n="infoChg"></h3><div id="infoChg"></div></div>
     </div>
   </div>
 
@@ -265,6 +273,32 @@ td.nw { white-space: nowrap; }
     </div>
 
     <div class="card">
+      <h3 data-i18n="secComp"></h3>
+      <div class="fields">
+        <div class="lbl" data-i18n="compMode"></div>
+        <div class="seg">
+          <label><input type="radio" name="compMode" value="0"><span data-i18n="compOff"></span></label>
+          <label><input type="radio" name="compMode" value="1"><span data-i18n="compV"></span></label>
+          <label><input type="radio" name="compMode" value="2"><span data-i18n="compR"></span></label>
+        </div>
+        <div class="lbl" data-i18n="compVal"></div>
+        <div class="inline"><input type="number" id="compVal" min="0" max="500" step="1"><span class="muted" id="compUnit">mΩ</span><span class="small muted" id="compHint"></span></div>
+      </div>
+      <div class="lab" style="margin-top:12px;border:0;padding:0;background:none">
+        <details><summary data-i18n="labMore"></summary><ul data-i18n-list="compL"></ul></details>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="secInfo"></h3>
+      <label class="check"><input type="checkbox" id="infoPt"><div><b data-i18n="infoPt"></b><span data-i18n="infoPtD"></span></div></label>
+      <label class="check" id="idPtRow"><input type="checkbox" id="idPt"><div><b data-i18n="idPt"></b><span data-i18n="idPtD"></span></div></label>
+      <div class="lab" style="margin-top:12px;border:0;padding:0;background:none">
+        <details><summary data-i18n="labMore"></summary><ul data-i18n-list="infoL"></ul></details>
+      </div>
+    </div>
+
+    <div class="card">
       <h3 data-i18n="secLog"></h3>
       <label class="check"><input type="checkbox" id="logPps"><div><b data-i18n="logPps"></b><span data-i18n="logPpsD"></span></div></label>
     </div>
@@ -296,6 +330,10 @@ td.nw { white-space: nowrap; }
         <div class="lab" id="lab-eprAvs">
           <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="eprAvsL"></ul></details>
+        </div>
+        <div class="lab" id="lab-forcePps">
+          <label class="labhead"><input type="checkbox" id="forcePps"><div><b data-i18n="forcePps"></b><span data-i18n="forcePpsS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="forcePpsL"></ul></details>
         </div>
         <div class="lab" id="lab-fixc">
           <label class="labhead"><input type="checkbox" id="fixc"><div><b data-i18n="fixc"></b><span data-i18n="fixcS"></span></div><span class="labtags"><span class="tag " data-i18n="tagNo12"></span></span></label>
@@ -388,7 +426,7 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
     rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
@@ -396,11 +434,35 @@ const T = {
     stEpr: "Entering EPR",
     beSt: ["unattached", "attach", "vSafe5V", "startup", "sending caps", "waiting Request", "transition", "ready",
            "SinkTx wait", "Hard Reset", "recover", "non-PD", "discharge", "2nd handshake", "2nd handshake"],
-    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode",
+    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode", note6: "Front · answered the charger's identity query: ",
+    identRep: ["", "ACK (device identity)", "NAK (no device)", "BUSY (device identity not read yet)"],
     note4: "Front · charger refused EPR: ", eprFail: ["unknown", "cable not EPR capable", "source not VCONN source", "EPR bit not set in RDO", "unable at this time", "EPR bit not set in 5V PDO"],
     merged: "adjusted ×", waitN: "charger Wait ×", txWait: "waited SinkTxOK ", txTimeout: "SinkTxNG, sent after timeout", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
     on: "on", off: "off", pps: "PPS log", fix12s: "12 V",
     secLab: "Lab mode", labD: "Experimental features. Each switch is independent unless noted; they may depend on specific chargers or devices and are not fully spec compliant.",
+    secComp: "Voltage compensation", compMode: "Mode", compVal: "Value", compOff: "Off", compV: "V (fixed)", compR: "R (I × R)",
+    compHintV: "0–1000 mV", compHintR: "0–500 mΩ · default 15 mΩ", compVs: "V comp", compRs: "R comp",
+    compL: ["Raises the voltage requested from the charger to cancel the drop across the converter and cable.",
+      "Only works when the front contract is PPS or AVS — AVS translated from PPS, 12 V conversion, custom Fixed, PPS passthrough, AVS as PPS. A charger Fixed PDO cannot be compensated.",
+      "V: adds the set value (0–1000 mV).",
+      "R: adds output current × resistance (0–500 mΩ), updated every 0.5 s from the measured current. Default 15 mΩ (the converter's own drop: +45 mV at 3 A).",
+      "At most +1 V and never above the charger PDO's maximum voltage. Rounded to the charger's step: PPS 20 mV, AVS 100 mV (AVS ignores less than 50 mV).",
+      "OVP/UVP are checked against the compensated voltage."],
+    infoDev: "Device info", infoChg: "Charger info", batTag: "Battery", battery: "Battery", batChg: "charging", batDis: "discharging",
+    batIdle: "idle", batNone: "no battery info", idLbl: "ID", sinkPdp: "Power need", srcPdp: "Charger PDP", rearPdp: "Offered to device",
+    chgTemp: "Temperature", chgName: "Manufacturer", infoOff: "Info passthrough is off", infoOld: "Needs firmware v0.6.0",
+    infoNoChg: "Charger info is read while powered by a charger (see Records → Identity).",
+    secInfo: "PD info passthrough", infoPt: "Pass PD info through",
+    infoPtD: "Default on. The charger can read the device's battery; the device sees the charger's extended info.",
+    idPt: "Identity passthrough (VID/PID)",
+    idPtD: "Off by default. Both sides see each other's identity as if connected directly.",
+    infoL: ["The charger's queries are answered right away from data the converter has already read. The spec allows only 15 ms, too short to ask the other side live.",
+      "Device → charger: battery capacity and level (Battery_Capabilities / Battery_Status), battery Alerts, Sink_Capabilities_Extended. Chargers with a screen can then show the phone's battery.",
+      "Charger → device: Source_Capabilities_Extended, Source_Info, Status. The PDP values are rewritten to what the converter actually offers.",
+      "Sink Modes sent to the charger describe the converter: PPS; AVS only with the Lab \"AVS 2nd handshake\" option.",
+      "Identity passthrough: Discover Identity answers, VID/PID in the extended info and the charger's Manufacturer_Info come from the other side. Some devices enable vendor-specific behaviour when they see a known charger ID; turn this off if anything misbehaves.",
+      "Needs PD 3.0 on both sides. The status page shows the device's battery; charger info appears in Records while powered by a charger."],
+    identS: ["Charger", "Device"],
     labFront: "Front · charger side", labRear: "Rear · device side", labMore: "Details",
     tagHw: "HW revision", tag5a: "5 A / EPR", tagAC: "modes a/c", tagBC: "modes b/c", tagNeedEm: "needs E-Marker", tagNo12: "not with 12 V",
     fe2nd: "AVS second handshake (front)", fe2ndS: "Tell the charger the converter supports AVS.",
@@ -432,6 +494,14 @@ const T = {
       "Exactly 9 V or 15 V: served by the charger's Fixed 9 V / 15 V.",
       "Any other 9–15 V request is rejected.",
       "Takes precedence over PPS or SPR AVS as the AVS source. Never above 20 V."],
+    forcePps: "Force PPS", forcePpsS: "Serve every Fixed and AVS level from the charger's PPS, so voltage compensation works on all of them.",
+    tagAll: "all modes", fpps: "force PPS",
+    forcePpsL: ["Each Fixed voltage covered by a charger PPS is requested as PPS at that voltage (the PPS with the highest current first). Voltages no PPS covers still use the charger's Fixed.",
+      "The Fixed current offered becomes the PPS current (within the current limit). For example, a 20 V 5 A Fixed made from a 3 A PPS is offered as 3 A.",
+      "AVS uses PPS translation when a PPS covers the same range as the charger's native AVS.",
+      "Voltage compensation now applies to every level. It cannot go above the PPS maximum, so with PPS 5–20 V there is no compensation at 20 V.",
+      "Fixed levels are requested at the PPS maximum current, so the charger's current limiting is not used (OCP still applies), and UVP is still checked.",
+      "The converter sends the PPS keep-alive request every 5 s. Works in all modes."],
     fixc: "Custom Fixed", fixcS: "Add one non-standard Fixed voltage and current, made from PPS.", fixcRange: "5.1–20.0 V · 0.5–5 A",
     fixcL: ["Source: the PPS covering the voltage (highest current first); without PPS, the charger's SPR AVS (9 V and up only).",
       "Current = min(setting, source current, current limit).",
@@ -486,7 +556,7 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "協議事件" },
+          13: "AVS 二次握手", 14: "協議事件", 15: "身份" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
     rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
@@ -494,11 +564,35 @@ const T = {
     stEpr: "進入 EPR",
     beSt: ["未插入", "偵測中", "等 5V", "啟動", "發送能力", "等請求", "轉換中", "就緒",
            "SinkTx 等待", "Hard Reset", "恢復中", "非 PD", "放電中", "二次握手", "二次握手"],
-    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式",
+    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式", note6: "前端 · 回覆充電器的身份查詢：",
+    identRep: ["", "ACK（設備身份）", "NAK（沒有設備）", "BUSY（設備身份尚未讀到）"],
     note4: "前端 · 充電器拒絕進入 EPR：", eprFail: ["原因不明", "線材不支援 EPR", "充電器無法供 VCONN", "RDO 未設 EPR 位", "暫時無法進入", "5V PDO 未設 EPR 位"],
     merged: "微調 ×", waitN: "充電器 Wait ×", txWait: "等 SinkTxOK ", txTimeout: "SinkTxNG 逾時仍送出", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
     on: "開", off: "關", pps: "PPS 記錄", fix12s: "12V 轉換",
     secLab: "Lab 模式", labD: "實驗功能。除非另外註明，每一項都可以單獨開關；可能依賴特定充電器或設備，也不完全符合規範。",
+    secComp: "電壓補償", compMode: "方式", compVal: "數值", compOff: "關閉", compV: "V 補償（固定）", compR: "R 補償（I × R）",
+    compHintV: "0–1000 mV", compHintR: "0–500 mΩ · 預設 15 mΩ", compVs: "V 補償", compRs: "R 補償",
+    compL: ["自動提高向充電器請求的電壓，抵消轉換器與線材的壓降。",
+      "只對前端為 PPS / AVS 的合約有效：PPS 平移的 AVS、12V 轉換、自訂 Fixed、PPS 透傳、AVS 轉 PPS。充電器本身的 Fixed 無法補償。",
+      "V 補償：固定加上設定值（0–1000 mV）。",
+      "R 補償：加上 輸出電流 × 電阻（0–500 mΩ），每 0.5 秒依實測電流更新。預設 15 mΩ（轉換器內部壓降，3A 時 +45 mV）。",
+      "最多 +1V，且不超過充電器 PDO 的最高電壓。依充電器步進四捨五入：PPS 20 mV、AVS 100 mV（AVS 補償不足 50 mV 時不動作）。",
+      "過壓 / 欠壓保護以補償後的電壓為準。"],
+    infoDev: "設備資訊", infoChg: "充電器資訊", batTag: "電量", battery: "電量", batChg: "充電中", batDis: "放電中",
+    batIdle: "閒置", batNone: "沒有電池資訊", idLbl: "ID", sinkPdp: "功率需求", srcPdp: "充電器 PDP", rearPdp: "輸出給設備",
+    chgTemp: "溫度", chgName: "廠商", infoOff: "資訊透傳已關閉", infoOld: "需要韌體 v0.6.0",
+    infoNoChg: "充電器資訊在接充電器時讀取（見 記錄 → 身份）。",
+    secInfo: "PD 資訊透傳", infoPt: "透傳 PD 資訊",
+    infoPtD: "預設開啟。充電器可讀取設備電量，設備可看到充電器的擴充資訊。",
+    idPt: "身份透傳（VID/PID）",
+    idPtD: "預設關閉。兩端看到的是對方的身份，如同直接連接。",
+    infoL: ["充電器的查詢用轉換器已讀到的資料立即回覆；規範只給 15 ms，來不及即時轉問另一端。",
+      "設備 → 充電器：電池容量與電量（Battery_Capabilities / Battery_Status）、電池 Alert、Sink_Capabilities_Extended。有螢幕的充電器就能顯示手機電量。",
+      "充電器 → 設備：Source_Capabilities_Extended、Source_Info、Status。其中的 PDP 改成轉換器實際輸出的功率。",
+      "回給充電器的 Sink Modes 描述的是轉換器：PPS；只有開啟 Lab「AVS 二次握手」時才聲明 AVS。",
+      "身份透傳：Discover Identity 的回覆、擴充資訊裡的 VID/PID、充電器的 Manufacturer_Info 都用對方的。部分設備看到特定充電器 ID 會啟用廠商私有功能；如有異常請關閉。",
+      "兩端都要支援 PD 3.0。狀態頁顯示設備電量；充電器資訊在接充電器時讀取，可在記錄中查看。"],
+    identS: ["充電器", "設備"],
     labFront: "前端 · 充電器側", labRear: "後端 · 設備側", labMore: "詳細說明",
     tagHw: "需硬體改版", tag5a: "5A / EPR", tagAC: "方式 a/c", tagBC: "方式 b/c", tagNeedEm: "需 E-Marker", tagNo12: "與 12V 轉換互斥",
     fe2nd: "AVS 二次握手（前端）", fe2ndS: "向充電器宣告轉換器支援 AVS。",
@@ -530,6 +624,14 @@ const T = {
       "剛好 9V、15V：改走充電器的 Fixed 9V / 15V。",
       "其他 9–15V 請求一律拒絕。",
       "優先於 PPS 平移或 SPR AVS 作為 AVS 來源；永遠不超過 20V。"],
+    forcePps: "強制 PPS", forcePpsS: "所有 Fixed 與 AVS 擋位都改由充電器的 PPS 提供，電壓補償對所有擋位生效。",
+    tagAll: "所有方式", fpps: "強制 PPS",
+    forcePpsL: ["PPS 覆蓋得到的 Fixed 電壓，一律改向充電器請求該電壓的 PPS（電流大的 PPS 優先）；沒有 PPS 覆蓋的電壓仍走充電器的 Fixed。",
+      "輸出給設備的 Fixed 電流改為 PPS 的電流（不超過電流上限）。例如由 3A PPS 提供的 20V 5A Fixed 會顯示為 3A。",
+      "若 PPS 與充電器原生 AVS 覆蓋相同範圍，AVS 改由 PPS 平移。",
+      "電壓補償對所有擋位生效，但不能超過 PPS 最高電壓：例如 PPS 5–20V 時 20V 擋位無法補償。",
+      "Fixed 擋位以 PPS 最大電流請求，不使用充電器的限流功能（過流保護照常），欠壓保護照常檢查。",
+      "轉換器每 5 秒發送 PPS 保活請求。所有透傳方式都適用。"],
     fixc: "自訂 Fixed", fixcS: "增加一個非標準的 Fixed 電壓與電流，由 PPS 轉換。", fixcRange: "5.1–20.0V · 0.5–5A",
     fixcL: ["來源：覆蓋該電壓的 PPS（電流大者優先）；沒有 PPS 時用充電器的 SPR AVS（僅 9V 以上）。",
       "電流 = min(設定值, 來源電流, 電流上限)。",
@@ -667,6 +769,7 @@ async function refreshStatus() {
   const m = b[0];
   state.rearCaps = Array.from({ length: m }, (_, i) => u32(b, 1 + i * 4));
   state.rearSrc = Array.from({ length: m }, (_, i) => b[1 + m * 4 + i]);
+  state.pdInfo = state.info && state.info.proto >= 5 ? parsePdInfo(await request(0x02, [3])) : null;
   renderStatus();
 }
 
@@ -726,6 +829,7 @@ function renderStatus() {
     ["feSub", "vbusSub", "beSub"].forEach((id) => ($(id).textContent = ""));
     ["feTag", "swTag", "beTag", "avs2Tag", "avs2Tag2"].forEach((id) => setTag(id, ["", ""]));
     $("frontCaps").innerHTML = capsTable([], 0); $("rearCaps").innerHTML = capsTable([], 0, []); $("rearCaps2").innerHTML = capsTable([], 0, []);
+    renderPdInfo();
     return;
   }
   setTag("feTag", feState(s));
@@ -749,18 +853,71 @@ function renderStatus() {
   $("frontCaps").innerHTML = capsTable(state.frontCaps, fr ? fr.pos : 0);
   const rear = capsTable(state.rearCaps, br ? br.pos : 0, state.rearSrc);
   $("rearCaps").innerHTML = rear; $("rearCaps2").innerHTML = rear;
+  renderPdInfo();
+}
+
+/* ================= PD 資訊透傳 ================= */
+/* 常見 VID（其餘顯示十六進位） */
+const VENDORS = { 0x05AC: "Apple", 0x04E8: "Samsung", 0x12D1: "Huawei", 0x2717: "Xiaomi", 0x22D9: "OPPO", 0x2A70: "OnePlus",
+  0x2D95: "vivo", 0x18D1: "Google", 0x0B05: "ASUS", 0x17EF: "Lenovo", 0x22B8: "Motorola", 0x054C: "Sony", 0x045E: "Microsoft",
+  0x046D: "Logitech", 0x057E: "Nintendo", 0x291A: "Anker", 0x2109: "VIA Labs", 0x0BDA: "Realtek", 0x1209: "PPStoAVS" };
+const hex4 = (v) => v.toString(16).toUpperCase().padStart(4, "0");
+const idText = (vid, pid) => vid ? `${VENDORS[vid] ? VENDORS[vid] + " · " : ""}${hex4(vid)}:${hex4(pid)}` : t("none");
+function parsePdInfo(p) {
+  const name = p[35] ? new TextDecoder().decode(p.subarray(36, 36 + p[35])).replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, "") : "";
+  return { f: p[0], f2: p[1], devVid: u16(p, 2), devPid: u16(p, 4), chgVid: u16(p, 6), chgPid: u16(p, 8),
+    batDesign: u16(p, 10), batFull: u16(p, 12), bsdo: u32(p, 14), chgPdp: p[18], backPdp: p[19], sido: u32(p, 20), chgTemp: p[24],
+    sinkModes: p[25], sinkOp: p[26], sinkMax: p[27], name };
+}
+/* 電池：BSDO [31:16] 目前容量 0.1Wh，[15:8] bit0 編號無效、bit1 有電池、bit3..2 0 充電 1 放電 2 閒置 */
+function batInfo(i) {
+  if (!(i.f & 0x20)) return null;
+  const now = i.bsdo >>> 16, bi = (i.bsdo >> 8) & 0xFF;
+  if (bi & 1 || !(bi & 2)) return null;
+  const full = i.f & 0x10 ? (i.batFull || i.batDesign) : 0;
+  const pct = now !== 0xFFFF && full ? Math.min(100, Math.round(now * 100 / full)) : null;
+  return { now: now === 0xFFFF ? null : now / 10, full: full ? full / 10 : null, pct,
+    st: [t("batChg"), t("batDis"), t("batIdle")][(bi >> 2) & 3] ?? "" };
+}
+function renderPdInfo() {
+  const i = state.pdInfo, s = state.status;
+  $("infoCards").hidden = !dev;
+  if (!dev) return;
+  const kv = (rows) => `<div class="kv">${rows.filter(Boolean).map(([k, v]) => `<div>${esc(k)}</div><div>${v}</div>`).join("")}</div>`;
+  if (!i) { $("infoDev").innerHTML = `<div class="empty">${t("infoOld")}</div>`; $("infoChg").innerHTML = ""; setTag("batTag", ["", ""]); return; }
+  if (!(i.f & 1)) { $("infoDev").innerHTML = `<div class="empty">${t("infoOff")}</div>`; $("infoChg").innerHTML = ""; setTag("batTag", ["", ""]); return; }
+  const attached = s && s.flags & 2;
+  const b = attached ? batInfo(i) : null;
+  setTag("batTag", b && b.pct != null ? [b.pct + "%", b.pct <= 20 ? "warn" : "ok"] : ["", ""]);
+  $("infoDev").innerHTML = !attached ? `<div class="empty">${t("stNone")}</div>` : kv([
+    [t("idLbl"), esc(idText(i.devVid, i.devPid))],
+    [t("battery"), b ? `${b.pct != null ? b.pct + "% · " : ""}${b.now != null ? b.now.toFixed(1) + " Wh" : "?"}${b.full ? " / " + b.full.toFixed(1) + " Wh" : ""} · ${esc(b.st)}` +
+      (b.pct != null ? `<div class="bat"><div style="width:${b.pct}%"></div></div>` : "") : t("batNone")],
+    i.f & 0x08 ? [t("sinkPdp"), `${i.sinkOp} W · max ${i.sinkMax} W`] : null,
+  ]);
+  const hasChg = i.f & 0xC0 || i.f2 & 7;
+  $("infoChg").innerHTML = !hasChg ? `<div class="empty">${t("infoNoChg")}</div>` : kv([
+    [t("idLbl"), esc(idText(i.chgVid, i.chgPid))],
+    i.name ? [t("chgName"), esc(i.name)] : null,
+    i.f & 0x80 ? [t("srcPdp"), `${i.chgPdp} W`] : null,
+    [t("rearPdp"), `${i.backPdp} W`],
+    i.f2 & 2 && i.chgTemp ? [t("chgTemp"), `${i.chgTemp} °C`] : null,
+  ]);
 }
 
 /* ================= settings ================= */
-function cfgFromBytes(p) {
+/* hasComp：20 字節格式（韌體 v0.6.0 / 協議 v5 起）才有補償欄位 */
+function cfgFromBytes(p, hasComp) {
   return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0,
-    fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0 };
+    fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0, compMode: hasComp ? p[16] : null, compVal: hasComp ? u16(p, 18) : 0,
+    flags2: hasComp ? p[15] : null };
 }
 function cfgToBytes(c) {
-  const b = new Uint8Array(16);
+  const b = new Uint8Array(20);
   b[0] = c.mode; b[1] = c.hide; b[2] = c.maxMv & 0xFF; b[3] = c.maxMv >> 8; b[4] = c.maxMa & 0xFF; b[5] = c.maxMa >> 8;
   b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
-  b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0;
+  b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0; b[15] = c.flags2 ?? 0;
+  b[16] = c.compMode ?? 0; b[18] = (c.compVal ?? 0) & 0xFF; b[19] = (c.compVal ?? 0) >> 8;
   return Array.from(b);
 }
 function readForm() {
@@ -770,7 +927,12 @@ function readForm() {
   return { mode: radio("mode"), hide, maxMv: radio("maxMv"), maxMa: Math.round(Number($("maxMa").value) / 50) * 50,
     ovp: Number($("ovp").value), uvp: Number($("uvp").value), ocpMa: Number($("ocpMa").value), ocpMs: Number($("ocpMs").value),
     flags: ($("fix12").checked ? 1 : 0) | ($("logPps").checked ? 2 : 0) | ($("fe2nd").checked ? 4 : 0) | ($("be2nd").checked ? 8 : 0) | ($("avs2pps").checked ? 16 : 0) | ($("emarker").checked ? 32 : 0) | ($("eprAvs").checked ? 64 : 0) | ($("fixc").checked ? 128 : 0),
-    fixDv: Math.round(Number($("fixcV").value) * 10) || 0, fixMa50: Math.round(Number($("fixcA").value) * 20) || 0 };
+    /* 自訂 Fixed 未勾選時沿用原值（輸入框顯示的是建議值，不算修改） */
+    fixDv: $("fixc").checked ? Math.round(Number($("fixcV").value) * 10) || 0 : state.cfg?.fixDv ?? 0,
+    fixMa50: $("fixc").checked ? Math.round(Number($("fixcA").value) * 20) || 0 : state.cfg?.fixMa50 ?? 0,
+    compMode: state.cfg && state.cfg.compMode == null ? null : radio("compMode"), compVal: Math.round(Number($("compVal").value)) || 0,
+    /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
+    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -780,7 +942,10 @@ function writeForm(c) {
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
   $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
-  applyCurLimits(); applyLabDeps();
+  document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
+  $("compVal").value = c.compVal ?? 0;
+  $("infoPt").checked = !((c.flags2 ?? 0) & 1); $("idPt").checked = !!((c.flags2 ?? 0) & 2); $("forcePps").checked = !!((c.flags2 ?? 0) & 4);
+  applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
   updateDirty();
 }
 const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
@@ -799,7 +964,8 @@ function renderCfgState() {
 async function loadCfg(force) {
   const p = await request(0x10);
   const wasDirty = isDirty();
-  state.cfg = cfgFromBytes(p); state.cfgSaving = !!p[16];
+  const v5 = !!state.info && state.info.proto >= 5;
+  state.cfg = cfgFromBytes(p, v5); state.cfgSaving = !!p[v5 ? 20 : 16];
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
 }
@@ -874,8 +1040,9 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : ""].filter(Boolean).join(", ");
-  return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` +
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : ""].filter(Boolean).join(", ");
+  const comp = c.compMode === 1 ? ` · ${t("compVs")} ${c.compVal} mV` : c.compMode === 2 ? ` · ${t("compRs")} ${c.compVal} mΩ` : "";
+  return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` + comp +
     (flags ? ` · ${flags}` : "");
 }
 /* 返回 { t, type, name, html, text, cls, cat }；cat: req / caps / bad / other */
@@ -888,7 +1055,7 @@ function decodeRecords(records) {
         const f = d[2], why = [];
         if (f & 0x08) why.push("POR"); if (f & 0x04) why.push("PIN"); if (f & 0x10) why.push("SW");
         if (f & 0x40) { why.push("WWDG"); cls = "warn"; } if (f & 0x80) why.push("LPWR");
-        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3)))}`;
+        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3), d.length >= 23))}`;
         cls = cls || "acc";
         break; }
       case 2: case 7: case 12: {
@@ -921,10 +1088,12 @@ function decodeRecords(records) {
         cls = "warn"; cat = "bad"; break; }
       case 14: {
         const code = d[1], x = d.length >= 3 ? d[2] : 0;
-        text = code === 4 ? `${t("note4")}${t("eprFail")[x] ?? x}` : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
-        const info = code === 2 || code === 3 || code === 5;
+        text = code === 4 ? `${t("note4")}${t("eprFail")[x] ?? x}` : code === 6 ? `${t("note6")}${t("identRep")[x] ?? x}`
+          : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
+        const info = code === 2 || code === 3 || code === 5 || code === 6;
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
-      case 11: text = cfgText(cfgFromBytes(d)); cls = "acc"; break;
+      case 11: text = cfgText(cfgFromBytes(d, d.length >= 20)); cls = "acc"; break;
+      case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 13: {
         const modes = "0x" + d[2].toString(16).toUpperCase().padStart(2, "0");
         if (d[1] === 0) text = `${t("avs2Fe")} (Sink Modes ${modes})`;
@@ -1015,6 +1184,31 @@ function applyLabDeps() {
   $("lab-eprAvs").classList.toggle("off", !a5);
   $("fixcIn").hidden = !$("fixc").checked;
 }
+/* 資訊透傳：身份透傳依附於資訊透傳；舊韌體沒有這個功能 */
+function applyInfo() {
+  const old = !!state.cfg && state.cfg.flags2 == null;
+  $("infoPt").disabled = old || !dev;
+  const on = $("infoPt").checked && !old;
+  $("idPt").disabled = !on || !dev; if (!on) $("idPt").checked = false;
+  $("idPtRow").classList.toggle("off", !on);
+  $("forcePps").disabled = old || !dev; $("lab-forcePps").classList.toggle("off", old);
+}
+$("infoPt").addEventListener("change", applyInfo);
+/* 電壓補償：單位、範圍隨方式變化；舊韌體沒有這個功能 */
+function applyComp() {
+  const old = !!state.cfg && state.cfg.compMode == null;
+  const m = old ? 0 : Number((document.querySelector("input[name=compMode]:checked") || { value: 0 }).value);
+  document.querySelectorAll("input[name=compMode]").forEach((r) => (r.disabled = old));
+  const vi = $("compVal");
+  vi.disabled = old || m === 0; vi.max = m === 1 ? 1000 : 500;
+  if (Number(vi.value) > Number(vi.max)) vi.value = vi.max;
+  $("compUnit").textContent = m === 1 ? "mV" : "mΩ";
+  $("compHint").textContent = m === 1 ? t("compHintV") : t("compHintR");
+}
+document.querySelectorAll("input[name=compMode]").forEach((r) => r.addEventListener("change", () => {
+  if (Number(r.value) === 2 && !Number($("compVal").value)) $("compVal").value = 15;
+  applyComp(); updateDirty();
+}));
 /* 自訂 Fixed 與 12V 轉換互斥 */
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });

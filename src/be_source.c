@@ -3,6 +3,7 @@
 #include "board.h"
 #include "bridge.h"
 #include "evlog.h"
+#include "pdinfo.h"
 #include "pd_phy.h"
 #include "power_sw.h"
 #include "timebase.h"
@@ -22,7 +23,8 @@
 #define T_SRC_RECOVER_MS        800     /* tSrcRecover 0.66~1s */
 #define T_SINK_TX_MS            20      /* tSinkTx 16~20ms */
 #define N_HARD_RESET_COUNT      2
-#define T_QUERY_DELAY_MS        200     /* Lab 二次握手：合约建立后稍等再查询设备 */
+#define T_QUERY_DELAY_MS        200     /* 合约建立后稍等再查询设备（Lab 二次握手、信息透传） */
+#define T_QUERY_GAP_MS          30      /* 连续查询之间的间隔 */
 
 /* 参考手册 §15.2.15 端口寄存器 */
 #define PORT_CE                 (1u << 7)
@@ -47,7 +49,7 @@ typedef enum
     BE_ST_HARD_RESET_RECOVER,
     BE_ST_NO_PD,
     BE_ST_DETACH_DISCHARGE,
-    BE_ST_QUERY_TX_WAIT,        /* Lab 二次握手：SinkTxNG 后查询 Sink_Capabilities_Extended */
+    BE_ST_QUERY_TX_WAIT,        /* SinkTxNG 后查询设备（Lab 二次握手、信息透传） */
     BE_ST_QUERY_WAIT,
 } be_state_t;
 
@@ -71,6 +73,8 @@ static uint8_t hard_reset_count;
 static bool has_contract;
 static bool caps_sent_once;
 static uint8_t last_rx_id;
+static uint8_t query;               /* 进行中的查询 PI_Q_*，0 = 无 */
+static uint16_t query_gap;          /* READY 后多久可以发下一项查询 */
 
 static void set_state(be_state_t s)
 {
@@ -141,6 +145,8 @@ static void log_reset(uint8_t kind)
 static void go_unattached(void)
 {
     power_sw_set(false);
+    pdinfo_dev_reset();
+    pdinfo_dev_attached(false);
     bridge_on_back_reset();
     bridge_on_back_detach();
     set_rp(CC_PU_80);
@@ -158,6 +164,8 @@ static void go_unattached(void)
 static void on_detach(void)
 {
     evlog_add(EV_BE_DETACH, NULL, 0);
+    pdinfo_dev_reset();
+    pdinfo_dev_attached(false);
     bridge_on_back_reset();
     set_rp(CC_PU_80);
     pd_phy_reset_protocol(phy);
@@ -176,7 +184,93 @@ static void start_hard_reset(bool send)
         pd_phy_send_hard_reset(phy);
     hard_reset_count++;
     has_contract = false;
+    pdinfo_dev_reset();
     set_state(BE_ST_HARD_RESET_WAIT);
+}
+
+/* 下一项查询：Lab 二次握手优先，其次信息透传 */
+static uint8_t next_query(void)
+{
+    if (bridge_rear_query_wanted())
+        return PI_Q_EXTCAPS;
+    return pdinfo_dev_next_query();
+}
+
+static bool send_query(uint8_t q)
+{
+    static const uint8_t battery_ref[1] = {0};
+    uint32_t vdm = VDM_DISC_IDENT_REQ;
+    switch (q)
+    {
+    case PI_Q_IDENT:
+        return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
+    case PI_Q_EXTCAPS:
+        return pd_phy_send(phy, MSG_TYPE_Get_Sink_Cap_Extended, 0, NULL);
+    case PI_Q_BCAP:
+        return pd_phy_send_ext(phy, MSG_TYPE_Get_Battery_Cap, battery_ref, 1);
+    default:
+        return pd_phy_send_ext(phy, MSG_TYPE_Get_Battery_Status, battery_ref, 1);
+    }
+}
+
+/* 查询结束（数据已交给 pdinfo / 协议桥，或设备拒绝、超时） */
+static void query_end(void)
+{
+    if (query == PI_Q_EXTCAPS && bridge_rear_query_wanted())
+        bridge_on_rear_sink_modes(-1);
+    pdinfo_dev_query_done(query);
+    query = 0;
+    query_gap = T_QUERY_GAP_MS;
+    set_state(BE_ST_READY);
+}
+
+/* 代答设备的扩展查询：数据来自前端读到的充电器信息 */
+static void answer_ext_query(uint8_t type, const uint8_t *d, uint8_t size)
+{
+    uint8_t buf[PI_EXT_MAX];
+    uint8_t n = 0;
+    if (type == MSG_TYPE_Get_Manufacturer_Info && size >= 1 && d[0] == 0)     /* 目标 = 端口 */
+        n = pdinfo_be_midb(buf);
+    if (n)
+        pd_phy_send_ext(phy, MSG_TYPE_Manufacturer_Info, buf, n);
+    else
+        send_not_supported();
+}
+
+static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
+{
+    uint32_t vdm = pd_get_u32(&m->data[2]);
+    if (!VDM_STRUCTURED(vdm))
+        return;
+    if (VDM_CMD_TYPE(vdm) != 0)
+    {
+        /* 设备对 Discover Identity 的应答 */
+        if (state == BE_ST_QUERY_WAIT && query == PI_Q_IDENT && VDM_IS_DISC_IDENT(vdm))
+        {
+            if (VDM_CMD_TYPE(vdm) == VDM_ACK && n > 1)
+            {
+                uint32_t vdo[PI_MAX_VDOS];
+                uint8_t k = n - 1 > PI_MAX_VDOS ? PI_MAX_VDOS : n - 1;
+                for (uint8_t i = 0; i < k; i++)
+                    vdo[i] = pd_get_u32(&m->data[6 + 4 * i]);
+                pdinfo_dev_ident(vdo, k);
+            }
+            if (VDM_CMD_TYPE(vdm) != VDM_BUSY)
+                query_end();
+        }
+        return;
+    }
+    /* 设备查询本端身份：身份透传时回充电器的 */
+    pi_ident_t id;
+    if (VDM_IS_DISC_IDENT(vdm) && pdinfo_be_ident(&id))
+    {
+        uint32_t o[1 + PI_MAX_VDOS];
+        o[0] = VDM_REPLY(vdm, VDM_ACK);
+        memcpy(&o[1], id.vdo, id.n * 4);
+        pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1 + id.n, o);
+        return;
+    }
+    send_not_supported();
 }
 
 static void handle_request(uint32_t rdo)
@@ -216,17 +310,37 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     if (h.extended)
     {
-        if (h.msg_type == MSG_TYPE_Sink_Capabilities_Extended)
+        uint16_t ext = m->data[2] | (m->data[3] << 8);
+        const uint8_t *d = &m->data[4];
+        uint8_t size = m->len > 4 ? m->len - 4 : 0;
+        if (EXT_DATA_SIZE(ext) < size)
+            size = EXT_DATA_SIZE(ext);
+        if (ext & EXT_REQUEST_CHUNK)
+            return;
+        switch (h.msg_type)
         {
-            if (state == BE_ST_QUERY_WAIT)
+        case MSG_TYPE_Sink_Capabilities_Extended:
+            if (state == BE_ST_QUERY_WAIT && query == PI_Q_EXTCAPS)
             {
-                bridge_on_rear_sink_modes(m->len >= 4 + SKEDB_SINK_MODES + 1 ? m->data[4 + SKEDB_SINK_MODES] : -1);
-                set_state(BE_ST_READY);
+                pdinfo_dev_skedb(d, size);
+                if (bridge_rear_query_wanted())
+                    bridge_on_rear_sink_modes(size > SKEDB_SINK_MODES ? d[SKEDB_SINK_MODES] : -1);
+                query_end();
             }
-        }
-        else
-        {
+            break;
+        case MSG_TYPE_Battery_Capabilities:
+            if (state == BE_ST_QUERY_WAIT && query == PI_Q_BCAP)
+            {
+                pdinfo_dev_bcap(d, size);
+                query_end();
+            }
+            break;
+        case MSG_TYPE_Get_Manufacturer_Info:
+            answer_ext_query(h.msg_type, d, size);
+            break;
+        default:
             send_not_supported();
+            break;
         }
         return;
     }
@@ -236,14 +350,24 @@ static void handle_msg(const pd_rx_msg_t *m)
         switch (h.msg_type)
         {
         case MSG_TYPE_Request:
+            if (state == BE_ST_QUERY_WAIT)
+                query_end();    /* 设备抢先发了请求：本次查询作废 */
             if (state == BE_ST_WAIT_REQUEST || state == BE_ST_READY)
                 handle_request(pd_get_u32(&m->data[2]));
             break;
         case MSG_TYPE_Vendor_Defined:
-            if ((pd_get_u32(&m->data[2]) >> 15) & 1)
-                send_not_supported();
+            handle_vdm(m, h.num_objs);
+            break;
+        case MSG_TYPE_Battery_Status:
+            if (state == BE_ST_QUERY_WAIT && query == PI_Q_BSTAT)
+            {
+                pdinfo_dev_bsdo(pd_get_u32(&m->data[2]));
+                query_end();
+            }
             break;
         case MSG_TYPE_Alert:
+            pdinfo_dev_alert(pd_get_u32(&m->data[2]));
+            break;
         case MSG_TYPE_BIST:
         case MSG_TYPE_Sink_Capabilities:
             break;
@@ -263,13 +387,39 @@ static void handle_msg(const pd_rx_msg_t *m)
                 set_state(BE_ST_WAIT_REQUEST);
         }
         break;
+    case MSG_TYPE_Get_Source_Cap_Extended:
+    {
+        uint8_t buf[PI_EXT_MAX];
+        uint8_t n = pdinfo_be_scedb(buf);
+        if (n)
+            pd_phy_send_ext(phy, MSG_TYPE_Source_Capabilities_Extended, buf, n);
+        else
+            send_not_supported();
+        break;
+    }
+    case MSG_TYPE_Get_Source_Info:
+    {
+        uint32_t sido;
+        if (pdinfo_be_sido(&sido))
+            pd_phy_send(phy, MSG_TYPE_Source_Info, 1, &sido);
+        else
+            send_not_supported();
+        break;
+    }
+    case MSG_TYPE_Get_Status:
+    {
+        uint8_t buf[PI_EXT_MAX];
+        uint8_t n = pdinfo_be_status(buf);
+        if (n)
+            pd_phy_send_ext(phy, MSG_TYPE_Status, buf, n);
+        else
+            send_not_supported();
+        break;
+    }
     case MSG_TYPE_Reject:
     case MSG_TYPE_Not_Supported:
         if (state == BE_ST_QUERY_WAIT)
-        {
-            bridge_on_rear_sink_modes(-1);
-            set_state(BE_ST_READY);
-        }
+            query_end();
         break;
     case MSG_TYPE_GoodCRC:
     case MSG_TYPE_Accept:
@@ -330,6 +480,7 @@ static void poll_attach(void)
         hard_reset_count = 0;
         uint8_t cc = (uint8_t)attach_cc;
         evlog_add(EV_BE_ATTACH, &cc, 1);
+        pdinfo_dev_attached(true);
         set_state(BE_ST_WAIT_VSAFE5V);
     }
 }
@@ -455,6 +606,7 @@ void be_process(void)
             }
             else if (++caps_count > N_CAPS_COUNT)
             {
+                pdinfo_dev_attached(false);
                 set_state(BE_ST_NO_PD);   /* 非 PD 设备：保持 5V 供电 */
             }
             else
@@ -477,6 +629,9 @@ void be_process(void)
             has_contract = true;
             hard_reset_count = 0;
             bridge_on_back_contract();
+            pdinfo_dev_start(phy->revision >= PD_REV_30);
+            /* 信息透传：尽快读设备身份（前端新合约后充电器很快会来查询）；Lab 二次握手仍稍等 */
+            query_gap = bridge_rear_query_wanted() ? T_QUERY_DELAY_MS : T_QUERY_GAP_MS;
             set_rp(CC_PU_330);
             set_state(BE_ST_READY);
             break;
@@ -495,11 +650,11 @@ void be_process(void)
             set_rp(CC_PU_180);
             set_state(BE_ST_SINK_TX_WAIT);
         }
-        else if (elapsed >= T_QUERY_DELAY_MS && bridge_rear_query_wanted())
+        else if (elapsed >= query_gap && (query = next_query()) != 0)
         {
             if (phy->revision < PD_REV_30)
             {
-                bridge_on_rear_sink_modes(-1);  /* PD2.0 没有该报文，也不支持 APDO */
+                query_end();    /* PD2.0 没有这些报文，也不支持 APDO */
             }
             else
             {
@@ -512,26 +667,18 @@ void be_process(void)
     case BE_ST_QUERY_TX_WAIT:
         if (elapsed >= T_SINK_TX_MS)
         {
-            bool ok = pd_phy_send(phy, MSG_TYPE_Get_Sink_Cap_Extended, 0, NULL);
+            bool ok = send_query(query);
             set_rp(CC_PU_330);
             if (ok)
-            {
                 set_state(BE_ST_QUERY_WAIT);
-            }
             else
-            {
-                bridge_on_rear_sink_modes(-1);
-                set_state(BE_ST_READY);
-            }
+                query_end();
         }
         break;
 
     case BE_ST_QUERY_WAIT:
         if (elapsed > T_SENDER_RESPONSE_MS)
-        {
-            bridge_on_rear_sink_modes(-1);
-            set_state(BE_ST_READY);
-        }
+            query_end();
         break;
 
     case BE_ST_SINK_TX_WAIT:
@@ -562,7 +709,10 @@ void be_process(void)
             last_rx_id = 0xFF;
             set_rp(CC_PU_330);
             if (hard_reset_count > N_HARD_RESET_COUNT)
+            {
+                pdinfo_dev_attached(false);
                 set_state(BE_ST_NO_PD);
+            }
             else
                 set_state(BE_ST_WAIT_VSAFE5V);
         }

@@ -52,4 +52,3 @@
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */
-#define VOLTAGE_COMP_ENABLE     0       /* 压降补偿：预留，暂不启用（见备忘录） */

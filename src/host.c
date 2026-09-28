@@ -7,6 +7,7 @@
 #include "evlog.h"
 #include "fe_sink.h"
 #include "flash_io.h"
+#include "pdinfo.h"
 #include "power_sw.h"
 #include "timebase.h"
 #include "usb_hid.h"
@@ -66,6 +67,13 @@ static void put_bytes(wr_t *w, const void *src, uint8_t len)
 
 static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
 {
+    if (arg[0] == 3)
+    {
+        /* PD 信息透传：设备电量、双方身份（格式见 pdinfo_status） */
+        uint8_t buf[RSP_PAYLOAD];
+        put_bytes(w, buf, pdinfo_status(buf));
+        return ST_OK;
+    }
     if (arg[0] == 2)
     {
         /* 协议 v4：前端 EPR 能力表 8 号起的 PDO */
