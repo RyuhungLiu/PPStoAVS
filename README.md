@@ -11,7 +11,8 @@ v0.1.1 is verified on hardware. v0.2.0 adds a USB HID link on the front D+/D− 
 host tool: change the output mode and limits, and read back per-session logs. v0.3.0 adds Lab mode
 (AVS second handshake) and handles fast AVS/PPS requests reliably. v0.4.0 adds Lab mode AVS as PPS. v0.5.0 adds Lab modes virtual 5 A E-Marker with EPR,
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
-identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP).
+identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
+Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool.
 
 ## Pin assignment
 
