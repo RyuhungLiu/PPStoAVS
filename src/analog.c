@@ -78,14 +78,14 @@ uint16_t analog_fe_cc_mv(void)
     return (uint32_t)adc_read(FE_CC_ADC_CHANNEL) * ADC_VREF_MV / 4096;
 }
 
-/* ISP 接 GND_1（负电压），OPA4 输出 = 1.6V − I × 5mΩ × 55，电流越大输出越低 */
+/*
+ * OPA4 输出 = 1.6V −（ISP − ISN）× 55。原假设电流越大输出越低，实测读数恒为 0（R 补偿无效），
+ * 说明 R4 上的压降方向相反。电流只会从充电器流向设备，取与零点的绝对差，与极性无关
+ */
 uint16_t analog_current_ma(void)
 {
     uint16_t code = adc_read_avg(ISP_ADC_CHANNEL, 4);
-    if (code >= isp_zero_code)
-    {
-        return 0;
-    }
-    uint32_t diff_uv = (uint32_t)(isp_zero_code - code) * ADC_VREF_MV * 1000 / 4096;
+    uint16_t diff = code >= isp_zero_code ? code - isp_zero_code : isp_zero_code - code;
+    uint32_t diff_uv = (uint32_t)diff * ADC_VREF_MV * 1000 / 4096;
     return diff_uv / (ISP_RSENSE_MOHM * ISP_GAIN);
 }

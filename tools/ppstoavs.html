@@ -434,7 +434,7 @@ const T = {
     stEpr: "Entering EPR",
     beSt: ["unattached", "attach", "vSafe5V", "startup", "sending caps", "waiting Request", "transition", "ready",
            "SinkTx wait", "Hard Reset", "recover", "non-PD", "discharge", "2nd handshake", "2nd handshake"],
-    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode", note6: "Front · answered the charger's identity query: ",
+    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode", note6: "Front · answered the charger's identity query: ", note7: "Voltage compensation applied: +",
     identRep: ["", "ACK (device identity)", "NAK (no device)", "BUSY (device identity not read yet)"],
     note4: "Front · charger refused EPR: ", eprFail: ["unknown", "cable not EPR capable", "source not VCONN source", "EPR bit not set in RDO", "unable at this time", "EPR bit not set in 5V PDO"],
     merged: "adjusted ×", waitN: "charger Wait ×", txWait: "waited SinkTxOK ", txTimeout: "SinkTxNG, sent after timeout", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
@@ -564,7 +564,7 @@ const T = {
     stEpr: "進入 EPR",
     beSt: ["未插入", "偵測中", "等 5V", "啟動", "發送能力", "等請求", "轉換中", "就緒",
            "SinkTx 等待", "Hard Reset", "恢復中", "非 PD", "放電中", "二次握手", "二次握手"],
-    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式", note6: "前端 · 回覆充電器的身份查詢：",
+    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式", note6: "前端 · 回覆充電器的身份查詢：", note7: "電壓補償已生效：+",
     identRep: ["", "ACK（設備身份）", "NAK（沒有設備）", "BUSY（設備身份尚未讀到）"],
     note4: "前端 · 充電器拒絕進入 EPR：", eprFail: ["原因不明", "線材不支援 EPR", "充電器無法供 VCONN", "RDO 未設 EPR 位", "暫時無法進入", "5V PDO 未設 EPR 位"],
     merged: "微調 ×", waitN: "充電器 Wait ×", txWait: "等 SinkTxOK ", txTimeout: "SinkTxNG 逾時仍送出", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
@@ -1088,9 +1088,9 @@ function decodeRecords(records) {
         cls = "warn"; cat = "bad"; break; }
       case 14: {
         const code = d[1], x = d.length >= 3 ? d[2] : 0;
-        text = code === 4 ? `${t("note4")}${t("eprFail")[x] ?? x}` : code === 6 ? `${t("note6")}${t("identRep")[x] ?? x}`
+        text = code === 4 ? `${t("note4")}${t("eprFail")[x] ?? x}` : code === 6 ? `${t("note6")}${t("identRep")[x] ?? x}` : code === 7 ? `${t("note7")}${x * 10} mV`
           : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
-        const info = code === 2 || code === 3 || code === 5 || code === 6;
+        const info = code === 2 || code === 3 || code === 5 || code === 6 || code === 7;
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
       case 11: text = cfgText(cfgFromBytes(d, d.length >= 20)); cls = "acc"; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;

@@ -561,6 +561,23 @@ static bool entry_covers(const back_entry_t *e)
 }
 
 /*
+ * 设备当前合约对应的能力项：先按 RDO 中的位置找（模式 b/c 可能有多个 PPS 覆盖同一电压，
+ * 如 5~11V 与 5~20V，按电压找会找到别的充电器 PPS）；能力表重建后位置对不上才按电压找
+ */
+static const back_entry_t *contract_entry(void)
+{
+    uint8_t pos = pd_rdo_pos(back_rdo);
+    if (pos >= 1 && pos <= back_n && entry_covers(&entries[pos - 1]))
+        return &entries[pos - 1];
+    for (uint8_t i = 0; i < back_n; i++)
+    {
+        if (entry_covers(&entries[i]))
+            return &entries[i];
+    }
+    return NULL;
+}
+
+/*
  * 前端能力或设置变化后重建后端能力：能保持设备当前合约就保持（返回前端应请求的目标），
  * 保持不了就回 5V 并让后端 Hard Reset
  */
@@ -577,14 +594,12 @@ static fe_target_t reevaluate(void)
     if (!back_has_contract || fe_is_legacy())
         return front_5v_target();
 
-    for (uint8_t i = 0; i < back_n; i++)
+    const back_entry_t *e = contract_entry();
+    if (e)
     {
-        if (entry_covers(&entries[i]))
-        {
-            fe_target_t t = front_target(&entries[i], back_mv, back_ma);
-            apply_comp(&t, comp_mv(analog_current_ma()));
-            return t;
-        }
+        fe_target_t t = front_target(e, back_mv, back_ma);
+        apply_comp(&t, comp_mv(analog_current_ma()));
+        return t;
     }
 
     back_hard_reset = true;
@@ -939,6 +954,21 @@ static void protection_trip(uint8_t kind, uint16_t v, uint16_t i)
     back_hard_reset = true;
 }
 
+/* 记录补偿量（前端请求 − 设备电压），变化 ≥100mV 才记，避免 R 补偿随电流波动刷屏 */
+static void log_comp(void)
+{
+    static int16_t logged = -1;
+    const fe_target_t *c = fe_contract();
+    if (!c || c->mv < back_mv)
+        return;
+    int16_t d = (c->mv - back_mv) / 10;
+    if (logged >= 0 && d > logged - 10 && d < logged + 10)
+        return;
+    logged = d;
+    ev_note_t e = {0, NOTE_COMP, d > 255 ? 255 : (uint8_t)d};
+    evlog_add(EV_NOTE, &e, sizeof(e));
+}
+
 /* 按当前电流更新补偿（R 补偿随电流变化；V 补偿在设置改变后生效） */
 static void comp_update(uint32_t now, uint16_t ma)
 {
@@ -950,6 +980,8 @@ static void comp_update(uint32_t now, uint16_t ma)
         comp_pending = false;
         if (s != FE_REQ_OK)
             comp_ts = now + T_COMP_FAIL_MS;
+        else
+            log_comp();
     }
     if ((int32_t)(now - comp_ts) < T_COMP_UPDATE_MS || !fe_is_ready() || want_front_5v || front_5v_pending)
         return;
@@ -958,11 +990,10 @@ static void comp_update(uint32_t now, uint16_t ma)
     const fe_target_t *cur = fe_contract();
     if (!cur || !adjustable(cur->type))
         return;
-    for (uint8_t k = 0; k < back_n; k++)
+    const back_entry_t *e = contract_entry();
+    if (e)
     {
-        if (!entry_covers(&entries[k]))
-            continue;
-        fe_target_t t = front_target(&entries[k], back_mv, back_ma);
+        fe_target_t t = front_target(e, back_mv, back_ma);
         if (t.type != cur->type || t.pos != cur->pos)
             return;
         /* 迟滞：与现在的请求相差 3/4 步进以上才更新 */

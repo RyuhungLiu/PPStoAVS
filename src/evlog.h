@@ -110,6 +110,7 @@ typedef enum
     NOTE_FE_EPR_ENTERED   = 3,  /* 前端进入 EPR 模式 */
     NOTE_FE_EPR_FAILED    = 4,  /* 充电器拒绝进入 EPR，data = 原因码 */
     NOTE_FE_EPR_EXIT      = 5,  /* 前端退出 EPR 模式 */
+    NOTE_COMP             = 7,  /* 压降补偿：周期更新已生效，data = 补偿量（10mV 单位，与上次记录相差 ≥100mV 才记） */
     NOTE_FE_IDENT         = 6,  /* 身份透传：回复充电器的 Discover Identity，data = 1 ACK、2 NAK、3 BUSY（相同回复只记一次） */
 } note_code_t;
 
