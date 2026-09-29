@@ -4,6 +4,7 @@
 #include "bridge.h"
 #include "cfg.h"
 #include "evlog.h"
+#include "fe_ufcs.h"
 #include "pdinfo.h"
 #include "pd_phy.h"
 #include "timebase.h"
@@ -850,6 +851,13 @@ static void enter_legacy(void)
 
 void fe_process(void)
 {
+    if (feu_active())
+    {
+        /* UFCS 前端：会话丢失且重连失败时改用 PD */
+        if (!feu_process())
+            fe_init();
+        return;
+    }
     phy->sop1_en = (cfg()->flags & CFG_FE_EMARKER) != 0;
     fe_ra_apply();
     if (phy->hard_reset_rcvd)
@@ -1001,16 +1009,22 @@ void fe_process(void)
 
 bool fe_caps_available(void)
 {
+    if (feu_active())
+        return feu_caps_available();
     return num_caps > 0 || state == FE_ST_LEGACY;
 }
 
 uint32_t fe_contract_rdo(void)
 {
+    if (feu_active())
+        return feu_contract_rdo();
     return has_contract ? contract_rdo : 0;
 }
 
 bool fe_flash_safe(void)
 {
+    if (feu_active())
+        return feu_flash_safe();
     if (state == FE_ST_LEGACY)
         return true;
     if (state != FE_ST_READY || bridge_req_waiting)
@@ -1023,16 +1037,22 @@ bool fe_flash_safe(void)
 
 uint8_t fe_state_code(void)
 {
+    if (feu_active())
+        return feu_state_code();
     return (uint8_t)state;
 }
 
 bool fe_is_ready(void)
 {
+    if (feu_active())
+        return feu_is_ready();
     return state == FE_ST_READY && has_contract && !bridge_req_waiting;
 }
 
 bool fe_is_legacy(void)
 {
+    if (feu_active())
+        return false;
     return state == FE_ST_LEGACY;
 }
 
@@ -1047,22 +1067,30 @@ uint16_t fe_legacy_current_ma(void)
 
 const pdo_t *fe_caps(uint8_t *num)
 {
+    if (feu_active())
+        return feu_caps(num);
     *num = num_caps;
     return caps;
 }
 
 bool fe_caps_unconstrained(void)
 {
+    if (feu_active())
+        return false;
     return num_caps > 0 && ((caps[0].raw >> 27) & 1);
 }
 
 const fe_target_t *fe_contract(void)
 {
+    if (feu_active())
+        return feu_contract();
     return has_contract ? &contract : NULL;
 }
 
 bool fe_request(const fe_target_t *t)
 {
+    if (feu_active())
+        return feu_request(t);
     if (!fe_is_ready())
         return false;
     pending = *t;
@@ -1076,20 +1104,28 @@ bool fe_request(const fe_target_t *t)
 
 fe_req_status_t fe_request_status(void)
 {
+    if (feu_active())
+        return feu_request_status();
     return req_status;
 }
 
 uint8_t fe_request_waits(void)
 {
+    if (feu_active())
+        return 0;
     return wait_count;
 }
 
 uint8_t fe_request_txwait(void)
 {
+    if (feu_active())
+        return 0;
     return txwait;
 }
 
 bool fe_epr_mode(void)
 {
+    if (feu_active())
+        return false;
     return epr_mode;
 }

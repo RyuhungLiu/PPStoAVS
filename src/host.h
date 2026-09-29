@@ -22,6 +22,6 @@
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  6
+#define HOST_PROTO_VERSION  7
 
 void host_process(void);

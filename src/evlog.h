@@ -35,6 +35,8 @@ typedef enum
     EV_AVS_2ND      = 13,   /* ev_avs_2nd_t：AVS 二次握手（Lab） */
     EV_NOTE         = 14,   /* ev_note_t：协议异常但已自动恢复 */
     EV_IDENT        = 15,   /* ev_ident_t：读到充电器 / 设备的身份（Discover Identity） */
+    EV_UFCS_PKT     = 16,   /* ev_ufcs_pkt_t：UFCS 原始报文（探测固件） */
+    EV_UFCS_STEP    = 17,   /* ev_ufcs_step_t：UFCS 探测流程节点 */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -158,9 +160,60 @@ uint8_t evlog_used_pages(void);
 void evlog_add(uint8_t type, const void *payload, uint8_t len);
 void evlog_request(const ev_request_t *r, bool adjustable);    /* adjustable：PPS/AVS，可合并 */
 
+void evlog_panic_flush(void);                       /* 掉电时的紧急写入：封页并同步写入已擦除的页，不做任何等待 */
 bool evlog_flush_step(void);                        /* store 模块在 PD 空闲时调用 */
 void evlog_clear(void);                             /* 清除全部记录（分多次空闲窗口擦除） */
 bool evlog_clearing(void);
 
 uint8_t evlog_sessions(evlog_session_t *out, uint8_t max);     /* 最新在前 */
 const uint8_t *evlog_page(uint8_t idx);             /* 128 字节整页；无效索引返回 NULL */
+
+/* UFCS 探测：原始报文（dir 0 = 收，1 = 发；raw 为线上字节，不含训练字节；后面跟 raw[len]） */
+typedef struct __attribute__((packed))
+{
+    uint8_t  dir;
+    uint8_t  baud;          /* 0 = 115200，1 = 57600，2 = 38400（收：训练字节判定；发：标称） */
+    uint16_t bit_ticks;     /* 收：实测位宽，12MHz 计数（115200 ≈ 104）；发：0 */
+    uint8_t  len;
+} ev_ufcs_pkt_t;
+
+typedef enum
+{
+    UFS_DCP         = 1,    /* arg = 判别标志（bit0 D+ 跟随 D−，bit1 撤去驱动后 D+ 回低） */
+    UFS_HS_OK       = 2,    /* arg = 第几次握手尝试成功 */
+    UFS_HS_FAIL     = 3,    /* 三次握手均无 D+ 拉高：不是 UFCS 充电器 */
+    UFS_PING_OK     = 4,    /* arg = baud | (发送地址 << 4)；v_mv = 从握手到 ACK 的 ms */
+    UFS_PING_FAIL   = 5,    /* arg = baud | (发送地址 << 4) */
+    UFS_CAPS        = 6,    /* arg = 模式数（原始报文见 EV_UFCS_PKT） */
+    UFS_REQUEST     = 7,    /* arg = 模式号，v_mv / i_ma = 请求值 */
+    UFS_ACCEPT      = 8,    /* v_mv = 从发出 Request 到收到 Accept 的 ms */
+    UFS_READY       = 9,    /* v_mv = 请求值，vbus_mv = 实测，i_ma = 从 Accept 到 Power_Ready 的 ms */
+    UFS_REFUSE      = 10,   /* arg = 原因，v_mv = 被拒命令 */
+    UFS_TIMEOUT     = 11,   /* arg = 等待对象（见 ufs_wait_t） */
+    UFS_SRC_INFO    = 12,   /* v_mv / i_ma = 充电器报告的输出，arg = 温度 ℃（无数据 = 0x80），vbus_mv = 实测 */
+    UFS_HARD_RESET  = 13,   /* arg = 0 收到充电器硬复位，1 我方发出 */
+    UFS_END         = 14,   /* arg = 0 探测完成保持中，1 失败（已发硬复位），2 充电器结束（硬复位或 Exit_UFCS），v_mv = 累计报文错误数 */
+    UFS_SCAN_A      = 16,   /* D+/D− 电平扫描（档位×51.6mV）：arg = D+ 悬空，v_mv = D− 悬空 */
+    UFS_SCAN_B      = 17,   /* arg = D− 驱动 0.6V 时的 D+，v_mv = D+ 驱动 0.6V 时的 D− */
+    UFS_VBUS_LOST   = 18,   /* 前端 VBUS 掉到 3.5V 以下（充电器断电）：arg = 当时的流程状态，v_mv = 读数；随后立即把记录写入 Flash */
+    UFS_RESET_LEN   = 19,   /* 充电器硬复位的低电平持续时间：v_mv = µs（规范应 ≥ 2000） */
+    UFS_PHY_STATS   = 15,   /* arg = 训练不合格数，v_mv = 训练合格数，i_ma = 超时+成帧错误 */
+} ufs_step_t;
+
+typedef enum
+{
+    UFW_ACK         = 1,    /* 三次重发仍无 ACK */
+    UFW_CAPS        = 2,    /* Get_Output_Capabilities 之后没有 Output_Capabilities */
+    UFW_ACCEPT      = 3,
+    UFW_READY       = 4,
+    UFW_INFO        = 5,
+} ufs_wait_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  code;          /* ufs_step_t */
+    uint8_t  arg;
+    uint16_t v_mv;
+    uint16_t i_ma;
+    uint16_t vbus_mv;
+} ev_ufcs_step_t;

@@ -210,6 +210,28 @@ bool evlog_flush_step(void)
     return true;
 }
 
+void evlog_panic_flush(void)
+{
+    if (clear_idx >= 0)
+        return;
+    for (;;)
+    {
+        if (n_sealed == 0)
+        {
+            seal();
+            if (n_sealed == 0)
+                break;
+        }
+        if (erased_ahead == 0)
+            break;                      /* 没有已擦除的页：擦除太慢，来不及 */
+        flash_page_program(page_addr(next_idx), (const uint32_t *)&sealed[0]);
+        next_idx = (next_idx + 1) % LOG_FLASH_PAGES;
+        erased_ahead--;
+        sealed[0] = sealed[1];
+        n_sealed--;
+    }
+}
+
 void evlog_clear(void)
 {
     clear_idx = 0;

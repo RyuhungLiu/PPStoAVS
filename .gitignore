@@ -2,3 +2,6 @@ build/
 obj/
 sdk/
 build_diag/
+build_ufcs/
+build_ufcs_pd/
+build_ufcs_ping/

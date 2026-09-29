@@ -5,172 +5,257 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PPStoAVS Host</title>
 <style>
+/* PPStoAVS Host
+   識別：PCB。阻焊綠的「電路板」承載即時讀數與電壓軸，其餘頁面保持平面、安靜。
+   電壓色階（冷 → 暖）是資訊：5 V 藍、9 V 青綠、12 V 黃、15 V 橘、20 V 紅。
+   單一 HTML，離線，不引外部字型。 */
 :root {
-  --bg: #f4f5f7; --panel: #ffffff; --text: #1b2130; --muted: #6b7385; --line: #e2e5ea; --soft: #f1f3f6;
-  --accent: #2563eb; --accent-soft: #e8f0fe; --accent-text: #ffffff;
-  --ok: #15803d; --ok-soft: #e7f6ec; --warn: #b45309; --warn-soft: #fdf3e2; --bad: #c02626; --bad-soft: #fdecec;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .05);
+  --mask: #0f3d31; --mask-deep: #092b23; --silk: #eef2e8; --gold: #d6ad4a;
+  --bg: #e6ebe2; --panel: #f6f8f2; --text: #17231e; --muted: #5a6a62; --line: #cbd4c9; --soft: #edf1e9; --line-strong: #98a79c;
+  --accent: #17624c; --accent-soft: #dcebe1; --accent-text: #ffffff; --on: #1d6b52; --on-ink: #ffffff;
+  --ok: #157a44; --ok-soft: #dcf1e3; --warn: #93590a; --warn-soft: #f8ebcf; --bad: #b0281f; --bad-soft: #f8e1de;
+  --v5: #2b7fc9; --v9: #14957f; --v12: #b8900a; --v15: #cf6a12; --v20: #c93c32;
+  --sans: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC", sans-serif;
+  --num: "Bahnschrift", "DIN Alternate", "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1216; --panel: #171b21; --text: #e5e8ec; --muted: #939cab; --line: #2a3039; --soft: #1e232b;
-    --accent: #5b93ff; --accent-soft: #1b2740; --accent-text: #0b0e12;
-    --ok: #4ade80; --ok-soft: #13291c; --warn: #fbbf24; --warn-soft: #2d2412; --bad: #f87171; --bad-soft: #321a1a;
-    --shadow: none;
+    --bg: #071e18; --panel: #0d2b23; --text: #e4eadf; --muted: #93a79c; --line: #1e4136; --soft: #123227; --line-strong: #40655a;
+    --accent: #e0bb5a; --accent-soft: #2a3a25; --accent-text: #241c05; --on: #d6ad4a; --on-ink: #241c05;
+    --ok: #6fdc9b; --ok-soft: #12382a; --warn: #f0be55; --warn-soft: #3a2f12; --bad: #ff8c82; --bad-soft: #401c19;
+    --v5: #6fb4f0; --v9: #4fd1b8; --v12: #e8c547; --v15: #f0964a; --v20: #ee6a5f;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--sans); }
 button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+::selection { background: var(--gold); color: #241c05; }
 
-/* ---------- header & tabs ---------- */
-.top { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
-.bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.brand { font-weight: 700; font-size: 16px; letter-spacing: .2px; }
-.conn { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; min-width: 0; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.on { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+/* ---------- 頁首：阻焊綠底板，絲印白字，鍍金焊盤 ---------- */
+.top { position: sticky; top: 0; z-index: 5; background: var(--mask); color: var(--silk); box-shadow: 0 1px 0 rgba(0, 0, 0, .3); }
+.bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 6px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font: 600 18px/1 var(--num); letter-spacing: .02em; }
+.brand::before { content: ""; width: 7px; height: 16px; border-radius: 2px; background: var(--gold); box-shadow: 11px 0 0 var(--gold); margin-right: 11px; }
+.conn { display: flex; align-items: center; gap: 8px; color: rgba(238, 242, 232, .7); font-size: 13px; min-width: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px rgba(238, 242, 232, .4); flex: none; }
+.dot.on { background: #7be0a3; box-shadow: 0 0 0 3px rgba(123, 224, 163, .25); }
 .spacer { flex: 1; }
-.tabs { max-width: 1100px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; }
-.tab { border: 0; background: none; padding: 8px 14px 10px; cursor: pointer; color: var(--muted);
-  border-bottom: 2px solid transparent; font-weight: 500; }
-.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
-main { max-width: 1100px; margin: 0 auto; padding: 16px; }
-.view { display: grid; gap: 16px; }
+.top select { background: rgba(238, 242, 232, .08); border-color: rgba(238, 242, 232, .25); color: var(--silk); }
+.top select option { color: #17231e; }
+.top .btn { background: transparent; border-color: rgba(238, 242, 232, .3); color: var(--silk); }
+.top .btn.primary { background: var(--gold); border-color: var(--gold); color: #241c05; font-weight: 600; }
+.top .btn.primary:hover:not(:disabled) { background: #e4bf5f; border-color: #e4bf5f; }
+#msg { font-size: 12px; color: #ffb4ac; }
+.tabs { max-width: 1100px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; }
+.tab { border: 0; background: none; padding: 8px 14px 10px; cursor: pointer; color: rgba(238, 242, 232, .62); white-space: nowrap;
+  border-bottom: 3px solid transparent; font-weight: 500; font-size: 14px; }
+.tab:hover { color: var(--silk); }
+.tab[aria-selected="true"] { color: var(--silk); border-bottom-color: var(--gold); font-weight: 600; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 32px; }
+.view { display: grid; gap: 20px; }
 .view[hidden] { display: none; }
 
-/* ---------- basics ---------- */
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
-.card h3 { font-size: 14px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
-.btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; white-space: nowrap; }
+/* ---------- 基礎 ---------- */
+.card { min-width: 0; padding: 18px 0 0; border-top: 1px solid var(--line-strong); }
+.card h3 { font: 600 15px/1.4 var(--sans); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px 32px; }
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line-strong); background: transparent; cursor: pointer; white-space: nowrap; }
 .btn:hover:not(:disabled) { background: var(--soft); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-.btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
-.btn.danger { color: var(--bad); }
-.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--on); border-color: var(--on); color: var(--on-ink); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.12); background: var(--on); }
+.btn.danger { color: var(--bad); border-color: var(--bad); }
+.btn.danger:hover:not(:disabled) { background: var(--bad-soft); }
+.btn:disabled { opacity: .4; cursor: default; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
-.tag { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 18px; font-weight: 600;
-  background: var(--soft); color: var(--muted); white-space: nowrap; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.tag { display: inline-block; padding: 0 7px; border-radius: 4px; font-size: 12px; line-height: 19px; font-weight: 500; background: var(--soft); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
 .tag:empty { display: none; }
-.tag.ok { background: var(--ok-soft); color: var(--ok); }
-.tag.warn { background: var(--warn-soft); color: var(--warn); }
-.tag.bad { background: var(--bad-soft); color: var(--bad); }
-.tag.acc { background: var(--accent-soft); color: var(--accent); }
-select, input[type=number] { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.tag.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.tag.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.tag.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.tag.acc { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+select, input[type=number] { padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); font-variant-numeric: tabular-nums; }
 input[type=number] { width: 100px; }
+input:focus-visible, select:focus-visible { outline-offset: 0; }
 
-/* ---------- notice ---------- */
-.notice { border: 1px dashed var(--line); border-radius: 12px; padding: 18px 20px; background: var(--panel); }
-.notice h3 { margin: 0 0 8px; font-size: 15px; }
+/* 開關與單選 */
+input[type=checkbox], input[type=radio] { -webkit-appearance: none; appearance: none; margin: 0; flex: none; cursor: pointer; vertical-align: middle; }
+input[type=checkbox] { width: 32px; height: 18px; border-radius: 9px; background: var(--line-strong); position: relative; transition: background .15s; }
+input[type=checkbox]::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: transform .15s; }
+input[type=checkbox]:checked { background: var(--on); }
+input[type=checkbox]:checked::after { transform: translateX(14px); background: var(--on-ink); }
+input[type=radio] { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: inline-grid; place-content: center; background: var(--panel); }
+input[type=radio]:checked { border-color: var(--on); }
+input[type=radio]:checked::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--on); }
+input:disabled { cursor: default; }
+@media (prefers-reduced-motion: reduce) { input[type=checkbox], input[type=checkbox]::after { transition: none; } }
+
+.notice { border: 1px solid var(--line-strong); border-left: 4px solid var(--gold); border-radius: 6px; padding: 14px 18px; background: var(--panel); }
+.notice h3 { margin: 0 0 6px; font-size: 15px; }
 .notice ol { margin: 0; padding-left: 20px; }
-.notice.bad { border-color: var(--bad); color: var(--bad); }
+.notice.bad { border-left-color: var(--bad); color: var(--bad); }
 
-/* ---------- status flow ---------- */
-.flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 10px; }
-.node { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
-.node .label { font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.node .big { font-size: 28px; font-weight: 700; line-height: 1.2; margin-top: 6px; font-variant-numeric: tabular-nums; }
-.node .sub { color: var(--muted); font-size: 13px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.node.mid { background: var(--soft); }
-.arrow { align-self: center; color: var(--muted); font-size: 20px; }
+/* ---------- 狀態：電路板 ---------- */
+.board { --silk-dim: rgba(238, 242, 232, .62); position: relative; background: var(--mask); color: var(--silk); border-radius: 10px; overflow: hidden;
+  --v5: #6fb4f0; --v9: #4fd1b8; --v12: #e8c547; --v15: #f0964a; --v20: #ee6a5f; }
+.board .tag { background: rgba(238, 242, 232, .12); color: var(--silk); border-color: transparent; }
+.board .tag.ok { color: #8be6ad; }
+.board .tag.warn { color: #f2c25c; }
+.board .tag.bad { color: #ff9a90; }
+.board .tag.acc { color: #9fd6ff; }
+.flow { display: grid; grid-template-columns: 1fr auto 1.15fr auto 1fr; align-items: center; padding: 22px 24px 18px; }
+.node { min-width: 0; }
+.node .label { font-size: 13px; color: var(--silk-dim); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+.node .big { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; line-height: 1.05; font-family: var(--num); font-variant-numeric: tabular-nums; }
+.node .big .n { font-size: 44px; font-weight: 500; letter-spacing: -.01em; }
+.node .big .u { font-size: 18px; color: var(--silk-dim); }
+.node.mid .big .n { font-size: 60px; font-weight: 600; }
+.node.mid .big .u { font-size: 22px; }
+.node .sub { color: var(--silk-dim); font-size: 13px; margin-top: 8px; min-height: 20px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rail { position: relative; width: 56px; height: 3px; margin: 0 14px; background: rgba(238, 242, 232, .2); border-radius: 2px; }
+.rail::before, .rail::after { content: ""; position: absolute; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
+.rail::before { left: -5px; }
+.rail::after { right: -5px; }
+.rail[data-on="1"] { background: repeating-linear-gradient(90deg, var(--gold) 0 8px, rgba(214, 173, 74, .25) 8px 14px); background-size: 14px 3px; animation: rail-x .8s linear infinite; }
+@keyframes rail-x { to { background-position: 14px 0; } }
+@keyframes rail-y { to { background-position: 0 14px; } }
+@media (prefers-reduced-motion: reduce) { .rail[data-on="1"] { animation: none; } }
 @media (max-width: 760px) {
-  .flow { grid-template-columns: 1fr; }
-  .arrow { transform: rotate(90deg); justify-self: center; line-height: 1; }
+  .flow { grid-template-columns: 1fr; padding: 18px 18px 8px; }
+  .rail { width: 3px; height: 34px; margin: 10px 0 10px 4px; }
+  .rail::before, .rail::after { left: -3px; right: auto; }
+  .rail::before { top: -5px; } .rail::after { top: auto; bottom: -5px; }
+  .rail[data-on="1"] { background: repeating-linear-gradient(180deg, var(--gold) 0 8px, rgba(214, 173, 74, .25) 8px 14px); background-size: 3px 14px; animation-name: rail-y; }
+  .node.mid .big .n { font-size: 52px; }
 }
 
-/* ---------- tables ---------- */
+/* 電壓軸：充電器提供什麼、設備得到什麼、此刻 VBUS 在哪 */
+.vaxis { position: relative; margin: 0 24px; padding: 34px 0 20px; border-top: 1px solid rgba(238, 242, 232, .16); }
+.vrow { display: grid; grid-template-columns: 5.5em 1fr; align-items: center; column-gap: 12px; }
+.vrow > span { font-size: 12px; color: var(--silk-dim); line-height: 1.25; }
+.track { position: relative; height: 26px; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 12px; height: 2px; background: rgba(238, 242, 232, .14); }
+.track .pin { position: absolute; top: 3px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--vc); opacity: .85; }
+.track .span { position: absolute; top: 8px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--vc), var(--vc2)); opacity: .5; }
+.track .on { opacity: 1; box-shadow: 0 0 0 2px var(--mask), 0 0 0 4px var(--silk); z-index: 1; }
+.track .pin.on { width: 6px; margin-left: -3px; }
+.track .cur { position: absolute; top: 5px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--silk); z-index: 2; box-shadow: 0 0 0 2px var(--mask); }
+.scale { position: relative; height: 22px; margin: 2px 0; }
+.scale i { position: absolute; top: 0; font-style: normal; font-size: 11px; color: var(--silk-dim); transform: translateX(-50%); font-variant-numeric: tabular-nums; }
+.scale i::before { content: ""; display: block; width: 1px; height: 5px; margin: 0 auto 2px; background: rgba(238, 242, 232, .35); }
+.plot { position: absolute; left: 5.5em; right: 0; top: 0; bottom: 0; margin-left: 12px; pointer-events: none; }
+.needle { position: absolute; top: 4px; bottom: 6px; width: 0; border-left: 2px solid var(--gold); transition: left .3s; }
+.needle b { position: absolute; top: -20px; left: 0; transform: translateX(-50%); background: var(--gold); color: #241c05; font: 600 12px/16px var(--num); padding: 0 6px; border-radius: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .needle { transition: none; } }
+@media (max-width: 760px) { .vaxis { margin: 0 18px; } .vrow { grid-template-columns: 4.2em 1fr; } .plot { left: 4.2em; } }
+
+/* ---------- 表格 ---------- */
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th, td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
 tr:last-child td { border-bottom: 0; }
-tr.hl td { background: var(--accent-soft); }
-tr.hl td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+tr.hl td { background: var(--accent-soft); font-weight: 600; }
+tr.hl td:first-child { box-shadow: inset 4px 0 0 var(--vc, var(--accent)); padding-left: 10px; }
 td.nw { white-space: nowrap; }
+td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--vc); margin-right: 8px; }
 .empty { color: var(--muted); padding: 10px 0; }
 
-/* ---------- settings ---------- */
-.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-.opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
-.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.opt input { margin-top: 3px; }
+/* ---------- 設定：左邊是段落名稱，右邊是控制項 ---------- */
+#view-settings { gap: 0; }
+#view-settings .grid2 { display: block; }
+#view-settings .card { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 32px; padding: 22px 0 24px; }
+#view-settings .card > h3 { grid-column: 1; grid-row: 1 / span 12; align-self: start; margin: 0; }
+#view-settings .card > :not(h3) { grid-column: 2; min-width: 0; }
+@media (max-width: 760px) { #view-settings .card { display: block; } #view-settings .card > h3 { margin-bottom: 12px; } }
+.modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .modes { grid-template-columns: 1fr; } }
+.opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 11px 13px; cursor: pointer; }
+.opt:hover { background: var(--soft); }
+.opt:has(input:checked) { border-color: var(--on); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--on); }
+.opt input { margin-top: 2px; }
 .opt b { display: block; font-weight: 600; }
 .opt span { display: block; color: var(--muted); font-size: 12px; }
-.fields { display: grid; grid-template-columns: max-content 1fr; gap: 12px 16px; align-items: center; }
+.fields { display: grid; grid-template-columns: max-content 1fr; gap: 14px 20px; align-items: center; }
 .fields > .lbl { color: var(--muted); }
 .inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.seg { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg label { padding: 6px 14px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg { display: inline-flex; justify-self: start; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.seg label { position: relative; padding: 6px 15px; cursor: pointer; border-right: 1px solid var(--line-strong); }
 .seg label:last-child { border-right: 0; }
+.seg label:hover { background: var(--soft); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
-.seg label:has(input:checked) { background: var(--accent); color: var(--accent-text); }
-.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.seg label:has(input:checked) { background: var(--mask); color: var(--silk); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: -2px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+.chip:hover { background: var(--soft); }
 .chip:has(input:checked) { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); text-decoration: line-through; }
 .chip input { display: none; }
-.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-.check input { margin-top: 3px; }
+.check { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; padding: 3px 0; }
+.check input { margin-top: 2px; }
 .check b { font-weight: 600; }
 .check span { display: block; color: var(--muted); font-size: 12px; }
-.labgrp { margin: 16px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
-.labs { display: grid; gap: 8px; }
-.lab { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.lab:has(.labhead input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.lab.off, .check.off { opacity: .55; }
-.labhead { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-.labhead input { margin-top: 3px; }
+.labgrp { margin: 20px 0 6px; font: 600 14px/1.4 var(--sans); color: var(--text); }
+.labs { display: grid; }
+.lab { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.lab:last-child { border-bottom: 0; }
+.lab.off, .check.off { opacity: .5; }
+.labhead { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.labhead input { margin-top: 2px; }
 .labhead b { font-weight: 600; }
 .labhead span:not(.tag):not(.labtags) { display: block; color: var(--muted); font-size: 12px; }
 .labtags { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-.lab details { margin: 6px 0 0 24px; font-size: 12px; color: var(--muted); }
+.lab details { margin: 6px 0 0 44px; font-size: 12px; color: var(--muted); }
 .lab summary { cursor: pointer; color: var(--accent); width: max-content; }
 .lab ul { margin: 6px 0 2px; padding-left: 18px; }
 .lab li { margin: 3px 0; }
-.labin { margin: 8px 0 0 24px; }
+.labin { margin: 8px 0 0 44px; }
 .labin input[type=number] { width: 84px; }
-@media (max-width: 640px) { .labhead { flex-wrap: wrap; } .labtags { margin-left: 24px; justify-content: flex-start; } }
+@media (max-width: 640px) { .labhead { flex-wrap: wrap; } .labtags { margin-left: 44px; justify-content: flex-start; } .lab details, .labin { margin-left: 44px; } }
 .actions { position: sticky; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
-@media (max-width: 640px) { .fields { grid-template-columns: 1fr; gap: 4px 0; } .fields > .lbl { margin-top: 8px; } }
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 14px; box-shadow: 0 -8px 20px rgba(0, 0, 0, .14); margin-top: 12px; }
+@media (max-width: 640px) { .fields { grid-template-columns: 1fr; gap: 4px 0; } .fields > .lbl { margin-top: 10px; } }
 
-/* ---------- log ---------- */
+/* ---------- 記錄：時間軸 ---------- */
 .logbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.filters { display: inline-flex; gap: 4px; }
-.filters button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
-.filters button[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }
-.stats { display: flex; gap: 8px; flex-wrap: wrap; }
-.ev { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.ev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.filters { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.filters button { border: 0; border-right: 1px solid var(--line-strong); background: transparent; padding: 5px 14px; cursor: pointer; }
+.filters button:last-child { border-right: 0; }
+.filters button:hover { background: var(--soft); }
+.filters button[aria-pressed="true"] { background: var(--mask); color: var(--silk); font-weight: 600; }
+.stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.ev { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; font-weight: 600; }
+.ev::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); box-shadow: 0 0 0 3px var(--panel); position: relative; }
 .ev.ok::before { background: var(--ok); }
 .ev.warn::before { background: var(--warn); }
 .ev.bad::before { background: var(--bad); }
 .ev.acc::before { background: var(--accent); }
-.logrow { display: grid; grid-template-columns: 84px 128px 1fr; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.logrow:last-child { border-bottom: 0; }
-.logrow.head { color: var(--muted); font-size: 12px; padding-top: 0; }
-.logrow .time { color: var(--muted); padding-top: 1px; }
+.logrow { display: grid; grid-template-columns: 84px 150px 1fr; gap: 4px 12px; padding: 9px 0;
+  background: linear-gradient(var(--line-strong), var(--line-strong)) 100px 0 / 1px 100% no-repeat; }
+.logrow.head { color: var(--muted); font-size: 12px; padding: 0 0 8px; background: none; }
+.logrow .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.logrow .detail { min-width: 0; overflow-wrap: anywhere; }
+.logrow.bad .detail { color: var(--bad); }
 @media (max-width: 640px) {
-  .logrow { grid-template-columns: auto 1fr; }
+  .logrow { grid-template-columns: auto 1fr; background: none; border-bottom: 1px solid var(--line); }
   .logrow .detail { grid-column: 1 / -1; }
   .logrow.head { display: none; }
 }
 .pdos { display: flex; flex-wrap: wrap; gap: 4px; }
-.pdo { border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 12px; white-space: nowrap; background: var(--soft); }
+.pdo { border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 12px; white-space: nowrap; background: var(--soft); font-variant-numeric: tabular-nums; }
 .pdo i { font-style: normal; color: var(--muted); }
 .simrow { display: grid; grid-template-columns: 28px 120px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .simrow:last-child { border-bottom: 0; }
 .simrow select { width: 100%; }
 .simrow input[type=number] { width: 76px; }
-.simsub { font-weight: 600; margin: 12px 0 6px; }
+.simsub { font-weight: 600; margin: 14px 0 6px; }
 @media (max-width: 640px) { .simrow { grid-template-columns: 24px 1fr auto; } .simrow .simf { grid-column: 1 / -1; order: 1; } }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 13px; }
 .kv > div:nth-child(odd) { color: var(--muted); }
 .bat { height: 8px; border-radius: 4px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; max-width: 220px; }
 .bat > div { height: 100%; background: var(--ok); }
-#msg { font-size: 12px; color: var(--bad); }
 </style>
 </head>
 <body>
@@ -198,24 +283,27 @@ td.nw { white-space: nowrap; }
       <h3 data-i18n="guideTitle"></h3>
       <ol><li data-i18n="guide1"></li><li data-i18n="guide2"></li><li data-i18n="guide3"></li></ol>
     </div>
+    <div class="board">
     <div class="flow">
       <div class="node">
         <div class="label"><span data-i18n="charger"></span><span class="tag" id="feTag"></span></div>
         <div class="big" id="feBig">—</div>
         <div class="sub" id="feSub"></div>
       </div>
-      <div class="arrow">→</div>
+      <div class="rail" id="rail1" aria-hidden="true"></div>
       <div class="node mid">
         <div class="label"><span data-i18n="converter"></span><span class="tag" id="swTag"></span></div>
         <div class="big" id="vbusBig">—</div>
         <div class="sub" id="vbusSub"></div>
       </div>
-      <div class="arrow">→</div>
+      <div class="rail" id="rail2" aria-hidden="true"></div>
       <div class="node">
         <div class="label"><span data-i18n="device"></span><span class="tag" id="beTag"></span></div>
         <div class="big" id="beBig">—</div>
         <div class="sub" id="beSub"></div>
       </div>
+    </div>
+    <div class="vaxis" id="vaxis"></div>
     </div>
     <div class="grid2">
       <div class="card"><h3 data-i18n="chargerCaps"></h3><div class="scroll" id="frontCaps"></div></div>
@@ -348,6 +436,10 @@ td.nw { white-space: nowrap; }
             <input type="number" id="fixcA" min="0.5" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="fixcRange"></span></div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fixcL"></ul></details>
         </div>
+        <div class="lab" id="lab-ufcs">
+          <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagExp"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ufcsL"></ul></details>
+        </div>
         <div class="lab" id="lab-ppsc">
           <label class="labhead"><input type="checkbox" id="ppsc"><div><b data-i18n="ppsc"></b><span data-i18n="ppscS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
           <div class="labin inline" id="ppscIn"><input type="number" id="ppscLo" min="3.3" max="20.9" step="0.1"><span class="muted">–</span>
@@ -459,7 +551,7 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
     rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
@@ -535,6 +627,12 @@ const T = {
       "Exactly 9 V or 15 V: served by the charger's Fixed 9 V / 15 V.",
       "Any other 9–15 V request is rejected.",
       "Takes precedence over PPS or SPR AVS as the AVS source. Never above 20 V."],
+    ufcs: "UFCS on the front port", ufcss: "UFCS", tagExp: "experimental",
+    ufcsS: "Try UFCS (T/TAF 083-2022) when the charger is plugged in; fall back to PD if it does not answer.",
+    ufcsL: ["At power-up the front D+/D− lines are checked; only a charger that answers the UFCS handshake is used through UFCS. Otherwise PD works as usual.",
+      "The charger's UFCS output modes are turned into equivalent PD capabilities (Fixed 5/9/15/20 V plus one PPS per mode), so all rear modes, compensation and Lab items keep working.",
+      "UFCS uses D+/D−, which the host tool also needs: once UFCS is active this page cannot connect. To change settings, unplug the charger and connect a PC.",
+      "Experimental. Needs a charger that supports UFCS; not every UFCS charger has been tested."],
     forcePps: "Force PPS", forcePpsS: "Serve every Fixed and AVS level from the charger's PPS, so voltage compensation works on all of them.",
     tagAll: "all modes", fpps: "force PPS",
     forcePpsL: ["Each Fixed voltage covered by a charger PPS is requested as PPS at that voltage (the PPS with the highest current first). Voltages no PPS covers still use the charger's Fixed.",
@@ -604,7 +702,7 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "協議事件", 15: "身份" },
+          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
     rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
@@ -680,6 +778,12 @@ const T = {
       "剛好 9V、15V：改走充電器的 Fixed 9V / 15V。",
       "其他 9–15V 請求一律拒絕。",
       "優先於 PPS 平移或 SPR AVS 作為 AVS 來源；永遠不超過 20V。"],
+    ufcs: "前端使用 UFCS", ufcss: "UFCS", tagExp: "實驗",
+    ufcsS: "充電器插入時先嘗試 UFCS（T/TAF 083-2022）握手；沒有回應就照常走 PD。",
+    ufcsL: ["上電時檢測前端 D+/D−，只有回應 UFCS 握手的充電器才走 UFCS，其餘照常走 PD。",
+      "充電器的 UFCS 輸出模式會被轉成等效的 PD 能力（Fixed 5/9/15/20V，加上每個模式一個 PPS），後端所有方式、壓降補償與 Lab 功能照常生效。",
+      "UFCS 使用 D+/D−，與上位機共用：UFCS 生效後無法連接本頁。要修改設定，請先拔掉充電器，改接電腦。",
+      "實驗功能，需要充電器支援 UFCS；並非所有 UFCS 充電器都測試過。"],
     forcePps: "強制 PPS", forcePpsS: "所有 Fixed 與 AVS 擋位都改由充電器的 PPS 提供，電壓補償對所有擋位生效。",
     tagAll: "所有方式", fpps: "強制 PPS",
     forcePpsL: ["PPS 覆蓋得到的 Fixed 電壓，一律改向充電器請求該電壓的 PPS（電流大的 PPS 優先）；沒有 PPS 覆蓋的電壓仍走充電器的 Fixed。",
@@ -714,7 +818,7 @@ const T = {
 };
 /* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
 T.zhs = (() => {
-  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删";
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余";
   const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
   const phr = [["韌體", "固件"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
   const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
@@ -740,6 +844,7 @@ function msg(text) { $("msg").textContent = text || ""; if (text) setTimeout(() 
 const CRC_TABLE = (() => { const tb = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; tb[n] = c >>> 0; }
   return tb; })();
+function crc8u(bytes) { let c = 0; for (const b of bytes) { c ^= b; for (let k = 0; k < 8; k++) c = c & 0x80 ? ((c << 1) ^ 0x29) & 0xFF : (c << 1) & 0xFF; } return c; }
 function crc32(bytes) { let c = 0xFFFFFFFF; for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
 
 /* PDO 解码 */
@@ -882,8 +987,45 @@ function beState(s) {
     13: [t("stQuery"), "acc"], 14: [t("stQuery"), "acc"] };
   return map[s.be] ?? [t("stNeg"), "acc"];
 }
+/* 读数：数值 + 灰色单位（"5.0 V" → <span class=n>5.0</span><span class=u>V</span>） */
+function setBig(id, text) {
+  const m = /^(\S+)\s+(\S+)$/.exec(text);
+  $(id).innerHTML = m ? `<span class="n">${m[1]}</span><span class="u">${m[2]}</span>` : `<span class="n">${text}</span>`;
+}
 function setTag(id, [text, cls]) { const el = $(id); el.textContent = text; el.className = "tag " + (cls || ""); }
 
+/* 電壓色階：越高越暖，表格色塊與電壓軸共用 */
+const VSTEPS = [[5000, "var(--v5)"], [9000, "var(--v9)"], [12000, "var(--v12)"], [15000, "var(--v15)"], [20000, "var(--v20)"]];
+function vcol(mv) { let c = VSTEPS[0][1]; for (const [v, x] of VSTEPS) if (mv >= v - 500) c = x; return c; }
+
+/* 電壓軸：上排充電器提供的檔位，下排輸出給設備的檔位，金針是此刻 VBUS。
+   Fixed 畫成一根針，PPS/AVS 畫成一段範圍；目前合約的檔位加白框，可調檔再標出請求電壓 */
+function axisRow(label, caps, act, cur, pct) {
+  let h = "";
+  caps.forEach((raw, i) => {
+    const p = decodePdo(raw);
+    if (p.empty || !p.max) return;
+    const on = act === i + 1 ? " on" : "";
+    if (p.min === p.max) h += `<i class="pin${on}" style="left:${pct(p.max)}%;--vc:${vcol(p.max)}"></i>`;
+    else h += `<i class="span${on}" style="left:${pct(p.min)}%;width:${pct(p.max) - pct(p.min)}%;--vc:${vcol(p.min)};--vc2:${vcol(p.max)}"></i>`;
+    if (on && cur) h += `<i class="cur" style="left:${pct(cur)}%"></i>`;
+  });
+  return `<div class="vrow"><span>${label}</span><div class="track">${h}</div></div>`;
+}
+function renderAxis(s, fr, br) {
+  const el = $("vaxis");
+  if (!s || !state.frontCaps.length && !state.rearCaps.length) { el.innerHTML = ""; el.hidden = true; return; }
+  el.hidden = false;
+  const all = [...state.frontCaps, ...state.rearCaps].map((r) => decodePdo(r).max);
+  const top = Math.max(21000, Math.ceil(Math.max(...all, s.vbus) / 5000) * 5000);
+  const pct = (mv) => Math.min(100, (mv / top) * 100);
+  let ticks = "";
+  for (let v = 0; v <= top; v += 5000) ticks += `<i style="left:${pct(v)}%">${v / 1000}</i>`;
+  el.innerHTML = axisRow(t("chargerCaps"), state.frontCaps, fr ? fr.pos : 0, fr && fr.type !== "Fixed" ? fr.mv : 0, pct) +
+    `<div class="vrow"><span></span><div class="scale">${ticks}</div></div>` +
+    axisRow(t("rearCaps"), state.rearCaps, br ? br.pos : 0, br && br.type !== "Fixed" ? (s.beMv || br.mv) : 0, pct) +
+    `<div class="plot"><div class="needle" style="left:${pct(s.vbus)}%"><b>${fmtV(s.vbus)}</b></div></div>`;
+}
 function capsTable(caps, activePos, src, fcaps = state.frontCaps) {
   if (!caps.length) return `<div class="empty">${dev ? t("none") : t("notAvail")}</div>`;
   let h = `<table><tr><th>#</th><th>${t("colType")}</th><th>${t("colVolt")}</th><th>${t("colCur")}</th>${src ? `<th>${t("colSrc")}</th>` : ""}</tr>`;
@@ -895,35 +1037,39 @@ function capsTable(caps, activePos, src, fcaps = state.frontCaps) {
       const fp = k && fcaps[k - 1] ? decodePdo(fcaps[k - 1]) : null;
       srcCell = `<td class="nw">${fp ? `#${k} ${fp.type}` : t("none")}${fp && fp.type !== p.type ? ` <span class="tag acc">${t("converted")}</span>` : ""}</td>`;
     }
-    h += `<tr class="${activePos === i + 1 ? "hl" : ""}" title="0x${raw.toString(16).toUpperCase().padStart(8, "0")}">` +
-      `<td>${i + 1}</td><td>${p.type}</td><td class="nw">${pdoVolt(p)}</td><td class="nw">${pdoCur(p)}</td>${srcCell}</tr>`;
+    h += `<tr class="${activePos === i + 1 ? "hl" : ""}" style="--vc:${vcol(p.max)}" title="0x${raw.toString(16).toUpperCase().padStart(8, "0")}">` +
+      `<td>${i + 1}</td><td>${p.type}</td><td class="nw v">${pdoVolt(p)}</td><td class="nw">${pdoCur(p)}</td>${srcCell}</tr>`;
   });
   return h + "</table>";
 }
 function renderStatus() {
   const s = state.status;
   if (!s || !dev) {
-    ["feBig", "vbusBig", "beBig"].forEach((id) => ($(id).textContent = "—"));
+    ["feBig", "vbusBig", "beBig"].forEach((id) => setBig(id, "—"));
+    $("rail1").dataset.on = $("rail2").dataset.on = "0";
     ["feSub", "vbusSub", "beSub"].forEach((id) => ($(id).textContent = ""));
     ["feTag", "swTag", "beTag", "avs2Tag", "avs2Tag2"].forEach((id) => setTag(id, ["", ""]));
     $("frontCaps").innerHTML = capsTable([], 0); $("rearCaps").innerHTML = capsTable([], 0, []); $("rearCaps2").innerHTML = capsTable([], 0, []);
+    renderAxis(null);
     renderPdInfo();
     return;
   }
   setTag("feTag", feState(s));
   const fr = (s.flags & 16) ? decodeRdo(s.feRdo, state.frontCaps) : null;
-  $("feBig").textContent = fr ? fmtV(fr.mv) : (s.flags & 1) ? "5.0 V" : "—";
+  setBig("feBig", fr ? fmtV(fr.mv) : (s.flags & 1) ? "5.0 V" : "—");
+  $("rail1").dataset.on = (s.flags & 16) || (s.flags & 1) ? "1" : "0";
   /* CC 电压：Rp 3A ≥ 1.23V = SinkTxOK，1.5A = SinkTxNG（PD 3.0 冲突避免） */
   const cc = s.cc != null && !(s.flags & 1) ? ` · CC ${(s.cc / 1000).toFixed(2)} V ${s.cc >= 1230 ? "TxOK" : "TxNG"}` : "";
   $("feSub").textContent = (s.flags & 128 ? "EPR · " : "") + (fr ? `${fr.type} · ${fmtA(fr.ma)} · #${fr.pos}` : t("noContract")) + cc;
 
   setTag("swTag", (s.flags & 4) ? [t("swOn"), "ok"] : [t("swOff"), ""]);
-  $("vbusBig").textContent = fmtV(s.vbus);
+  setBig("vbusBig", fmtV(s.vbus));
+  $("rail2").dataset.on = (s.flags & 4) ? "1" : "0";
   $("vbusSub").textContent = `${t("current")} ${fmtA(s.ibus)}`;
 
   setTag("beTag", beState(s));
   const br = (s.flags & 8) ? decodeRdo(s.beRdo, state.rearCaps) : null;
-  $("beBig").textContent = br ? fmtV(s.beMv || br.mv) : "—";
+  setBig("beBig", br ? fmtV(s.beMv || br.mv) : "—");
   $("beSub").textContent = br ? `${br.type} · ${fmtA(br.ma)} · #${br.pos}` : t("noContract");
 
   const a2 = (s.flags >> 5) & 3;
@@ -931,6 +1077,7 @@ function renderStatus() {
   $("frontCaps").innerHTML = capsTable(state.frontCaps, fr ? fr.pos : 0);
   const rear = capsTable(state.rearCaps, br ? br.pos : 0, state.rearSrc);
   $("rearCaps").innerHTML = rear; $("rearCaps2").innerHTML = rear;
+  renderAxis(s, fr, br);
   renderPdInfo();
 }
 
@@ -1234,7 +1381,7 @@ function readForm() {
     fixMa50: $("fixc").checked ? Math.round(Number($("fixcA").value) * 20) || 0 : state.cfg?.fixMa50 ?? 0,
     compMode: state.cfg && state.cfg.compMode == null ? null : radio("compMode"), compVal: Math.round(Number($("compVal").value)) || 0,
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
-    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0),
+    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0),
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
@@ -1250,7 +1397,7 @@ function writeForm(c) {
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
   $("compVal").value = c.compVal ?? 0;
-  $("infoPt").checked = !((c.flags2 ?? 0) & 1); $("idPt").checked = !!((c.flags2 ?? 0) & 2); $("forcePps").checked = !!((c.flags2 ?? 0) & 4);
+  $("infoPt").checked = !((c.flags2 ?? 0) & 1); $("idPt").checked = !!((c.flags2 ?? 0) & 2); $("forcePps").checked = !!((c.flags2 ?? 0) & 4); $("ufcs").checked = !!((c.flags2 ?? 0) & 16);
   $("ppsc").checked = !!((c.flags2 ?? 0) & 8); $("ppscLo").value = ((c.ppsLo || 33) / 10).toFixed(1);
   $("ppscHi").value = ((c.ppsHi || 160) / 10).toFixed(1); $("ppscA").value = ((c.ppsMa50 || 60) / 20).toFixed(2);
   applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
@@ -1350,11 +1497,69 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "",
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "", (c.flags2 ?? 0) & 16 ? t("ufcss") : "",
     (c.flags2 ?? 0) & 8 ? `${t("ppscs")} ${(c.ppsLo / 10).toFixed(1)}–${(c.ppsHi / 10).toFixed(1)} V ${fmtA(c.ppsMa50 * 50)}` : ""].filter(Boolean).join(", ");
   const comp = c.compMode === 1 ? ` · ${t("compVs")} ${c.compVal} mV` : c.compMode === 2 ? ` · ${t("compRs")} ${c.compVal} mΩ` : "";
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` + comp +
     (flags ? ` · ${flags}` : "");
+}
+/* UFCS 探测固件（EV_UFCS_PKT / EV_UFCS_STEP）：协议名称保持英文 */
+const UFCS_CTRL = ["Ping", "ACK", "NCK", "Accept", "Soft_Reset", "Power_Ready", "Get_Output_Capabilities", "Get_Source_Info", "Get_Sink_Info",
+  "Get_Cable_Info", "Get_Device_Info", "Get_Error_Info", "Detect_Cable_Info", "Start_Cable_Detect", "End_Cable_Detect", "Exit_UFCS_Mode"];
+const UFCS_DATA = { 1: "Output_Capabilities", 2: "Request", 3: "Source_Information", 4: "Sink_Information", 5: "Cable_Information", 6: "Device_Information",
+  7: "Error_Information", 8: "Config_Watchdog", 9: "Refuse", 10: "Verify_Request", 11: "Verify_Response", 12: "Power_Change" };
+const UFCS_BAUD = [115200, 57600, 38400];
+const ufcsMv = (x) => (x / 100).toFixed(2).replace(/\.?0+$/, "") + " V";
+const ufcsMa = (x) => (x / 100).toFixed(2).replace(/\.?0+$/, "") + " A";
+function ufcsPktText(d) {
+  const dir = d[0] ? "TX →" : "RX ←", n = d[4], raw = d.subarray(5, 5 + n);
+  const hexs = Array.from(raw, (x) => x.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+  const speed = d[0] ? `${UFCS_BAUD[d[1]] ?? d[1]}` : `${UFCS_BAUD[d[1]] ?? d[1]} (${u16(d, 2) ? Math.round(12e6 / u16(d, 2)) : 0} bps)`;
+  if (raw.length < 4) return `${dir} ${speed} · ${hexs}`;
+  const h = (raw[0] << 8) | raw[1], type = h & 7, num = (h >> 9) & 15, addr = h >> 13;
+  const crcOk = crc8u(raw.subarray(0, raw.length - 1)) === raw[raw.length - 1];
+  let name = "?", body = "";
+  if (type === 0) name = UFCS_CTRL[raw[2]] ?? "ctrl 0x" + raw[2].toString(16);
+  else if (type === 1) {
+    name = UFCS_DATA[raw[2]] ?? "data 0x" + raw[2].toString(16);
+    const b = raw.subarray(4, raw.length - 1);
+    if (raw[2] === 1) body = Array.from({ length: Math.floor(b.length / 8) }, (_, i) => {
+      const o = i * 8, cs = (b[o] >> 1) & 7;
+      return `#${b[o] >> 4} ${ufcsMv((b[o + 3] << 8) | b[o + 4])}–${ufcsMv((b[o + 1] << 8) | b[o + 2])} ${ufcsMa(b[o + 7])}–${ufcsMa((b[o + 5] << 8) | b[o + 6])} (${(b[o] & 1) ? 20 : 10}mV/${(cs + 1) * 10}mA)`;
+    }).join(" · ");
+    else if (raw[2] === 2 && b.length === 8) body = `#${b[0] >> 4} ${ufcsMv((b[4] << 8) | b[5])} ${ufcsMa((b[6] << 8) | b[7])}`;
+    else if (raw[2] === 3 && b.length === 8) body = `${ufcsMv((b[4] << 8) | b[5])} ${ufcsMa((b[6] << 8) | b[7])} · temp ${b[2] ? b[2] - 50 : "-"}/${b[3] ? b[3] - 50 : "-"} °C`;
+    else if (raw[2] === 9 && b.length === 4) body = `msg#${b[0] & 15} cmd 0x${b[2].toString(16)} reason ${b[3]}`;
+    else body = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(" ");
+  }
+  return `${dir} ${speed} · ${name} #${num} →${addr}${crcOk ? "" : " · CRC ✗"}${body ? " · " + body : ""} · ${hexs}`;
+}
+const UFS_WAIT = ["", "ACK", "Output_Capabilities", "Accept", "Power_Ready", "Source_Information"];
+function ufcsStepText(d) {
+  const code = d[0], arg = d[1], v = u16(d, 2), i = u16(d, 4), vbus = u16(d, 6);
+  const vb = `VBUS ${fmtV(vbus)}`;
+  switch (code) {
+    case 1: return `BC1.2/DCP check: D+ follows D− ${arg & 1 ? "yes" : "no"} · baseline ${arg & 2 ? "ok" : "-"}`;
+    case 2: return `UFCS handshake OK (attempt ${arg})`;
+    case 3: return `UFCS handshake failed: D+ never went high (${arg} attempts) — not a UFCS charger`;
+    case 4: return `Ping ACKed · ${UFCS_BAUD[arg & 15]} bps · header addr ${arg >> 4} · ${v} ms after handshake`;
+    case 5: return `Ping not answered · ${UFCS_BAUD[arg & 15]} bps · header addr ${arg >> 4}`;
+    case 6: return `Output_Capabilities: ${arg} mode(s)`;
+    case 7: return `Request mode ${arg} · ${(v / 1000).toFixed(2)} V · ${fmtA(i)}`;
+    case 8: return `Accept after ${v} ms`;
+    case 9: return `Power_Ready · mode ${arg} · target ${(v / 1000).toFixed(2)} V · ${vb} · ${i} ms after Accept`;
+    case 10: return `Refuse · reason ${arg} · cmd 0x${v.toString(16)}`;
+    case 11: return `Timeout waiting for ${UFS_WAIT[arg] ?? arg}`;
+    case 12: return `Source_Info · ${fmtV(v)} · ${fmtA(i)} · ${arg === 0x80 ? "no temp" : arg + " °C"} · ${vb}`;
+    case 13: return arg ? "Hard reset sent by converter" : `Hard reset from charger · last packet ${v} ms ago · ${i} ACKs sent`;
+    case 14: return ["Probe finished, holding (polling Source_Info)", "Probe failed (hard reset sent)", "Ended by charger"][arg] + ` · bad packets ${v}`;
+    case 16: return `Level scan (×51.6 mV, pin < level): D+ idle ${arg} (~${(arg * 51.6 / 1000).toFixed(2)} V) · D− idle ${v} (~${(v * 51.6 / 1000).toFixed(2)} V)`;
+    case 17: return `Level scan: D+ while D− driven 0.6 V = ${arg} (~${(arg * 51.6 / 1000).toFixed(2)} V) · D− while D+ driven 0.6 V = ${v} (~${(v * 51.6 / 1000).toFixed(2)} V)`;
+    case 18: return `VBUS lost (${v} mV) during flow state ${arg} — charger cut power`;
+    case 19: return `Charger hard reset: D+ low for ${v} µs (spec ≥ 2000)`;
+    case 15: return `PHY: training ok ${v} · bad ${arg} · frame/timeouts ${i}`;
+    default: return `step ${code}`;
+  }
 }
 /* 返回 { t, type, name, html, text, cls, cat }；cat: req / caps / bad / other */
 function decodeRecords(records) {
@@ -1405,6 +1610,13 @@ function decodeRecords(records) {
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
       case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24)); cls = "acc"; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
+      case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;
+      case 17: {
+        text = ufcsStepText(d);
+        const c = d[0];
+        cls = c === 3 || c === 5 || c === 10 || c === 11 || c === 13 || c === 18 || (c === 14 && d[1] === 1) ? "bad" : c === 9 || c === 2 || c === 4 || c === 8 ? "ok" : "acc";
+        cat = cls === "bad" ? "bad" : c === 7 || c === 9 ? "req" : "other";
+        break; }
       case 13: {
         const modes = "0x" + d[2].toString(16).toUpperCase().padStart(2, "0");
         if (d[1] === 0) text = `${t("avs2Fe")} (Sink Modes ${modes})`;
@@ -1434,7 +1646,7 @@ function renderLog() {
   const shown = rows.filter((r) => state.filter === "all" || r.cat === state.filter);
   $("logTable").innerHTML = shown.length
     ? `<div class="logrow head"><div>${t("colTime")}</div><div>${t("colEvent")}</div><div>${t("colDetail")}</div></div>` +
-      shown.map((r) => `<div class="logrow"><div class="time mono">${(r.t / 1000).toFixed(3)} s</div>` +
+      shown.map((r) => `<div class="logrow ${r.cls}"><div class="time mono">${(r.t / 1000).toFixed(3)} s</div>` +
         `<div><span class="ev ${r.cls}">${esc(r.name)}</span></div><div class="detail">${r.html}</div></div>`).join("")
     : `<div class="empty">${t("noRecords")}</div>`;
   const notes = [];
@@ -1504,6 +1716,8 @@ function applyInfo() {
   $("idPt").disabled = !on; if (!on) $("idPt").checked = false;
   $("idPtRow").classList.toggle("off", !on);
   $("forcePps").disabled = old; $("lab-forcePps").classList.toggle("off", old);
+  const oldUfcs = !!state.info && state.info.proto < 7;
+  $("ufcs").disabled = oldUfcs; $("lab-ufcs").classList.toggle("off", oldUfcs);
   const oldPps = !!state.cfg && state.cfg.ppsLo == null;
   ["ppsc", "ppscLo", "ppscHi", "ppscA"].forEach((id) => ($(id).disabled = oldPps)); $("lab-ppsc").classList.toggle("off", oldPps);
 }

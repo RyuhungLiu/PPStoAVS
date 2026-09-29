@@ -204,6 +204,19 @@ Flash layout (64 KB, 128-byte pages):
 
 Flash writes stall the CPU for ~4.5 ms, so they only run when both PD ports have been idle for 300 ms.
 
+## UFCS front end (experimental)
+
+Lab setting *UFCS on the front port* (off by default). At power-up the converter checks the front D+/D−; if the
+charger answers the UFCS handshake (T/TAF 083-2022), the front port runs UFCS instead of PD. Its output modes are
+turned into equivalent PD capabilities — Fixed 5/9/15/20 V where a mode covers them, plus one PPS per mode — and the
+device's requests become UFCS Requests, so every rear mode, compensation and Lab item works unchanged.
+Chargers that do not answer fall back to PD. UFCS shares D+/D− with USB HID, so the host tool cannot connect while
+UFCS is active; change settings with the charger unplugged.
+
+`make BUILD=build_ufcs EXTRA_DEFS=-DUFCS_PROBE` builds a probe image instead: it pings, reads the output modes, requests
+each mode's voltage (up to 20 V) and polls Source_Information, logging raw packets and steps. The switch stays off.
+Read the result in the host tool's Records tab after plugging into a PC.
+
 ## Risks
 
 - **Charge pump** — TIM2 set up from datasheet DS2 §4 steps; whether CCER channels 3/4 must be enabled
