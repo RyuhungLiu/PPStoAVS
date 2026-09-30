@@ -13,3 +13,4 @@ void usb_hid_init(void);
 bool usb_hid_configured(void);
 bool usb_hid_receive(uint8_t *buf);         /* 取出一条主机报告（64 字节）；没有则返回 false */
 bool usb_hid_send(const uint8_t *buf);      /* 发送一条报告；上一条未发完返回 false */
+bool usb_hid_tx_busy(void);                 /* 上一条报告还没被主机取走 */

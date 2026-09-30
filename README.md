@@ -204,11 +204,27 @@ Flash layout (64 KB, 128-byte pages):
 
 | Range | Use |
 |---|---|
-| `0x0000–0xBEFF` | Firmware |
+| `0x0000–0x17FF` | Bootloader (6 KB) |
+| `0x1800–0xBDFF` | Application |
+| `0xBE00–0xBE7F` | Boot-to-bootloader flag page |
+| `0xBE80–0xBEFF` | Application header (size, CRC-32, version) |
 | `0xBF00–0xBFFF` | Settings (2 pages, alternating, CRC) |
 | `0xC000–0xFFFF` | Log ring (128 pages, CRC per page) |
 
 Flash writes stall the CPU for ~4.5 ms, so they only run when both PD ports have been idle for 300 ms.
+
+### Online update (bootloader)
+
+The bootloader runs first after every reset. It starts the application if the header and the CRC-32 are valid;
+otherwise (new chip, interrupted update) it stays in bootloader mode. In bootloader mode the front D+/D− is the same
+USB HID device (same VID/PID), the rear has no output and PD is off. Protocol: [`src/iap.h`](src/iap.h).
+
+The host tool's **Firmware** tab shows the mode and flashes an application `.bin` or `.hex` (a full image works too):
+*Flash* enters the bootloader, writes and verifies the file, then starts the application. The header is written last,
+so an interrupted update leaves the device in the bootloader and it can be flashed again. Settings and records are kept.
+
+First flash (or an older firmware without a bootloader): program the **full image** with WCH-LinkUtility.
+Firmware v0.9.0 and older cannot be updated this way.
 
 ## UFCS front end (unstable)
 
@@ -247,7 +263,14 @@ bash scripts/setup_sdk.sh
 "/c/MounRiver/MounRiver_Studio2/resources/app/resources/win32/others/Build_Tools/Make/bin/make.exe"
 ```
 
-Output: `build/PPStoAVS.hex` / `.bin`. Prebuilt images are attached to the GitHub release.
+Output: `build/PPStoAVS.hex` / `.bin` (application, linked at `0x1800`). Prebuilt images are attached to the GitHub release.
+
+Bootloader and full image (bootloader + application + header, for the first flash):
+
+```bash
+make -f Makefile.bl
+python scripts/mkfull.py        # build/PPStoAVS-full.hex / .bin
+```
 
 ## Flashing
 

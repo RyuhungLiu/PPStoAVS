@@ -15,10 +15,17 @@
 #define FLASH_KEY1      0x45670123u
 #define FLASH_KEY2      0xCDEF89ABu
 
+/* 程序只写配置/记录区与进入 BL 的标志页；BL 只写程序区（含标志页、程序头页） */
 static bool in_data_area(uint32_t addr)
 {
-    return (addr & (FLASH_PAGE_SIZE - 1)) == 0 && addr >= CFG_FLASH_ADDR &&
-           addr < LOG_FLASH_ADDR + LOG_FLASH_PAGES * FLASH_PAGE_SIZE;
+    if (addr & (FLASH_PAGE_SIZE - 1))
+        return false;
+#ifdef BOOTLOADER
+    return addr >= APP_ADDR && addr < CFG_FLASH_ADDR;
+#else
+    return addr == BL_FLAG_ADDR ||
+           (addr >= CFG_FLASH_ADDR && addr < LOG_FLASH_ADDR + LOG_FLASH_PAGES * FLASH_PAGE_SIZE);
+#endif
 }
 
 static void unlock(void)

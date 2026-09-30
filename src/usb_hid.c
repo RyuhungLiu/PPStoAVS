@@ -57,7 +57,12 @@ static const uint8_t cfg_desc[CFG_DESC_LEN] = {
     7, USB_DESCR_TYP_ENDP, 0x01, 0x03, USB_HID_REPORT_LEN, 0, 1,            /* EP1 OUT */
 };
 
-static const char *const str_ascii[] = {NULL, "PPStoAVS", "PPStoAVS Bridge", NULL};
+#ifdef BOOTLOADER
+#define USB_PRODUCT_NAME "PPStoAVS Bootloader"
+#else
+#define USB_PRODUCT_NAME "PPStoAVS Bridge"
+#endif
+static const char *const str_ascii[] = {NULL, "PPStoAVS", USB_PRODUCT_NAME, NULL};
 static const uint8_t zero_report[USB_HID_REPORT_LEN];
 
 static uint8_t ep0_buf[EP0_SIZE] __attribute__((aligned(4)));
@@ -147,6 +152,11 @@ bool usb_hid_receive(uint8_t *buf)
     USBFSD->UEP1_RX_CTRL = (USBFSD->UEP1_RX_CTRL & ~USBFS_UEP_R_RES_MASK) | USBFS_UEP_R_RES_ACK;
     NVIC_EnableIRQ(USBFS_IRQn);
     return true;
+}
+
+bool usb_hid_tx_busy(void)
+{
+    return in_busy;
 }
 
 bool usb_hid_send(const uint8_t *buf)

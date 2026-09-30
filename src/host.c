@@ -7,6 +7,7 @@
 #include "evlog.h"
 #include "fe_sink.h"
 #include "flash_io.h"
+#include "iap.h"
 #include "pdinfo.h"
 #include "power_sw.h"
 #include "timebase.h"
@@ -22,6 +23,7 @@ enum
     CMD_LOG_SESSIONS = 0x20,
     CMD_LOG_READ     = 0x21,
     CMD_LOG_CLEAR    = 0x22,
+    /* CMD_SYS_INFO、CMD_ENTER_BL 见 iap.h */
 };
 
 enum
@@ -129,6 +131,8 @@ static uint8_t cmd_cfg_set(const cfg_t *c)
     return ST_OK;
 }
 
+static bool enter_bl_pending;
+
 static uint8_t handle(const uint8_t *req, wr_t *w)
 {
     const uint8_t *arg = &req[2];
@@ -204,6 +208,27 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
         evlog_clear();
         return ST_OK;
 
+    case CMD_SYS_INFO:
+    {
+        const iap_hdr_t *h = iap_hdr();
+        bool ok = iap_hdr_ok(h);
+        put8(w, 1);                     /* 1 = APP */
+        put16(w, 0);                    /* BL 版本只有 BL 模式下报告 */
+        put8(w, IAP_PROTO);
+        put8(w, 1);
+        put16(w, FW_VERSION);
+        put32(w, ok ? h->size : 0);
+        put32(w, APP_BASE);
+        put32(w, APP_MAX_SIZE);
+        return ST_OK;
+    }
+
+    case CMD_ENTER_BL:
+        if (arg[0] != 'B' || arg[1] != 'L')
+            return ST_BAD_ARG;
+        enter_bl_pending = true;        /* 应答发出后再写标志并复位 */
+        return ST_OK;
+
     default:
         return ST_BAD_CMD;
     }
@@ -230,4 +255,18 @@ void host_process(void)
     rsp[1] = req[1];
     rsp[2] = handle(req, &w);
     rsp_pending = !usb_hid_send(rsp);
+    if (enter_bl_pending)
+    {
+        /* 等应答被主机取走（最多 100ms），再写标志页并复位；后端输出随复位断开 */
+        uint32_t t0 = millis();
+        while (rsp_pending || usb_hid_tx_busy())
+        {
+            if (rsp_pending && usb_hid_send(rsp))
+                rsp_pending = false;
+            if (millis() - t0 > 100)
+                break;
+        }
+        delay_ms(20);           /* 让主机把应答读走再复位 */
+        iap_enter_bootloader();
+    }
 }

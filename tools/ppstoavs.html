@@ -166,12 +166,16 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
 .empty { color: var(--muted); padding: 10px 0; }
 
 /* ---------- 設定：左邊是段落名稱，右邊是控制項 ---------- */
-#view-settings { gap: 0; }
+#view-settings, #view-fw { gap: 0; }
 #view-settings .grid2 { display: block; }
-#view-settings .card { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 32px; padding: 22px 0 24px; }
-#view-settings .card > h3 { grid-column: 1; grid-row: 1 / span 12; align-self: start; margin: 0; }
-#view-settings .card > :not(h3) { grid-column: 2; min-width: 0; }
-@media (max-width: 760px) { #view-settings .card { display: block; } #view-settings .card > h3 { margin-bottom: 12px; } }
+#view-settings .card, #view-fw .card { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 32px; padding: 22px 0 24px; }
+#view-settings .card > h3, #view-fw .card > h3 { grid-column: 1; grid-row: 1 / span 12; align-self: start; margin: 0; }
+#view-settings .card > :not(h3), #view-fw .card > :not(h3) { grid-column: 2; min-width: 0; }
+@media (max-width: 760px) { #view-settings .card, #view-fw .card { display: block; } #view-settings .card > h3, #view-fw .card > h3 { margin-bottom: 12px; } }
+.tab:disabled { opacity: .35; cursor: default; }
+.fwbar { height: 10px; border: 1px solid var(--line-strong); border-radius: 5px; overflow: hidden; background: var(--soft); margin-top: 12px; max-width: 420px; }
+.fwbar > div { height: 100%; width: 0; background: var(--gold); }
+input[type=file] { max-width: 100%; }
 .modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 560px) { .modes { grid-template-columns: 1fr; } }
 .opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 11px 13px; cursor: pointer; }
@@ -273,6 +277,7 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
     <button class="tab" role="tab" data-tab="status" data-i18n="tabStatus"></button>
     <button class="tab" role="tab" data-tab="settings" data-i18n="tabSettings"></button>
     <button class="tab" role="tab" data-tab="log" data-i18n="tabLog"></button>
+    <button class="tab" role="tab" data-tab="fw" data-i18n="tabFw"></button>
     <button class="tab" role="tab" data-tab="sim" data-i18n="tabSim"></button>
   </nav>
 </div>
@@ -313,6 +318,31 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
     <div class="grid2" id="infoCards">
       <div class="card"><h3><span data-i18n="infoDev"></span><span class="tag" id="batTag"></span></h3><div id="infoDev"></div></div>
       <div class="card"><h3 data-i18n="infoChg"></h3><div id="infoChg"></div></div>
+    </div>
+  </div>
+
+  <!-- ===== 韌體（線上升級） ===== -->
+  <div class="view" id="view-fw" hidden>
+    <div class="card">
+      <h3 data-i18n="fwRun"></h3>
+      <div>
+        <div class="kv" id="fwKv"></div>
+        <div class="inline" style="margin-top:14px">
+          <button class="btn" id="fwEnter" data-i18n="fwEnter"></button>
+          <button class="btn" id="fwBoot" data-i18n="fwBoot"></button>
+        </div>
+        <div class="small muted" id="fwHint" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 data-i18n="fwUpdate"></h3>
+      <div>
+        <div class="inline"><input type="file" id="fwFile" accept=".bin,.hex"><button class="btn primary" id="fwGo" data-i18n="fwGo"></button></div>
+        <div class="small muted" id="fwFileInfo" style="margin-top:8px"></div>
+        <div class="fwbar" id="fwBar" hidden><div id="fwProg"></div></div>
+        <div class="small" id="fwMsg" style="margin-top:8px"></div>
+        <ul class="small muted" data-i18n-list="fwNotes" style="margin:12px 0 0;padding-left:18px"></ul>
+      </div>
     </div>
   </div>
 
@@ -525,7 +555,27 @@ const T = {
   en: {
     connect: "Connect", disconnect: "Disconnect", connected: "Connected", notConnected: "Not connected",
     noHid: "WebHID is not available in this browser. Use desktop Chrome or Edge.",
-    tabStatus: "Status", tabSettings: "Settings", tabLog: "Records",
+    tabStatus: "Status", tabSettings: "Settings", tabLog: "Records", tabFw: "Firmware",
+    fwRun: "Running", fwUpdate: "Update", fwEnter: "Enter bootloader", fwBoot: "Start application", fwGo: "Flash",
+    fwRowMode: "Mode", fwRowApp: "Application", fwRowBl: "Bootloader", fwRowSize: "Application size",
+    fwModeApp: "Application", fwModeBl: "Bootloader", fwModeOld: "Application without online update", fwNoDev: "Not connected",
+    fwHintApp: "Entering the bootloader cuts the rear output and stops PD. The page reconnects by itself.",
+    fwHintBl: "The bootloader is idle: the rear has no output and PD is off. Flash a file or start the application.",
+    fwHintOld: "This firmware has no bootloader. Flash the full image once with WCH-LinkUtility (power-off erase); later updates work here.",
+    fwHintNone: "Connect to the device to see its mode.",
+    fwInvalid: "no valid application", fwNone: "none",
+    fwFile: (n, sz, v, crc) => `${n} · ${sz} bytes · ${v ? fmtFw(v) : "?"} · CRC ${crc.toString(16).toUpperCase().padStart(8, "0")}`,
+    fwPick: "Choose the application file (.bin or .hex).",
+    fwBig: (max) => `The application is larger than ${max} bytes.`,
+    fwBad: "This does not look like an application image.",
+    fwConfirmEnter: "The rear output stops and the device reboots into the bootloader. Continue?",
+    fwStepEnter: "Entering the bootloader…", fwStepWait: "Waiting for the device…", fwStepWrite: (p) => `Writing ${p}%`,
+    fwStepVerify: "Verifying…", fwStepBoot: "Starting the application…", fwDone: "Done. The application is running.",
+    fwFail: (n) => `Flash failed (status ${n}). The bootloader stays active; try again.`,
+    fwLost: "The device did not come back. Replug it and press Connect.",
+    fwNotes: ["Use the application file of a release: PPStoAVS-v….bin. A full image (…-full.bin or .hex) also works; only the application part is written.",
+      "If the update is interrupted, the device stays in the bootloader. Connect again and flash once more.",
+      "Settings and records are kept."],
     guideTitle: "How to connect", guide1: "Plug the front Type-C plug into a computer (no charger needed).",
     guide2: "Click Connect at the top right.", guide3: "Select \"PPStoAVS Bridge\" and allow access.",
     charger: "Charger (front)", converter: "Converter", device: "Device (rear)",
@@ -683,7 +733,27 @@ const T = {
   zh: {
     connect: "連線", disconnect: "中斷連線", connected: "已連線", notConnected: "未連線",
     noHid: "此瀏覽器不支援 WebHID，請改用桌面版 Chrome 或 Edge。",
-    tabStatus: "狀態", tabSettings: "設定", tabLog: "記錄",
+    tabStatus: "狀態", tabSettings: "設定", tabLog: "記錄", tabFw: "韌體",
+    fwRun: "運作狀態", fwUpdate: "更新", fwEnter: "進入 Bootloader", fwBoot: "啟動應用程式", fwGo: "刷寫",
+    fwRowMode: "模式", fwRowApp: "應用程式", fwRowBl: "Bootloader", fwRowSize: "應用程式大小",
+    fwModeApp: "應用程式", fwModeBl: "Bootloader", fwModeOld: "應用程式（不支援線上更新）", fwNoDev: "未連線",
+    fwHintApp: "進入 Bootloader 會中斷後端輸出並停止 PD，頁面會自動重新連線。",
+    fwHintBl: "Bootloader 待命中：後端沒有輸出，PD 也未運作。可以刷寫檔案，或啟動應用程式。",
+    fwHintOld: "此韌體沒有 Bootloader。請先用 WCH-LinkUtility（斷電擦除）燒錄一次完整映像，之後就能在這裡更新。",
+    fwHintNone: "連線後才能看到裝置模式。",
+    fwInvalid: "沒有有效的應用程式", fwNone: "無",
+    fwFile: (n, sz, v, crc) => `${n} · ${sz} 位元組 · ${v ? fmtFw(v) : "?"} · CRC ${crc.toString(16).toUpperCase().padStart(8, "0")}`,
+    fwPick: "請選擇應用程式檔案（.bin 或 .hex）。",
+    fwBig: (max) => `應用程式超過 ${max} 位元組。`,
+    fwBad: "這不像是應用程式映像。",
+    fwConfirmEnter: "後端輸出會中斷，裝置將重新啟動進入 Bootloader。要繼續嗎？",
+    fwStepEnter: "正在進入 Bootloader…", fwStepWait: "等待裝置重新連線…", fwStepWrite: (p) => `寫入中 ${p}%`,
+    fwStepVerify: "驗證中…", fwStepBoot: "正在啟動應用程式…", fwDone: "完成，應用程式已在運作。",
+    fwFail: (n) => `刷寫失敗（狀態 ${n}）。Bootloader 仍在運作，請重試。`,
+    fwLost: "裝置沒有重新出現。請重新插拔後按「連線」。",
+    fwNotes: ["請使用發行版的應用程式檔案：PPStoAVS-v….bin。完整映像（…-full.bin 或 .hex）也可以，只會寫入應用程式的部分。",
+      "更新中斷時，裝置會停在 Bootloader，重新連線後再刷寫一次即可。",
+      "設定與記錄會保留。"],
     guideTitle: "連線步驟", guide1: "把前端 Type-C 公頭插到電腦（不需要接充電器）。",
     guide2: "按右上角「連線」。", guide3: "選擇「PPStoAVS Bridge」並允許存取。",
     charger: "充電器（前端）", converter: "轉換器", device: "設備（後端）",
@@ -841,9 +911,9 @@ const T = {
 };
 /* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
 T.zhs = (() => {
-  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组";
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组運运帶带將将繼继嗎吗證证檔档裝装";
   const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
-  const phr = [["韌體", "固件"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
+  const phr = [["韌體", "固件"], ["檔案", "文件"], ["裝置", "设备"], ["應用程式", "应用程序"], ["位元組", "字节"], ["映像", "镜像"], ["程式", "程序"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
   const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
   const walk = (v) => typeof v === "string" ? cv(v) : Array.isArray(v) ? v.map(walk) : typeof v === "function" ? (...a) => walk(v(...a)) : v;
   return Object.fromEntries(Object.entries(T.zh).map(([k, v]) => [k, walk(v)]));
@@ -915,12 +985,12 @@ function onReport(e) {
   const b = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
   if (waiter && b[0] === (waiter.cmd | 0x80) && b[1] === waiter.tag) { const w = waiter; waiter = null; clearTimeout(w.timer); w.resolve(b); }
 }
-function request(cmd, payload = []) {
+function request(cmd, payload = [], ms = 1500) {
   const run = () => new Promise((resolve, reject) => {
     if (!dev || !dev.opened) return reject(new Error(t("notConnected")));
     const tag = (tagCtr = (tagCtr + 1) & 0xFF);
     const buf = new Uint8Array(64); buf[0] = cmd; buf[1] = tag; buf.set(payload.slice(0, 62), 2);
-    waiter = { cmd, tag, resolve, timer: setTimeout(() => { waiter = null; reject(new Error("timeout")); }, 1500) };
+    waiter = { cmd, tag, resolve, timer: setTimeout(() => { waiter = null; reject(new Error("timeout")); }, ms) };
     dev.sendReport(0, buf).catch((err) => { waiter = null; reject(err); });
   }).then((b) => { if (b[2] !== 0) throw new Error("status " + b[2]); return b.subarray(3); });
   const p = queue.then(run, run);
@@ -928,11 +998,21 @@ function request(cmd, payload = []) {
   return p;
 }
 
+let opening = false;
 async function openDevice(d) {
-  if (!d.opened) await d.open();
-  dev = d;
-  dev.addEventListener("inputreport", onReport);
-  renderConn();
+  if (opening) return;
+  opening = true;
+  try {
+    if (!d.opened) await d.open();
+    dev = d;
+    dev.addEventListener("inputreport", onReport);
+    renderConn();
+    await refreshSys();
+    if (isBl()) { setTab("fw"); renderAll(); return; }     /* Bootloader 模式：只有韌體頁可用 */
+    await openApp();
+  } finally { opening = false; }
+}
+async function openApp() {
   await refreshInfo();
   await loadCfg(true);
   await refreshStatus();
@@ -947,9 +1027,10 @@ async function connect() {
 }
 
 /* ================= state ================= */
-const state = { info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, cfgSaving: false,
+function isBl() { return !!state.sys && state.sys.mode === 2; }
+const state = { sys: null, fw: null, busy: false, info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, cfgSaving: false,
   sessions: [], current: 0, ramMask: 0, log: null, filter: "all", tab: "status" };
-function resetState() { Object.assign(state, { info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, sessions: [], log: null }); }
+function resetState() { Object.assign(state, { sys: null, info: null, status: null, frontCaps: [], rearCaps: [], rearSrc: [], cfg: null, sessions: [], log: null }); }
 
 async function refreshInfo() {
   const p = await request(0x01);
@@ -981,7 +1062,8 @@ function renderConn() {
   $("connDot").className = "dot" + (dev ? " on" : "");
   $("connText").textContent = dev ? t("connected") : t("notConnected");
   const i = state.info;
-  $("devInfo").textContent = dev && i ? `· ${t("fw")} ${fmtFw(i.fw)} · ${t("sessionN")(i.session)}` : "";
+  $("devInfo").textContent = isBl() ? `· ${t("fwModeBl")}` : dev && i ? `· ${t("fw")} ${fmtFw(i.fw)} · ${t("sessionN")(i.session)}` : "";
+  document.querySelectorAll(".tab").forEach((b) => (b.disabled = isBl() && !["fw", "sim"].includes(b.dataset.tab)));
   $("guide").hidden = !!dev;
   /* 設定表單離線也可修改（供轉換模擬）；套用等按鈕需要連線 */
   document.querySelectorAll("#view-settings button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
@@ -992,8 +1074,9 @@ function renderConn() {
 function setTab(name) {
   state.tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-  ["status", "settings", "log", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  ["status", "settings", "log", "fw", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
   if (name === "sim") renderSim();
+  if (name === "fw") renderFw();
   try { localStorage.setItem("tab", name); } catch (e) {}
 }
 
@@ -1476,6 +1559,144 @@ async function applyCfg(defaults) {
 }
 function flash(text) { const el = $("dirtyText"); el.textContent = text; el.style.color = "var(--ok)"; setTimeout(updateDirty, 3000); }
 
+/* ================= firmware / 線上升級 ================= */
+const IAP_ST_MAX = 6;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const crcTab = (() => { const t = new Uint32Array(256); for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcTab[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+
+async function refreshSys() {
+  try {
+    const p = await request(0x30);
+    state.sys = { mode: p[0], blVer: u16(p, 1), proto: p[3], appValid: !!p[4], appVer: u16(p, 5), appSize: u32(p, 7), appBase: u32(p, 11), appMax: u32(p, 15) };
+  } catch (e) { state.sys = { mode: 0, appMax: 0xA600, appBase: 0x1800 }; }   /* 舊韌體沒有這個命令 */
+}
+
+/* Intel HEX → 位元組陣列（位址 0x0800_0000 起的別名視同 0 起）；只取應用程式區間 */
+function parseHex(text, base, max) {
+  const mem = new Map(); let ext = 0, top = -1;
+  for (const line of text.split(/\r?\n/)) {
+    if (line[0] !== ":") continue;
+    const n = parseInt(line.substr(1, 2), 16), a = parseInt(line.substr(3, 4), 16), ty = parseInt(line.substr(7, 2), 16);
+    if (ty === 1) break;
+    if (ty === 4) ext = parseInt(line.substr(9, 4), 16) * 65536;
+    else if (ty === 2) ext = parseInt(line.substr(9, 4), 16) * 16;
+    else if (ty === 0) for (let i = 0; i < n; i++) {
+      let addr = ext + a + i; if (addr >= 0x08000000) addr -= 0x08000000;
+      if (addr >= base && addr < base + max) { mem.set(addr, parseInt(line.substr(9 + i * 2, 2), 16)); top = Math.max(top, addr); }
+    }
+  }
+  if (top < 0) return null;
+  const out = new Uint8Array(Math.ceil((top + 1 - base) / 4) * 4).fill(0xFF);
+  mem.forEach((v, addr) => (out[addr - base] = v));
+  return out;
+}
+/* 完整映像（.bin）：程式頭頁在 0xBE80，大小取自頭；單純的應用程式 .bin 直接使用 */
+function appFromBin(b, base, max) {
+  if (b.length === 0xBF00 && u32(b, 0xBE80) === 0x31505041) return b.slice(base, base + u32(b, 0xBE84));
+  const out = new Uint8Array(Math.ceil(b.length / 4) * 4).fill(0xFF); out.set(b); return out;
+}
+/* 應用程式映像開頭附近有 app_info（魔數 'PPSA'、版本 u16，見 src/main.c）；Bootloader 等其他映像沒有 */
+function appVersion(b) {
+  for (let o = 0; o + 8 <= Math.min(b.length, 0x400); o += 4) if (u32(b, o) === 0x41535050) return u16(b, o + 4);
+  return 0;
+}
+async function onFwFile() {
+  state.fw = null; $("fwMsg").textContent = "";
+  const f = $("fwFile").files[0];
+  const sys = state.sys || { appBase: 0x1800, appMax: 0xA600 };
+  if (f) {
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const bytes = /\.hex$/i.test(f.name) ? parseHex(new TextDecoder().decode(buf), sys.appBase, sys.appMax) : appFromBin(buf, sys.appBase, sys.appMax);
+    if (!bytes || bytes.length < 0x800 || !appVersion(bytes) || (bytes[0] & 0x7F) !== 0x6F) $("fwFileInfo").textContent = t("fwBad");
+    else if (bytes.length > sys.appMax) $("fwFileInfo").textContent = t("fwBig")(sys.appMax);
+    else { state.fw = { name: f.name, bytes, ver: appVersion(bytes), crc: crc32(bytes) }; $("fwFileInfo").textContent = t("fwFile")(f.name, bytes.length, state.fw.ver, state.fw.crc); }
+  } else $("fwFileInfo").textContent = "";
+  renderFw();
+}
+function renderFw() {
+  const sys = state.sys, mode = !dev ? -1 : sys ? sys.mode : 0;
+  const kv = [];
+  kv.push([t("fwRowMode"), !dev ? t("fwNoDev") : mode === 2 ? t("fwModeBl") : mode === 1 ? t("fwModeApp") : t("fwModeOld")]);
+  if (dev && mode >= 1) {
+    const appVer = mode === 1 ? sys.appVer : sys.appValid ? sys.appVer : 0;
+    kv.push([t("fwRowApp"), mode === 2 && !sys.appValid ? t("fwInvalid") : (appVer ? fmtFw(appVer) : "?")]);
+    kv.push([t("fwRowBl"), mode === 2 ? fmtFw(sys.blVer) : "—"]);
+    if (sys.appSize) kv.push([t("fwRowSize"), sys.appSize + " B"]);
+  }
+  $("fwKv").innerHTML = kv.map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("");
+  $("fwHint").textContent = !dev ? t("fwHintNone") : mode === 2 ? t("fwHintBl") : mode === 1 ? t("fwHintApp") : t("fwHintOld");
+  const idle = !state.busy;
+  $("fwEnter").disabled = !(idle && mode === 1);
+  $("fwBoot").disabled = !(idle && mode === 2 && sys.appValid);
+  $("fwFile").disabled = !idle;
+  $("fwGo").disabled = !(idle && (mode === 1 || mode === 2) && state.fw);
+}
+function fwMsg(text, bad) { $("fwMsg").textContent = text; $("fwMsg").style.color = bad ? "var(--bad)" : ""; }
+function fwProgress(p) { $("fwBar").hidden = p == null; if (p != null) $("fwProg").style.width = Math.round(p * 100) + "%"; }
+const matchDev = (d) => d.vendorId === FILTER.vendorId && d.productId === FILTER.productId;
+
+/* 裝置重啟後等它回來（連線事件或輪詢） */
+async function waitDevice(ms = 12000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    await sleep(300);
+    if (dev && dev.opened && state.sys) return true;
+    const d = (await navigator.hid.getDevices()).find(matchDev);
+    if (d && !d.opened) { try { await openDevice(d); } catch (e) {} }
+  }
+  return !!(dev && dev.opened);
+}
+/* 会让装置复位的命令：应答可能来不及送到（USB 随复位断开），超时不算失败，后面等装置回来并确认模式即可 */
+async function resetCmd(cmd, payload) {
+  try { await request(cmd, payload); } catch (e) { if (e.message !== "timeout") throw e; }
+}
+const iapErr = (e) => (/^status (\d+)/.exec(e.message) || [0, e.message])[1];
+
+async function doEnterBl() {
+  fwMsg(t("fwStepEnter"));
+  await resetCmd(0x31, [0x42, 0x4C]);
+  dev = null; state.sys = null; renderAll();          /* 裝置隨即重啟 */
+  fwMsg(t("fwStepWait"));
+  if (!(await waitDevice())) throw new Error("lost");
+  if (!isBl()) throw new Error("lost");
+}
+async function doFlash() {
+  const f = state.fw, size = f.bytes.length;
+  await request(0x40, [size & 255, (size >> 8) & 255, (size >> 16) & 255, size >>> 24, f.crc & 255, (f.crc >>> 8) & 255, (f.crc >>> 16) & 255, f.crc >>> 24, f.ver & 255, f.ver >> 8]);
+  for (let off = 0; off < size; off += 56) {
+    const chunk = f.bytes.subarray(off, Math.min(off + 56, size));
+    await request(0x41, [off & 255, (off >> 8) & 255, (off >> 16) & 255, off >>> 24, chunk.length, ...chunk]);
+    if ((off / 56) % 8 === 0) { fwProgress(off / size); fwMsg(t("fwStepWrite")(Math.round((off / size) * 100))); }
+  }
+  fwMsg(t("fwStepVerify")); fwProgress(1);
+  await request(0x42, [], 5000);
+}
+async function doBoot() {
+  await resetCmd(0x43);
+  dev = null; state.sys = null; renderAll();
+  fwMsg(t("fwStepBoot"));
+  if (!(await waitDevice())) throw new Error("lost");
+}
+async function runFw(steps) {
+  state.busy = true; renderFw(); fwProgress(null);
+  try { await steps(); }
+  catch (e) { fwMsg(e.message === "lost" ? t("fwLost") : t("fwFail")(iapErr(e)), true); }
+  finally { state.busy = false; renderFw(); }
+}
+$("fwFile").onchange = onFwFile;
+$("fwEnter").onclick = () => { if (confirm(t("fwConfirmEnter"))) runFw(async () => { await doEnterBl(); fwMsg(t("fwHintBl")); }); };
+$("fwBoot").onclick = () => runFw(async () => { await doBoot(); fwMsg(t("fwDone")); setTab("status"); });
+$("fwGo").onclick = () => {
+  if (state.sys && state.sys.mode === 1 && !confirm(t("fwConfirmEnter"))) return;
+  runFw(async () => {
+    if (state.sys.mode === 1) await doEnterBl();
+    await doFlash();
+    await doBoot();
+    fwProgress(null); fwMsg(t("fwDone")); setTab("status");
+  });
+};
+
 /* ================= records ================= */
 async function loadSessions() {
   const p = await request(0x20);
@@ -1717,7 +1938,7 @@ function applyI18n() {
   $("lang").value = lang;
   renderAll();
 }
-function renderAll() { renderConn(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); simRowsHtml(); renderSim(); }
+function renderAll() { renderConn(); renderFw(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); simRowsHtml(); renderSim(); }
 function loadSessionsLabelsOnly() {
   const sel = $("sessionSel");
   Array.from(sel.options).forEach((o) => {
@@ -1814,7 +2035,7 @@ $("lang").onchange = (e) => { lang = e.target.value; try { localStorage.setItem(
 
 let tick = 0;
 setInterval(async () => {
-  if (!dev) return;
+  if (!dev || isBl() || state.busy) return;
   try {
     await refreshStatus();
     if (++tick % 3 === 0) { await refreshInfo(); if (state.cfgSaving || $("cfgState").textContent === t("saving")) await loadCfg(false); }
@@ -1823,7 +2044,7 @@ setInterval(async () => {
 
 let startTab = "status";
 try { startTab = localStorage.getItem("tab") || startTab; } catch (e) {}
-setTab(["status", "settings", "log", "sim"].includes(startTab) ? startTab : "status");
+setTab(["status", "settings", "log", "fw", "sim"].includes(startTab) ? startTab : "status");
 /* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
 const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
   compMode: 2, compVal: 15, flags2: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60 };
@@ -1834,7 +2055,8 @@ if (!("hid" in navigator)) {
   const g = $("guide"); g.className = "notice bad"; g.innerHTML = `<h3>${esc(t("noHid"))}</h3>`;
   $("btnConnect").disabled = true;
 } else {
-  navigator.hid.addEventListener("disconnect", (e) => { if (e.device === dev) { dev = null; resetState(); renderAll(); } });
+  navigator.hid.addEventListener("disconnect", (e) => { if (e.device === dev) { dev = null; if (!state.busy) resetState(); renderAll(); } });
+  navigator.hid.addEventListener("connect", (e) => { if (matchDev(e.device) && !dev) openDevice(e.device).catch((err) => msg(err.message)); });
   navigator.hid.getDevices().then((list) => {
     const d = list.find((x) => x.vendorId === FILTER.vendorId && x.productId === FILTER.productId);
     if (d) openDevice(d).catch((e) => msg(e.message));

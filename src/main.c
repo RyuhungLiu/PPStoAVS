@@ -27,6 +27,14 @@
 #include "ufcs.h"
 #include "usb_hid.h"
 
+/* 应用信息：链接时紧跟向量表（Makefile 生成链接脚本时插入 .appinfo），上位机据魔数 'PPSA' 认出应用程序映像并读版本 */
+__attribute__((section(".appinfo"), used)) const struct
+{
+    uint32_t magic;
+    uint16_t version;
+    uint16_t reserved;
+} app_info = {0x41535050u, FW_VERSION, 0};
+
 static void watchdog_init(void)
 {
     /* 48MHz / 4096 / 8 ≈ 1.46kHz，计数 0x7F→0x3F 约 43ms 超时 */
