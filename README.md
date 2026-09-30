@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool.
+unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable.
 
 ## Pin assignment
 
