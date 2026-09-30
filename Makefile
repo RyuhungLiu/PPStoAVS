@@ -30,10 +30,16 @@ INC := -Isrc -Isdk/Core -Isdk/Peripheral/inc -Isdk/User
 
 ARCH := -march=rv32imc_zba_zbb_zbc_zbs_xw -mabi=ilp32 -msmall-data-limit=8 -mno-save-restore
 
-CFLAGS := $(EXTRA_DEFS) $(ARCH) -Os -std=gnu99 -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections \
+# 链接时优化：跨文件内联与去重，约省 3.6 KB（make LTO=0 关闭）
+LTO ?= 1
+ifeq ($(LTO),1)
+OPT := -flto
+endif
+
+CFLAGS := $(EXTRA_DEFS) $(ARCH) $(OPT) -Os -std=gnu99 -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections \
           -fno-common -Wall -Wextra -Wno-unused-parameter -g $(INC)
 ASFLAGS := $(ARCH) -x assembler-with-cpp $(INC)
-LDFLAGS := $(ARCH) -T $(BUILD)/link.ld -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(BUILD)/$(TARGET).map \
+LDFLAGS := $(ARCH) $(OPT) -T $(BUILD)/link.ld -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(BUILD)/$(TARGET).map \
            --specs=nano.specs --specs=nosys.specs -Wl,--print-memory-usage
 
 OBJS := $(addprefix $(BUILD)/,$(SRC_C:.c=.o)) $(addprefix $(BUILD)/,$(SRC_S:.S=.o))

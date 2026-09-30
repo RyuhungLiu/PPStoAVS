@@ -1,4 +1,5 @@
 #include "evlog.h"
+#include "cfg.h"
 #include "flash_io.h"
 #include "timebase.h"
 #include <stddef.h>
@@ -37,6 +38,11 @@ static uint8_t session_records;
 static uint16_t dropped;
 static uint32_t last_add_ms;
 static int16_t clear_idx = -1;
+
+static bool log_on(void)
+{
+    return (cfg()->flags3 & CFG3_LOG) != 0;
+}
 
 static const log_page_t *flash_page(uint8_t idx)
 {
@@ -89,11 +95,14 @@ void evlog_init(void)
         next_seq = max_seq + 1;
         session = max_session + 1;
     }
-    for (uint8_t k = 0; k < LOG_ERASE_AHEAD; k++)
+    if (log_on())       /* 记录关闭时不预擦除（不动旧记录、不消耗 Flash 寿命） */
     {
-        flash_page_erase(page_addr((next_idx + k) % LOG_FLASH_PAGES));
+        for (uint8_t k = 0; k < LOG_ERASE_AHEAD; k++)
+        {
+            flash_page_erase(page_addr((next_idx + k) % LOG_FLASH_PAGES));
+        }
+        erased_ahead = LOG_ERASE_AHEAD;
     }
-    erased_ahead = LOG_ERASE_AHEAD;
     cur_reset();
 }
 
@@ -123,7 +132,7 @@ static bool seal(void)
 
 void evlog_add(uint8_t type, const void *payload, uint8_t len)
 {
-    if (clear_idx >= 0)
+    if (clear_idx >= 0 || !log_on())
         return;
     if (session_records >= LOG_MAX_RECORDS || REC_HDR + len > EVLOG_PAGE_DATA)
     {
@@ -192,7 +201,7 @@ bool evlog_flush_step(void)
     if (n_sealed == 0 && cur_fill > 0 && millis() - last_add_ms >= LOG_IDLE_SEAL_MS)
         seal();
 
-    if (n_sealed == 0 && erased_ahead > 0)
+    if (n_sealed == 0 && (erased_ahead > 0 || !log_on()))
         return false;
 
     if (erased_ahead == 0)

@@ -430,6 +430,7 @@ input[type=file] { max-width: 100%; }
 
     <div class="card">
       <h3 data-i18n="secLog"></h3>
+      <label class="check"><input type="checkbox" id="logOn"><div><b data-i18n="logOn"></b><span data-i18n="logOnD"></span></div></label>
       <label class="check"><input type="checkbox" id="logPps"><div><b data-i18n="logPps"></b><span data-i18n="logPpsD"></span></div></label>
     </div>
 
@@ -594,7 +595,7 @@ const T = {
     secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000", maxId5: "500–5000 (5A Lab)",
     hide: "Hide Fixed", hideD: "Hiding 15 V also removes AVS; hiding 20 V limits AVS to 15 V.",
     secProt: "Protection", ovp: "Over-voltage", uvp: "Under-voltage", uvpD: "not checked on PPS contracts", ocp: "Over-current",
-    secLog: "Records", logPps: "Record device PPS requests",
+    secLog: "Records", logOn: "Record events to flash", logOnD: "Off by default. Turn on to record boot, capabilities and requests (needs firmware v0.10.1 or newer). Recording is written to flash; turn it off when you are done.", logPps: "Record device PPS requests",
     logPpsD: "Off by default. PPS devices adjust voltage very often; failed requests are always recorded.",
     logPpsWarn: "PPS devices can adjust voltage several times per second.\n\nConsecutive adjustments are merged, but the 64-record limit per session may still fill up quickly and flash wear increases.\n\nRecord PPS requests anyway?",
     nowTag: "current", saved: "Saved", saving: "Saving…", dirty: "Unsaved changes", clean: "No changes",
@@ -605,7 +606,7 @@ const T = {
     refresh: "Reload", export: "Export JSON", clear: "Clear all",
     clearConfirm: "Erase all records in the device? This cannot be undone.",
     sessionN: (n) => `Session ${n}`, currentS: "current", pages: "pages",
-    colTime: "Time", colEvent: "Event", colDetail: "Detail", noRecords: "No records.",
+    colTime: "Time", colEvent: "Event", colDetail: "Detail", noRecords: "No records.", logOffHint: "Recording is off. Turn on \"Record events to flash\" in Settings and apply.",
     crcBad: "page CRC errors", dropped: "records dropped (per-session limit)",
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
@@ -772,7 +773,7 @@ const T = {
     secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000", maxId5: "500–5000（5A Lab）",
     hide: "隱藏 Fixed", hideD: "隱藏 15V 會同時取消 AVS；隱藏 20V 會讓 AVS 只到 15V。",
     secProt: "保護", ovp: "過壓", uvp: "欠壓", uvpD: "PPS 合約時不檢查", ocp: "過流",
-    secLog: "記錄", logPps: "記錄設備的 PPS 請求",
+    secLog: "記錄", logOn: "記錄事件到 Flash", logOnD: "預設關閉。開啟後才會記錄開機、能力與請求（需韌體 v0.10.1 以上）。記錄會寫入 Flash，用完請關閉。", logPps: "記錄設備的 PPS 請求",
     logPpsD: "預設關閉。PPS 設備會頻繁調壓；失敗的請求一律會記錄。",
     logPpsWarn: "PPS 設備可能每秒調壓好幾次。\n\n連續微調會合併成一條，但每段 64 條的上限仍可能很快用完，Flash 寫入也會增加。\n\n確定要記錄 PPS 請求？",
     nowTag: "目前", saved: "已儲存", saving: "儲存中…", dirty: "有未套用的修改", clean: "沒有修改",
@@ -783,7 +784,7 @@ const T = {
     refresh: "重新讀取", export: "匯出 JSON", clear: "清除全部",
     clearConfirm: "確定要清除設備內的全部記錄？此操作無法復原。",
     sessionN: (n) => `第 ${n} 段`, currentS: "本次", pages: "頁",
-    colTime: "時間", colEvent: "事件", colDetail: "內容", noRecords: "沒有記錄。",
+    colTime: "時間", colEvent: "事件", colDetail: "內容", noRecords: "沒有記錄。", logOffHint: "記錄已關閉。到「設定」開啟「記錄事件到 Flash」並套用。",
     crcBad: "頁 CRC 錯誤", dropped: "筆記錄因每段上限被捨棄",
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
@@ -1466,7 +1467,7 @@ function cfgFromBytes(p, hasComp, hasPps, hasId) {
   return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0,
     fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0, compMode: hasComp ? p[16] : null, compVal: hasComp ? u16(p, 18) : 0,
     flags2: hasComp ? p[15] : null, ppsLo: hasPps ? p[20] : null, ppsHi: hasPps ? p[21] : null, ppsMa50: hasPps ? p[22] : null,
-    feVid: hasId ? u16(p, 24) : null, fePid: hasId ? u16(p, 26) : null, beVid: hasId ? u16(p, 28) : null, bePid: hasId ? u16(p, 30) : null };
+    feVid: hasId ? u16(p, 24) : null, fePid: hasId ? u16(p, 26) : null, beVid: hasId ? u16(p, 28) : null, bePid: hasId ? u16(p, 30) : null, flags3: hasId ? p[23] : null };
 }
 function cfgToBytes(c) {
   const b = new Uint8Array(32);
@@ -1474,7 +1475,7 @@ function cfgToBytes(c) {
   b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
   b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0; b[15] = c.flags2 ?? 0;
   b[16] = c.compMode ?? 0; b[18] = (c.compVal ?? 0) & 0xFF; b[19] = (c.compVal ?? 0) >> 8;
-  b[20] = c.ppsLo ?? 0; b[21] = c.ppsHi ?? 0; b[22] = c.ppsMa50 ?? 0;
+  b[20] = c.ppsLo ?? 0; b[21] = c.ppsHi ?? 0; b[22] = c.ppsMa50 ?? 0; b[23] = c.flags3 ?? 0;
   [c.feVid, c.fePid, c.beVid, c.bePid].forEach((v, i) => { b[24 + i * 2] = (v ?? 0) & 0xFF; b[25 + i * 2] = (v ?? 0) >> 8; });
   return Array.from(b);
 }
@@ -1497,6 +1498,8 @@ function readForm() {
     compMode: state.cfg && state.cfg.compMode == null ? null : radio("compMode"), compVal: Math.round(Number($("compVal").value)) || 0,
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
     flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0) | ($("idFe").checked ? 32 : 0) | ($("idBe").checked ? 64 : 0) | ($("avs2ppsMin5").checked ? 128 : 0),
+    /* flags3：bit0 開啟記錄（韌體 v0.10.1 起；舊韌體沒有） */
+    flags3: state.cfg && state.cfg.flags3 == null ? null : $("logOn").checked ? 1 : 0,
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
@@ -1511,6 +1514,7 @@ function writeForm(c) {
   document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
+  $("logOn").checked = !!((c.flags3 ?? 0) & 1); $("logOn").disabled = !(state.info && state.info.fw >= 0xA1);
   $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
@@ -1910,7 +1914,7 @@ function renderLog() {
     ? `<div class="logrow head"><div>${t("colTime")}</div><div>${t("colEvent")}</div><div>${t("colDetail")}</div></div>` +
       shown.map((r) => `<div class="logrow ${r.cls}"><div class="time mono">${(r.t / 1000).toFixed(3)} s</div>` +
         `<div><span class="ev ${r.cls}">${esc(r.name)}</span></div><div class="detail">${r.html}</div></div>`).join("")
-    : `<div class="empty">${t("noRecords")}</div>`;
+    : `<div class="empty">${t(state.cfg && ((state.cfg.flags3 ?? 1) & 1) === 0 && state.info && state.info.fw >= 0xA1 ? "logOffHint" : "noRecords")}</div>`;
   const notes = [];
   if (L.crcErrors) notes.push(`${L.crcErrors} ${t("crcBad")}`);
   if (L.session === state.current && state.info && state.info.dropped) notes.push(`${state.info.dropped} ${t("dropped")}`);
@@ -2047,7 +2051,7 @@ try { startTab = localStorage.getItem("tab") || startTab; } catch (e) {}
 setTab(["status", "settings", "log", "fw", "sim"].includes(startTab) ? startTab : "status");
 /* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
 const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
-  compMode: 2, compVal: 15, flags2: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60 };
+  compMode: 2, compVal: 15, flags2: 0, flags3: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60 };
 writeForm(CFG_DEFAULT);
 applyI18n();
 

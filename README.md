@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image).
+unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records).
 
 ## Pin assignment
 
@@ -190,7 +190,7 @@ Plug the front Type-C into a PC (no charger needed; the board runs from the PC's
 - **Records** — the last power sessions (up to 64 records each): charger PDOs, the PDOs offered to the device
   (logged whenever they change, attached or not), every request (device RDO → charger RDO, voltage, result),
   resets, protection trips, attach/detach. Consecutive PPS/AVS steps on the same PDO are merged into one
-  record with a repeat count. Successful device PPS requests are not logged unless enabled. Export as JSON.
+  record with a repeat count. Successful device PPS requests are not logged unless enabled. Export as JSON. Recording itself is off by default (v0.10.1); turn on "Record events to flash" in Settings first.
 - **Simulator** — enter charger PDOs (Fixed / PPS / SPR AVS / EPR AVS; 5 rows by default, or load the
   connected charger's) and see the PDOs the device would be offered under the current, not yet applied,
   settings. Same rules as the firmware. Works offline.

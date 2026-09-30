@@ -149,7 +149,7 @@ bool cfg_set(const cfg_t *c)
     cur = *c;
     cur.flags2 &= CFG2_MASK;
     cur.reserved2 = 0;
-    cur.reserved3 = 0;
+    cur.flags3 &= CFG3_MASK;
     save_state = SAVE_ERASE;    /* 保存中途再次修改：从擦除重新开始 */
     return true;
 }

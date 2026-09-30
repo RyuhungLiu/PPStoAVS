@@ -41,6 +41,9 @@ typedef enum
 #define CFG2_ID_BE          (1u << 6)   /* 自订后端 Source 身份（be_vid/be_pid 给设备看），与身份透传互斥；默认开启 */
 #define CFG2_AVS_PPS5       (1u << 7)   /* Lab AVS 转 PPS：从 5V 开始（默认 0 = 从 9V 开始，即 AVS 的实际范围） */
 #define CFG2_MASK           (CFG2_AVS_PPS5 | CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS | CFG2_PPS_CUSTOM | CFG2_UFCS | CFG2_ID_FE | CFG2_ID_BE)
+/* flags3 位 */
+#define CFG3_LOG            (1u << 0)   /* 事件记录（默认关闭，需在网页开启；关闭时不写 Flash） */
+#define CFG3_MASK           (CFG3_LOG)
 #define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
 #define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */
@@ -71,7 +74,7 @@ typedef struct __attribute__((packed))
     uint8_t  pps_min_dv;    /* CFG2_PPS_CUSTOM：最低电压，100mV 单位（33 ~ 209） */
     uint8_t  pps_max_dv;    /* CFG2_PPS_CUSTOM：最高电压，100mV 单位（> 最低，≤ 210） */
     uint8_t  pps_ma50;      /* CFG2_PPS_CUSTOM：电流，50mA 单位（10 ~ 100） */
-    uint8_t  reserved3;
+    uint8_t  flags3;        /* CFG3_*：0 = 默认（日志关闭） */
     uint16_t fe_vid;        /* CFG2_ID_FE：前端 Sink 的 VID / PID（VID ≠ 0） */
     uint16_t fe_pid;
     uint16_t be_vid;        /* CFG2_ID_BE：后端 Source 的 VID / PID（VID ≠ 0） */
