@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-experimental Lab UFCS front end and a redesigned host tool.
+unstable Lab UFCS front end and a redesigned host tool.
 
 ## Pin assignment
 
@@ -101,7 +101,11 @@ On by default. The converter reads each side's PD info and answers the other sid
 - **Identity passthrough** (separate switch, off by default)
   - `Discover Identity` answers, VID/PID in the extended info, and the charger's `Manufacturer_Info` come from the
     other side.
-  - When off, the converter's own VID/PID (1209:0001) is used.
+- **Custom IDs** (exclusive with identity passthrough)
+  - The rear can present a custom Source VID/PID to the device (on by default, 5A1E:30A5, an arbitrary ID).
+  - The front can present a custom Sink VID/PID to the charger (off by default).
+  - They are used in `Discover Identity`, the extended info and the rear `Manufacturer_Info`.
+  - When neither is on and passthrough is off, the converter's own VID/PID (1209:0001) is used.
 
 The status page shows the device's identity and battery. The identities read from both sides are also recorded.
 
@@ -117,8 +121,9 @@ in place of PPS when the sink's Sink Modes has the AVS bit (bit 5). Two independ
 
 ### Lab mode: AVS as PPS
 
-Offers the charger's native SPR AVS to the device as a PPS APDO from 5 V to the AVS maximum (modes b/c; a charger
-PPS with the same maximum voltage takes precedence). Requests below 9 V are rejected, since AVS starts at 9 V.
+Offers the charger's native SPR AVS to the device as a PPS APDO up to the AVS maximum (modes b/c; a charger
+PPS with the same maximum voltage takes precedence). The range starts at 9 V by default, the real AVS range; an option
+starts it at 5 V as in earlier versions, in which case requests below 9 V are rejected, since AVS starts at 9 V.
 Voltages are rounded to the nearest 100 mV, e.g. PPS 12.34 V → AVS 12.3 V, 12.36 V → 12.4 V. The current is the lower of
 the two AVS ranges. AVS has no current limiting, so the PPS current limit is not enforced by the charger (OCP still applies).
 
@@ -205,7 +210,7 @@ Flash layout (64 KB, 128-byte pages):
 
 Flash writes stall the CPU for ~4.5 ms, so they only run when both PD ports have been idle for 300 ms.
 
-## UFCS front end (experimental)
+## UFCS front end (unstable)
 
 Lab setting *UFCS on the front port* (off by default). At power-up the converter checks the front D+/D−; if the
 charger answers the UFCS handshake (T/TAF 083-2022), the front port runs UFCS instead of PD. Its output modes are

@@ -3,7 +3,9 @@
 #include <stddef.h>
 #include <string.h>
 
-#define CFG_MAGIC           0x33464350u     /* 'PCF3'：cfg_t 24 字节（v0.7.0 起） */
+#define CFG_MAGIC           0x34464350u     /* 'PCF4'：cfg_t 32 字节（v0.9.0 起） */
+#define CFG_MAGIC_V3        0x33464350u     /* 'PCF3'：cfg_t 前 24 字节（v0.7.0 ~ v0.8.0） */
+#define CFG_V3_SIZE         24
 #define CFG_MAGIC_V2        0x32464350u     /* 'PCF2'：cfg_t 前 20 字节（v0.6.x） */
 #define CFG_V2_SIZE         20
 #define CFG_MAGIC_V1        0x47464350u     /* 'PCFG'：cfg_t 前 16 字节（v0.2.0 ~ v0.5.0） */
@@ -15,10 +17,10 @@ typedef struct
     uint32_t seq;
     cfg_t    cfg;
     uint32_t crc;           /* magic ~ cfg */
-    uint32_t pad[23];
+    uint32_t pad[21];
 } cfg_page_t;
 
-_Static_assert(sizeof(cfg_t) == 24, "cfg_t size");
+_Static_assert(sizeof(cfg_t) == 32, "cfg_t size");
 _Static_assert(sizeof(cfg_page_t) == FLASH_PAGE_SIZE, "cfg_page_t size");
 
 static cfg_t cur;
@@ -49,12 +51,15 @@ static bool page_old_load(const cfg_page_t *page, uint32_t magic, uint8_t size, 
         return false;
     cfg_defaults(out);
     memcpy(out, b + 8, size);
+    if (!(out->flags2 & CFG2_ID_PT))
+        out->flags2 |= CFG2_ID_BE;      /* 后端自订身份默认开启；旧设置里选了身份透传的保持不变 */
     return cfg_valid(out);
 }
 
 static bool page_legacy_load(const cfg_page_t *page, cfg_t *out)
 {
-    return page_old_load(page, CFG_MAGIC_V2, CFG_V2_SIZE, out) || page_old_load(page, CFG_MAGIC_V1, CFG_V1_SIZE, out);
+    return page_old_load(page, CFG_MAGIC_V3, CFG_V3_SIZE, out) || page_old_load(page, CFG_MAGIC_V2, CFG_V2_SIZE, out) ||
+           page_old_load(page, CFG_MAGIC_V1, CFG_V1_SIZE, out);
 }
 
 void cfg_defaults(cfg_t *c)
@@ -73,6 +78,11 @@ void cfg_defaults(cfg_t *c)
     c->pps_min_dv = 33;     /* 自订 PPS 建议值：3.3~16V 3A（未启用） */
     c->pps_max_dv = 160;
     c->pps_ma50 = 60;
+    c->flags2 = CFG2_ID_BE; /* 默认：后端以自订身份应答设备 */
+    c->fe_vid = 0x5A1E;     /* 自编的 VID/PID，并非任何厂商注册的 ID */
+    c->fe_pid = 0x30A6;
+    c->be_vid = 0x5A1E;
+    c->be_pid = 0x30A5;
 }
 
 bool cfg_valid(const cfg_t *c)
@@ -87,6 +97,10 @@ bool cfg_valid(const cfg_t *c)
     if ((c->flags2 & CFG2_PPS_CUSTOM) &&
         (c->pps_min_dv < CFG_PPS_DV_MIN || c->pps_max_dv > CFG_PPS_DV_MAX || c->pps_max_dv <= c->pps_min_dv ||
          c->pps_ma50 < 10 || c->pps_ma50 > 100))
+        return false;
+    if ((c->flags2 & CFG2_ID_PT) && (c->flags2 & (CFG2_ID_FE | CFG2_ID_BE)))
+        return false;   /* 自订身份与身份透传互斥 */
+    if (((c->flags2 & CFG2_ID_FE) && !c->fe_vid) || ((c->flags2 & CFG2_ID_BE) && !c->be_vid))
         return false;
     if (c->comp_mode > CFG_COMP_R || (c->comp_mode == CFG_COMP_V && c->comp_val > CFG_COMP_V_MAX) ||
         (c->comp_mode == CFG_COMP_R && c->comp_val > CFG_COMP_R_MAX))

@@ -2,7 +2,7 @@
  * PD 信息透传：前端读到的充电器信息、后端读到的设备信息缓存起来，由另一端代答。
  *   设备 → 充电器：电池（Battery_Capabilities / Battery_Status / Alert）、Sink_Capabilities_Extended、身份
  *   充电器 → 设备：Source_Capabilities_Extended、Source_Info、Status、Manufacturer_Info、身份
- * PDP 按后端实际能力改写；身份透传关闭时 VID/PID 换成本机的。
+ * PDP 按后端实际能力改写；身份透传关闭时 VID/PID 换成本机的（自订身份打开时用自订的，与身份透传互斥）。
  * 应答时间只有 tReceiverResponse（15ms），来不及现场转问另一端，因此一律用缓存应答。
  */
 #pragma once
@@ -33,6 +33,8 @@ typedef struct
 
 bool pdinfo_on(void);
 bool pdinfo_id_on(void);
+bool pdinfo_fe_custom(void);                    /* 前端以自订 Sink 身份应答充电器 */
+bool pdinfo_be_custom(void);                    /* 后端以自订 Source 身份应答设备 */
 
 /* ---- 设备（后端） ---- */
 void pdinfo_dev_reset(void);                    /* 设备拔出、Hard Reset */

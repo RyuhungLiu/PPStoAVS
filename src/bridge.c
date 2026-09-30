@@ -189,7 +189,7 @@ static int8_t find_native_avs(const pdo_t *c, uint8_t n)
  *  - Lab 后端二次握手：确认设备支持 AVS 之前不给 AVS、改给全部 PPS
  *  - Lab EPR AVS（CFG_EPR_AVS，前端 EPR 模式）：AVS 来源优先取 EPR AVS，只用 15~20V（电流 min(PDP÷20V, 5A)）；
  *    9~15V 段空缺，只有 9V、15V 两点走 Fixed，9~15V 电流 = min(9V、15V Fixed 电流)
- *  - Lab AVS 转 PPS（CFG_AVS_TO_PPS，模式 b/c）：充电器原生 AVS 另外提供为 5V~AVS 最高电压的 PPS，
+ *  - Lab AVS 转 PPS（CFG_AVS_TO_PPS，模式 b/c）：充电器原生 AVS 另外提供为 9V（默认）或 5V（CFG2_AVS_PPS5）~AVS 最高电压的 PPS，
  *    电流取两段 AVS 电流较小者；同一最高电压已有充电器 PPS 时以充电器 PPS 为准
  */
 /* 覆盖某电压、电流最大的充电器 PPS（下标），没有返回 -1 */
@@ -375,7 +375,8 @@ static void build_back_caps(void)
             const pdo_t *a = &fc[nat];
             uint16_t mv = min_u16(a->max_mv, c->max_mv);
             uint16_t ma = (mv > 15000 && a->max_ma_20v) ? min_u16(a->max_ma, a->max_ma_20v) : a->max_ma;
-            back_entry_t e = {PPS_PDO, SPR_AVS_PDO, nat + 1, 5000, mv, min_u16(ma, c->max_ma), 0};
+            uint16_t lo = (c->flags2 & CFG2_AVS_PPS5) ? 5000 : 9000;
+            back_entry_t e = {PPS_PDO, SPR_AVS_PDO, nat + 1, lo, mv, min_u16(ma, c->max_ma), 0};
             insert_sorted(pps, &np, &e);    /* 同一最高电压已有充电器 PPS 则不插入 */
         }
     }

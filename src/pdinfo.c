@@ -59,6 +59,16 @@ bool pdinfo_id_on(void)
     return pdinfo_on() && (cfg()->flags2 & CFG2_ID_PT);
 }
 
+bool pdinfo_fe_custom(void)
+{
+    return pdinfo_on() && (cfg()->flags2 & CFG2_ID_FE);
+}
+
+bool pdinfo_be_custom(void)
+{
+    return pdinfo_on() && (cfg()->flags2 & CFG2_ID_BE);
+}
+
 static uint16_t get16(const uint8_t *p)
 {
     return p[0] | (p[1] << 8);
@@ -70,11 +80,12 @@ static void put16(uint8_t *p, uint16_t v)
     p[1] = v >> 8;
 }
 
-/* 身份透传关闭：VID/PID 换成本机，XID、版本清零 */
-static void own_vid_pid(uint8_t *d, bool with_xid)
+/* 身份透传关闭：VID/PID 换成自订的（前端给充电器、后端给设备），没有自订就用本机的，XID、版本清零 */
+static void own_vid_pid(uint8_t *d, bool front, bool with_xid)
 {
-    put16(&d[EXT_VID], PI_VID);
-    put16(&d[EXT_PID], PI_PID);
+    bool custom = front ? pdinfo_fe_custom() : pdinfo_be_custom();
+    put16(&d[EXT_VID], custom ? (front ? cfg()->fe_vid : cfg()->be_vid) : PI_VID);
+    put16(&d[EXT_PID], custom ? (front ? cfg()->fe_pid : cfg()->be_pid) : PI_PID);
     if (with_xid)
         memset(&d[4], 0, 6);    /* XID u32、FW/HW 版本 */
 }
@@ -107,6 +118,15 @@ static void log_ident(uint8_t side, const pi_ident_t *id)
     ev_ident_t e = {side, (uint16_t)id->vdo[0], id->n >= 3 ? (uint16_t)(id->vdo[2] >> 16) : 0,
                     id->n >= 3 ? (uint16_t)id->vdo[2] : 0};
     evlog_add(EV_IDENT, &e, sizeof(e));
+}
+
+/* 自订身份的 Discover Identity 应答：ID Header（只有 VID）、Cert Stat（XID 0）、Product VDO（PID，bcdDevice 1.00） */
+static void custom_ident(pi_ident_t *out, uint16_t vid, uint16_t pid)
+{
+    out->n = 3;
+    out->vdo[0] = vid;
+    out->vdo[1] = 0;
+    out->vdo[2] = ((uint32_t)pid << 16) | 0x0100;
 }
 
 static void set_ident(pi_ident_t *dst, const uint32_t *vdo, uint8_t n)
@@ -223,7 +243,7 @@ bool pdinfo_fe_skedb(uint8_t *out)
     uint8_t pdp = (uint32_t)c->max_mv * c->max_ma / 1000000;
     memcpy(out, dev_skedb, SKEDB_LEN);
     if (!pdinfo_id_on())
-        own_vid_pid(out, true);
+        own_vid_pid(out, true, true);
     /* Sink Modes 描述的是本机前端：支持 PPS；AVS 仅在 Lab 二次握手打开时声明 */
     uint8_t m = (out[SKEDB_SINK_MODES] & ~SINK_MODE_AVS) | SINK_MODE_PPS;
     if (c->flags & CFG_FE_AVS_2ND)
@@ -240,6 +260,11 @@ bool pdinfo_fe_skedb(uint8_t *out)
 
 bool pdinfo_fe_ident(pi_ident_t *out)
 {
+    if (pdinfo_fe_custom())
+    {
+        custom_ident(out, cfg()->fe_vid, cfg()->fe_pid);
+        return true;
+    }
     if (!pdinfo_id_on() || dev_id.n == 0)
         return false;
     *out = dev_id;
@@ -262,7 +287,7 @@ void pdinfo_fe_bcap(uint8_t ref, uint8_t *out)
     }
     memcpy(out, dev_bcap, BCDB_LEN);
     if (!pdinfo_id_on())
-        own_vid_pid(out, false);
+        own_vid_pid(out, true, false);
 }
 
 uint32_t pdinfo_fe_bsdo(uint8_t ref)
@@ -358,7 +383,7 @@ uint8_t pdinfo_be_scedb(uint8_t *out)
         return 0;
     memcpy(out, chg_scedb, chg_scedb_len);
     if (!pdinfo_id_on())
-        own_vid_pid(out, true);
+        own_vid_pid(out, false, true);
     out[SCEDB_SPR_PDP] = back_pdp();
     if (chg_scedb_len > SCEDB_EPR_PDP)
         out[SCEDB_EPR_PDP] = 0;     /* 后端只有 SPR */
@@ -388,6 +413,13 @@ uint8_t pdinfo_be_status(uint8_t *out)
 
 uint8_t pdinfo_be_midb(uint8_t *out)
 {
+    if (pdinfo_be_custom())
+    {
+        /* 自订身份：只回 VID/PID，不带充电器的厂商字符串 */
+        put16(&out[EXT_VID], cfg()->be_vid);
+        put16(&out[EXT_PID], cfg()->be_pid);
+        return MIDB_MIN_LEN;
+    }
     if (!pdinfo_id_on() || chg_midb_len == 0)
         return 0;
     memcpy(out, chg_midb, chg_midb_len);
@@ -396,6 +428,11 @@ uint8_t pdinfo_be_midb(uint8_t *out)
 
 bool pdinfo_be_ident(pi_ident_t *out)
 {
+    if (pdinfo_be_custom())
+    {
+        custom_ident(out, cfg()->be_vid, cfg()->be_pid);
+        return true;
+    }
     if (!pdinfo_id_on() || chg_id.n == 0)
         return false;
     *out = chg_id;

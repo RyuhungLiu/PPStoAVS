@@ -79,6 +79,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 32px; }
 .tag.acc { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 select, input[type=number] { padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); font-variant-numeric: tabular-nums; }
 input[type=number] { width: 100px; }
+input[type=text].hex { width: 72px; padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); font-family: var(--mono); text-transform: uppercase; }
 input:focus-visible, select:focus-visible { outline-offset: 0; }
 
 /* 開關與單選 */
@@ -388,6 +389,10 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
       <h3 data-i18n="secInfo"></h3>
       <label class="check"><input type="checkbox" id="infoPt"><div><b data-i18n="infoPt"></b><span data-i18n="infoPtD"></span></div></label>
       <label class="check" id="idPtRow"><input type="checkbox" id="idPt"><div><b data-i18n="idPt"></b><span data-i18n="idPtD"></span></div></label>
+      <label class="check" id="idBeRow"><input type="checkbox" id="idBe"><div><b data-i18n="idBe"></b><span data-i18n="idBeD"></span></div></label>
+      <div class="labin inline" id="idBeIn"><span class="muted">VID</span><input type="text" class="hex" id="beVid" maxlength="4" spellcheck="false" autocomplete="off"><span class="muted">PID</span><input type="text" class="hex" id="bePid" maxlength="4" spellcheck="false" autocomplete="off"></div>
+      <label class="check" id="idFeRow"><input type="checkbox" id="idFe"><div><b data-i18n="idFe"></b><span data-i18n="idFeD"></span></div></label>
+      <div class="labin inline" id="idFeIn"><span class="muted">VID</span><input type="text" class="hex" id="feVid" maxlength="4" spellcheck="false" autocomplete="off"><span class="muted">PID</span><input type="text" class="hex" id="fePid" maxlength="4" spellcheck="false" autocomplete="off"></div>
       <div class="lab" style="margin-top:12px;border:0;padding:0;background:none">
         <details><summary data-i18n="labMore"></summary><ul data-i18n-list="infoL"></ul></details>
       </div>
@@ -419,11 +424,15 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="be2ndL"></ul></details>
         </div>
         <div class="lab" id="lab-avs2pps">
-          <label class="labhead"><input type="checkbox" id="avs2pps"><div><b data-i18n="avs2pps"></b><span data-i18n="avs2ppsS"></span></div><span class="labtags"><span class="tag " data-i18n="tagBC"></span></span></label>
+          <label class="labhead"><input type="checkbox" id="avs2pps"><div><b data-i18n="avs2pps"></b><span data-i18n="avs2ppsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span><span class="tag " data-i18n="tagBC"></span></span></label>
+          <div class="labin inline" id="avs2ppsIn"><div class="seg">
+            <label><input type="radio" name="avs2ppsMin" value="0" id="avs2ppsMin9"><span data-i18n="avs2ppsMin9"></span></label>
+            <label><input type="radio" name="avs2ppsMin" value="1" id="avs2ppsMin5"><span data-i18n="avs2ppsMin5"></span></label>
+          </div></div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="avs2ppsL"></ul></details>
         </div>
         <div class="lab" id="lab-eprAvs">
-          <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
+          <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="eprAvsL"></ul></details>
         </div>
         <div class="lab" id="lab-forcePps">
@@ -437,7 +446,7 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fixcL"></ul></details>
         </div>
         <div class="lab" id="lab-ufcs">
-          <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagExp"></span></span></label>
+          <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ufcsL"></ul></details>
         </div>
         <div class="lab" id="lab-ppsc">
@@ -580,7 +589,12 @@ const T = {
     secInfo: "PD info passthrough", infoPt: "Pass PD info through",
     infoPtD: "Default on. The charger can read the device's battery; the device sees the charger's extended info.",
     idPt: "Identity passthrough (VID/PID)",
-    idPtD: "Off by default. Both sides see each other's identity as if connected directly.",
+    idPtD: "Off by default. Both sides see each other's identity as if connected directly. Exclusive with the custom IDs.",
+    idBe: "Custom rear ID (Source)", idBes: "rear ID",
+    idBeD: "Default on. The device sees this VID/PID as the converter's Source identity. Exclusive with identity passthrough.",
+    idFe: "Custom front ID (Sink)", idFes: "front ID",
+    idFeD: "The charger sees this VID/PID as the converter's Sink identity. Exclusive with identity passthrough.",
+    idBad: "VID must be 1–4 hex digits and not 0.",
     infoL: ["The charger's queries are answered right away from data the converter has already read. The spec allows only 15 ms, too short to ask the other side live.",
       "Device → charger: battery capacity and level (Battery_Capabilities / Battery_Status), battery Alerts, Sink_Capabilities_Extended. Chargers with a screen can then show the phone's battery.",
       "Charger → device: Source_Capabilities_Extended, Source_Info, Status. The PDP values are rewritten to what the converter actually offers.",
@@ -616,8 +630,10 @@ const T = {
       "Re-advertise Fixed + AVS only if Sink Modes has AVS; otherwise (or no reply) keep PPS.",
       "Restarts when the device is unplugged (not on Hard Reset, to avoid loops)."],
     avs2pps: "AVS as PPS", avs2ppsS: "Offer the charger's native AVS to the device as PPS.",
-    avs2ppsL: ["PPS from 5 V to the AVS maximum; current is the lower of the two AVS ranges.",
-      "Requests below 9 V are rejected (AVS starts at 9 V).",
+    avs2ppsMin9: "From 9 V (standard, default)", avs2ppsMin5: "From 5 V",
+    avs2ppsL: ["From 9 V (default): PPS from 9 V to the AVS maximum (15 V or 20 V), the real AVS range and closer to a standard PPS.",
+      "From 5 V: PPS from 5 V to the AVS maximum, as in earlier versions. Requests below 9 V are still rejected because AVS starts at 9 V.",
+      "Current is the lower of the two AVS ranges.",
       "Voltage is rounded to the nearest 100 mV: 12.34 V → 12.3 V, 12.36 V → 12.4 V.",
       "AVS has no current limiting, so the device's PPS current limit is not enforced by the charger (OCP still applies).",
       "A charger PPS with the same maximum voltage takes precedence."],
@@ -627,12 +643,12 @@ const T = {
       "Exactly 9 V or 15 V: served by the charger's Fixed 9 V / 15 V.",
       "Any other 9–15 V request is rejected.",
       "Takes precedence over PPS or SPR AVS as the AVS source. Never above 20 V."],
-    ufcs: "UFCS on the front port", ufcss: "UFCS", tagExp: "experimental",
+    ufcs: "UFCS on the front port", ufcss: "UFCS", tagUnstable: "unstable",
     ufcsS: "Try UFCS (T/TAF 083-2022) when the charger is plugged in; fall back to PD if it does not answer.",
     ufcsL: ["At power-up the front D+/D− lines are checked; only a charger that answers the UFCS handshake is used through UFCS. Otherwise PD works as usual.",
       "The charger's UFCS output modes are turned into equivalent PD capabilities (Fixed 5/9/15/20 V plus one PPS per mode), so all rear modes, compensation and Lab items keep working.",
       "UFCS uses D+/D−, which the host tool also needs: once UFCS is active this page cannot connect. To change settings, unplug the charger and connect a PC.",
-      "Experimental. Needs a charger that supports UFCS; not every UFCS charger has been tested."],
+      "Unstable. Needs a charger that supports UFCS; not every UFCS charger has been tested."],
     forcePps: "Force PPS", forcePpsS: "Serve every Fixed and AVS level from the charger's PPS, so voltage compensation works on all of them.",
     tagAll: "all modes", fpps: "force PPS",
     forcePpsL: ["Each Fixed voltage covered by a charger PPS is requested as PPS at that voltage (the PPS with the highest current first). Voltages no PPS covers still use the charger's Fixed.",
@@ -731,7 +747,12 @@ const T = {
     secInfo: "PD 資訊透傳", infoPt: "透傳 PD 資訊",
     infoPtD: "預設開啟。充電器可讀取設備電量，設備可看到充電器的擴充資訊。",
     idPt: "身份透傳（VID/PID）",
-    idPtD: "預設關閉。兩端看到的是對方的身份，如同直接連接。",
+    idPtD: "預設關閉。兩端看到的是對方的身份，如同直接連接；與自訂 ID 互斥。",
+    idBe: "自訂後端 ID（Source）", idBes: "後端 ID",
+    idBeD: "預設開啟。設備看到的是這組 VID/PID，作為轉換器的 Source 身份。與身份透傳互斥。",
+    idFe: "自訂前端 ID（Sink）", idFes: "前端 ID",
+    idFeD: "充電器看到的是這組 VID/PID，作為轉換器的 Sink 身份。與身份透傳互斥。",
+    idBad: "VID 需為 1–4 位十六進位數，且不能是 0。",
     infoL: ["充電器的查詢用轉換器已讀到的資料立即回覆；規範只給 15 ms，來不及即時轉問另一端。",
       "設備 → 充電器：電池容量與電量（Battery_Capabilities / Battery_Status）、電池 Alert、Sink_Capabilities_Extended。有螢幕的充電器就能顯示手機電量。",
       "充電器 → 設備：Source_Capabilities_Extended、Source_Info、Status。其中的 PDP 改成轉換器實際輸出的功率。",
@@ -767,8 +788,10 @@ const T = {
       "Sink Modes 有 AVS 才重新廣播 Fixed + AVS；沒有或不回覆就維持 PPS。",
       "設備拔出後重新開始（Hard Reset 不會重來，避免循環）。"],
     avs2pps: "AVS 轉 PPS", avs2ppsS: "把充電器的原生 AVS 當作 PPS 提供給設備。",
-    avs2ppsL: ["提供 5V 到 AVS 最高電壓的 PPS，電流取 AVS 兩段中較小者。",
-      "請求低於 9V 直接拒絕（AVS 從 9V 開始）。",
+    avs2ppsMin9: "從 9V 開始（標準，預設）", avs2ppsMin5: "從 5V 開始",
+    avs2ppsL: ["從 9V 開始（預設）：提供 9V 到 AVS 最高電壓（15V 或 20V）的 PPS，範圍就是 AVS 的實際範圍，更接近標準 PPS。",
+      "從 5V 開始：提供 5V 到 AVS 最高電壓的 PPS，與舊版相同；請求低於 9V 仍會被拒絕（AVS 從 9V 開始）。",
+      "電流取 AVS 兩段中較小者。",
       "電壓四捨五入到 100mV：12.34V → 12.3V，12.36V → 12.4V。",
       "AVS 沒有限流功能，設備的 PPS 電流上限不會由充電器執行（OCP 仍有效）。",
       "充電器已有相同最高電壓的 PPS 時，以充電器的為準。"],
@@ -778,12 +801,12 @@ const T = {
       "剛好 9V、15V：改走充電器的 Fixed 9V / 15V。",
       "其他 9–15V 請求一律拒絕。",
       "優先於 PPS 平移或 SPR AVS 作為 AVS 來源；永遠不超過 20V。"],
-    ufcs: "前端使用 UFCS", ufcss: "UFCS", tagExp: "實驗",
+    ufcs: "前端使用 UFCS", ufcss: "UFCS", tagUnstable: "不穩定",
     ufcsS: "充電器插入時先嘗試 UFCS（T/TAF 083-2022）握手；沒有回應就照常走 PD。",
     ufcsL: ["上電時檢測前端 D+/D−，只有回應 UFCS 握手的充電器才走 UFCS，其餘照常走 PD。",
       "充電器的 UFCS 輸出模式會被轉成等效的 PD 能力（Fixed 5/9/15/20V，加上每個模式一個 PPS），後端所有方式、壓降補償與 Lab 功能照常生效。",
       "UFCS 使用 D+/D−，與上位機共用：UFCS 生效後無法連接本頁。要修改設定，請先拔掉充電器，改接電腦。",
-      "實驗功能，需要充電器支援 UFCS；並非所有 UFCS 充電器都測試過。"],
+      "不穩定，需要充電器支援 UFCS；並非所有 UFCS 充電器都測試過。"],
     forcePps: "強制 PPS", forcePpsS: "所有 Fixed 與 AVS 擋位都改由充電器的 PPS 提供，電壓補償對所有擋位生效。",
     tagAll: "所有方式", fpps: "強制 PPS",
     forcePpsL: ["PPS 覆蓋得到的 Fixed 電壓，一律改向充電器請求該電壓的 PPS（電流大的 PPS 優先）；沒有 PPS 覆蓋的電壓仍走充電器的 Fixed。",
@@ -818,7 +841,7 @@ const T = {
 };
 /* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
 T.zhs = (() => {
-  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余";
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组";
   const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
   const phr = [["韌體", "固件"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
   const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
@@ -1355,19 +1378,28 @@ $("view-settings").addEventListener("change", () => renderSim());
 /* ================= settings ================= */
 /* hasComp：20 字節格式（韌體 v0.6.0 / 協議 v5 起）才有補償欄位 */
 /* hasPps：24 字節格式（韌體 v0.7.0 / 協議 v6 起）才有自訂 PPS 欄位 */
-function cfgFromBytes(p, hasComp, hasPps) {
+/* hasId：32 字節格式（韌體 v0.9.0 / 協議 v8 起）才有自訂前後端 VID/PID */
+function cfgFromBytes(p, hasComp, hasPps, hasId) {
   return { mode: p[0], hide: p[1], maxMv: u16(p, 2), maxMa: u16(p, 4), ovp: p[6], uvp: p[7], ocpMa: u16(p, 8), ocpMs: u16(p, 10), flags: p[12] ?? 0,
     fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0, compMode: hasComp ? p[16] : null, compVal: hasComp ? u16(p, 18) : 0,
-    flags2: hasComp ? p[15] : null, ppsLo: hasPps ? p[20] : null, ppsHi: hasPps ? p[21] : null, ppsMa50: hasPps ? p[22] : null };
+    flags2: hasComp ? p[15] : null, ppsLo: hasPps ? p[20] : null, ppsHi: hasPps ? p[21] : null, ppsMa50: hasPps ? p[22] : null,
+    feVid: hasId ? u16(p, 24) : null, fePid: hasId ? u16(p, 26) : null, beVid: hasId ? u16(p, 28) : null, bePid: hasId ? u16(p, 30) : null };
 }
 function cfgToBytes(c) {
-  const b = new Uint8Array(24);
+  const b = new Uint8Array(32);
   b[0] = c.mode; b[1] = c.hide; b[2] = c.maxMv & 0xFF; b[3] = c.maxMv >> 8; b[4] = c.maxMa & 0xFF; b[5] = c.maxMa >> 8;
   b[6] = c.ovp; b[7] = c.uvp; b[8] = c.ocpMa & 0xFF; b[9] = c.ocpMa >> 8; b[10] = c.ocpMs & 0xFF; b[11] = c.ocpMs >> 8; b[12] = c.flags;
   b[13] = c.fixDv ?? 0; b[14] = c.fixMa50 ?? 0; b[15] = c.flags2 ?? 0;
   b[16] = c.compMode ?? 0; b[18] = (c.compVal ?? 0) & 0xFF; b[19] = (c.compVal ?? 0) >> 8;
   b[20] = c.ppsLo ?? 0; b[21] = c.ppsHi ?? 0; b[22] = c.ppsMa50 ?? 0;
+  [c.feVid, c.fePid, c.beVid, c.bePid].forEach((v, i) => { b[24 + i * 2] = (v ?? 0) & 0xFF; b[25 + i * 2] = (v ?? 0) >> 8; });
   return Array.from(b);
+}
+function idHex(inp, chk, key, dflt) {
+  if (state.cfg && state.cfg[key] == null) return null;
+  const txt = $(inp).value.trim();
+  if (/^[0-9a-f]{1,4}$/i.test(txt)) return parseInt(txt, 16);
+  return $(chk).checked ? 0 : state.cfg?.[key] ?? dflt;
 }
 function readForm() {
   let hide = 0;
@@ -1381,11 +1413,14 @@ function readForm() {
     fixMa50: $("fixc").checked ? Math.round(Number($("fixcA").value) * 20) || 0 : state.cfg?.fixMa50 ?? 0,
     compMode: state.cfg && state.cfg.compMode == null ? null : radio("compMode"), compVal: Math.round(Number($("compVal").value)) || 0,
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
-    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0),
+    flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0) | ($("idFe").checked ? 32 : 0) | ($("idBe").checked ? 64 : 0) | ($("avs2ppsMin5").checked ? 128 : 0),
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
-    ppsMa50: state.cfg && state.cfg.ppsMa50 == null ? null : $("ppsc").checked ? Math.round(Number($("ppscA").value) * 20) || 0 : state.cfg?.ppsMa50 ?? 60 };
+    ppsMa50: state.cfg && state.cfg.ppsMa50 == null ? null : $("ppsc").checked ? Math.round(Number($("ppscA").value) * 20) || 0 : state.cfg?.ppsMa50 ?? 60,
+    /* 自訂 ID 未勾選時輸入框寫錯就沿用原值；舊韌體沒有（欄位順序須與 cfgFromBytes 相同） */
+    feVid: idHex("feVid", "idFe", "feVid", 0x5A1E), fePid: idHex("fePid", "idFe", "fePid", 0x30A6),
+    beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5) };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -1398,6 +1433,10 @@ function writeForm(c) {
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
   $("compVal").value = c.compVal ?? 0;
   $("infoPt").checked = !((c.flags2 ?? 0) & 1); $("idPt").checked = !!((c.flags2 ?? 0) & 2); $("forcePps").checked = !!((c.flags2 ?? 0) & 4); $("ufcs").checked = !!((c.flags2 ?? 0) & 16);
+  $("avs2ppsMin5").checked = !!((c.flags2 ?? 0) & 128); $("avs2ppsMin9").checked = !((c.flags2 ?? 0) & 128);
+  $("idFe").checked = !!((c.flags2 ?? 0) & 32); $("idBe").checked = !!((c.flags2 ?? 0) & 64);
+  $("feVid").value = hex4(c.feVid ?? 0x5A1E); $("fePid").value = hex4(c.fePid ?? 0x30A6);
+  $("beVid").value = hex4(c.beVid ?? 0x5A1E); $("bePid").value = hex4(c.bePid ?? 0x30A5);
   $("ppsc").checked = !!((c.flags2 ?? 0) & 8); $("ppscLo").value = ((c.ppsLo || 33) / 10).toFixed(1);
   $("ppscHi").value = ((c.ppsHi || 160) / 10).toFixed(1); $("ppscA").value = ((c.ppsMa50 || 60) / 20).toFixed(2);
   applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
@@ -1419,14 +1458,15 @@ function renderCfgState() {
 async function loadCfg(force) {
   const p = await request(0x10);
   const wasDirty = isDirty();
-  const v5 = !!state.info && state.info.proto >= 5, v6 = !!state.info && state.info.proto >= 6;
-  state.cfg = cfgFromBytes(p, v5, v6); state.cfgSaving = !!p[v6 ? 24 : v5 ? 20 : 16];
+  const v5 = !!state.info && state.info.proto >= 5, v6 = !!state.info && state.info.proto >= 6, v8 = !!state.info && state.info.proto >= 8;
+  state.cfg = cfgFromBytes(p, v5, v6, v8); state.cfgSaving = !!p[v8 ? 32 : v6 ? 24 : v5 ? 20 : 16];
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
 }
 async function applyCfg(defaults) {
   const f = readForm();
   if (!defaults && $("ppsc").checked && !(f.ppsLo < f.ppsHi)) { msg(t("ppscBad")); return; }
+  if (!defaults && (($("idFe").checked && !f.feVid) || ($("idBe").checked && !f.beVid))) { msg(t("idBad")); return; }
   try {
     if (defaults) await request(0x12); else await request(0x11, cfgToBytes(readForm()));
     await loadCfg(true);
@@ -1497,7 +1537,8 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? t("a2ps") : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "", (c.flags2 ?? 0) & 16 ? t("ufcss") : "",
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? `${t("a2ps")}${(c.flags2 ?? 0) & 128 ? " 5 V" : ""}` : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "", (c.flags2 ?? 0) & 16 ? t("ufcss") : "",
+    (c.flags2 ?? 0) & 64 ? `${t("idBes")} ${hex4(c.beVid)}:${hex4(c.bePid)}` : "", (c.flags2 ?? 0) & 32 ? `${t("idFes")} ${hex4(c.feVid)}:${hex4(c.fePid)}` : "",
     (c.flags2 ?? 0) & 8 ? `${t("ppscs")} ${(c.ppsLo / 10).toFixed(1)}–${(c.ppsHi / 10).toFixed(1)} V ${fmtA(c.ppsMa50 * 50)}` : ""].filter(Boolean).join(", ");
   const comp = c.compMode === 1 ? ` · ${t("compVs")} ${c.compVal} mV` : c.compMode === 2 ? ` · ${t("compRs")} ${c.compVal} mΩ` : "";
   return `${t("mode")} ${"abcd"[c.mode] ?? c.mode} · ${c.maxMv / 1000} V · ${fmtA(c.maxMa)} · OVP ${c.ovp}% · UVP ${c.uvp}% · OCP ${fmtA(c.ocpMa)} ${c.ocpMs} ms` + comp +
@@ -1571,7 +1612,7 @@ function decodeRecords(records) {
         const f = d[2], why = [];
         if (f & 0x08) why.push("POR"); if (f & 0x04) why.push("PIN"); if (f & 0x10) why.push("SW");
         if (f & 0x40) { why.push("WWDG"); cls = "warn"; } if (f & 0x80) why.push("LPWR");
-        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3), d.length >= 23, d.length >= 27))}`;
+        text = `${t("fw")} ${fmtFw(u16(d, 0))} · ${t("resetBy")} ${why.join("/") || "-"} · ${cfgText(cfgFromBytes(d.subarray(3), d.length >= 23, d.length >= 27, d.length >= 35))}`;
         cls = cls || "acc";
         break; }
       case 2: case 7: case 12: {
@@ -1608,7 +1649,7 @@ function decodeRecords(records) {
           : t("note" + code) !== "note" + code ? t("note" + code) : `${t("side")[d[0]] ?? d[0]} · ${code}`;
         const info = code === 2 || code === 3 || code === 5 || code === 6 || code === 7;
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
-      case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24)); cls = "acc"; break;
+      case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24, d.length >= 32)); cls = "acc"; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;
       case 17: {
@@ -1707,14 +1748,24 @@ function applyLabDeps() {
   $("lab-eprAvs").classList.toggle("off", !a5);
   $("fixcIn").hidden = !$("fixc").checked;
   $("ppscIn").hidden = !$("ppsc").checked;
+  $("avs2ppsIn").hidden = !$("avs2pps").checked;
+  const oldMin = !!state.cfg && state.cfg.feVid == null;   /* 協議 v8 起才有 */
+  ["avs2ppsMin9", "avs2ppsMin5"].forEach((id) => ($(id).disabled = oldMin));
 }
 /* 資訊透傳：身份透傳依附於資訊透傳；舊韌體沒有這個功能 */
 function applyInfo() {
   const old = !!state.cfg && state.cfg.flags2 == null;
   $("infoPt").disabled = old;
   const on = $("infoPt").checked && !old;
+  const oldId = !!state.cfg && state.cfg.feVid == null;
   $("idPt").disabled = !on; if (!on) $("idPt").checked = false;
   $("idPtRow").classList.toggle("off", !on);
+  ["idBe", "idFe"].forEach((id) => {
+    $(id).disabled = !on || oldId; if (!on || oldId) $(id).checked = false;
+    $(id + "Row").classList.toggle("off", !on || oldId);
+    $(id + "In").hidden = !$(id).checked;
+    $(id === "idBe" ? "beVid" : "feVid").disabled = $(id === "idBe" ? "bePid" : "fePid").disabled = !$(id).checked;
+  });
   $("forcePps").disabled = old; $("lab-forcePps").classList.toggle("off", old);
   const oldUfcs = !!state.info && state.info.proto < 7;
   $("ufcs").disabled = oldUfcs; $("lab-ufcs").classList.toggle("off", oldUfcs);
@@ -1722,6 +1773,11 @@ function applyInfo() {
   ["ppsc", "ppscLo", "ppscHi", "ppscA"].forEach((id) => ($(id).disabled = oldPps)); $("lab-ppsc").classList.toggle("off", oldPps);
 }
 $("infoPt").addEventListener("change", applyInfo);
+/* 身份透傳與自訂 ID 互斥：勾其中一邊就取消另一邊 */
+["idPt", "idBe", "idFe"].forEach((id) => $(id).addEventListener("change", () => {
+  if ($(id).checked) (id === "idPt" ? ["idBe", "idFe"] : ["idPt"]).forEach((o) => ($(o).checked = false));
+  applyInfo();
+}));
 /* 電壓補償：單位、範圍隨方式變化；舊韌體沒有這個功能 */
 function applyComp() {
   const old = !!state.cfg && state.cfg.compMode == null;
@@ -1739,6 +1795,7 @@ document.querySelectorAll("input[name=compMode]").forEach((r) => r.addEventListe
 }));
 /* 自訂 Fixed 與 12V 轉換互斥 */
 $("ppsc").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
+$("avs2pps").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
 $("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });

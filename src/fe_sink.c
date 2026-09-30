@@ -447,9 +447,9 @@ static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
         }
         return;
     }
-    if (VDM_IS_DISC_IDENT(vdm) && pdinfo_id_on())
+    if (VDM_IS_DISC_IDENT(vdm) && (pdinfo_id_on() || pdinfo_fe_custom()))
     {
-        /* 身份透传：回设备的身份；设备的还没读到就回 BUSY 让充电器稍后再问 */
+        /* 身份透传：回设备的身份（自订身份：回自订的 Sink 身份）；设备的还没读到就回 BUSY 让充电器稍后再问 */
         static uint8_t logged_reply;
         pi_ident_t id;
         uint32_t o[1 + PI_MAX_VDOS];
