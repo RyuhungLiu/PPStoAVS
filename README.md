@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records).
+unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR).
 
 ## Pin assignment
 
@@ -140,6 +140,27 @@ Chargers query the cable only after detecting Ra on the plug's VCONN pin. The ha
 (VCONN) through 1 kΩ to PA2/CC3. With the switch on, PA2 is driven low to present Ra; with it off, PA2 is high-Z.
 The v0.1 PCB lacks this connection, so there only chargers that query the cable without Ra will ask.
 The converter cannot check the device-side cable, which must be rated for 5 A.
+
+### Rear cable e-marker and 5 A (v0.11.0)
+
+Every time a device is plugged in, the rear sends Discover Identity to the cable (SOP', up to 4 tries) once the contract is set up.
+It does not look at Ra first, so it also works with a single-CC solder pad that has no second CC pin (Ra on the other CC is only
+shown as a hint). The host tool shows the answer on the Status tab: cable type, current (3 A / 5 A), maximum voltage, highest USB
+speed, EPR bit and VID:PID. With recording on, each result (identity, no answer or NAK, with the raw VDOs) is also written to the
+flash log as a "Cable e-marker" record.
+
+- If the e-marker (Cable VDO1 bits 6:5) says 5 A, the rear limit moves from the default 3 A to 5 A and the rear Source_Capabilities are sent again.
+  The charger's own current per voltage is still the ceiling, so 5 A normally appears only at 20 V (Fixed, SPR AVS 15–20 V, PPS).
+  The Source never offers EPR (no Fixed above 20 V, no EPR AVS, Enter_EPR is answered with Not_Supported).
+- OCP follows the new limit: at least 7/6 of it, at most 5.5 A (the current sense saturates near 5.8 A).
+- Settings → Output cable: **Auto** (read the e-marker, the behavior above), **3 A** (never raise) or **5 A** (settings byte `flags3`
+  bit 1 = 3 A, bit 2 = 5 A). 5 A is for a soldered cable without e-marker whose wire you know can carry 5 A: the cable is not read,
+  the limit is 5 A, and the rear answers a device's SOP' Discover Identity as a virtual 5 A passive cable (Type-C, 20 V, USB 2.0, no EPR,
+  VCONN not required). The limit is only raised while it is at the default 3 A; any other value set by the user is kept.
+- To get 5 A from the charger as well, use the Lab virtual E-Marker on the front (otherwise the charger offers at most 3 A).
+- **Hardware limit:** an e-marker is powered from VCONN, and this MCU cannot supply it from its CC pins. A passive e-marked cable stays
+  silent, so the host tool shows "no answer". The default `be_vconn_set()` (weak, in `src/be_source.c`) drives the other CC pin with 3.3 V when Ra is seen (works with the 5 A cable tested); it is called after VBUS
+  comes up on every connection; a hardware revision with a VCONN switch only has to override that function and `be_vconn_available()`.
 
 ### Lab mode: EPR AVS as SPR AVS
 

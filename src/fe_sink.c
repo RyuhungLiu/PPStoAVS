@@ -583,7 +583,7 @@ static bool caps_epr_capable(void)
 static void send_sink_caps(void)
 {
     uint32_t objs[2];
-    uint16_t ma = cfg()->max_ma;
+    uint16_t ma = bridge_back_max_ma();
     objs[0] = pd_build_fixed_pdo(5000, ma, 0);
     objs[1] = pd_build_pps_apdo(3300, 21000, ma);
     pd_phy_send(phy, MSG_TYPE_Sink_Capabilities, 2, objs);
@@ -597,7 +597,7 @@ static void send_sink_caps_ext(void)
 {
     const cfg_t *c = cfg();
     uint8_t d[SKEDB_LEN] = {0};
-    uint8_t pdp = (uint32_t)c->max_mv * c->max_ma / 1000000;
+    uint8_t pdp = (uint32_t)c->max_mv * bridge_back_max_ma() / 1000000;
     d[0] = 0x09;                    /* VID 0x1209 */
     d[1] = 0x12;
     d[2] = 0x01;                    /* PID 0x0001 */

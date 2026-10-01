@@ -13,6 +13,7 @@
  *                      part 1：n u8, 后端能力 PDO[n], 对应充电器位置 src u8[n]（0 = 无）
  *                      part 2：n u8, 前端 EPR 能力 PDO[n]（8 号起）
  *                      part 3：PD 信息透传（设备电量、双方身份，格式见 pdinfo_status）
+ *                      part 4：后端线材 E-Marker（协议 v10 起，每次连接都读，不看 Ra）：status u8（be_cable_status_t）, flags u8, n u8, vdo u32[n]
  * 0x10 CFG_GET      → cfg_t（32 字节，协议 v8 起；v6 为 24 字节，v5 为 20 字节）, save_pending u8
  * 0x11 CFG_SET cfg  → 校验失败返回 BAD_ARG；成功立即生效并排队保存
  * 0x12 CFG_DEFAULT  → 恢复默认设置
@@ -24,6 +25,6 @@
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  9
+#define HOST_PROTO_VERSION  10
 
 void host_process(void);

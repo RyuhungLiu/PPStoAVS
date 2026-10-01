@@ -99,6 +99,7 @@ void pd_phy_init(pd_phy_t *p, USBPD_TypeDef *regs, IRQn_Type irqn, uint8_t power
     p->power_role = power_role;
     p->data_role = data_role;
     p->revision = PD_REV_30;
+    p->sop1_plug = power_role ? 0 : 1;      /* 前端（Sink）扮演线材；后端（Source）是真实端口，向线材发 SOP' */
 
     regs->CONFIG = 0;
     phy_set_rx(p);
@@ -189,8 +190,8 @@ bool pd_phy_send_sop1(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uin
     uint8_t payload[PD_MAX_DATA_OBJS * 4];
     for (uint8_t i = 0; i < num_objs; i++)
         pd_put_u32(&payload[i * 4], objs[i]);
-    /* SOP'：bit8 = Cable Plug，bit5 保留为 0 */
-    uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id_sop1, 1, 0, revision);
+    /* SOP'：bit8 = Cable Plug（线材发出为 1，端口发出为 0），bit5 保留为 0 */
+    uint16_t header = pd_build_header(msg_type, num_objs, p->tx_msg_id_sop1, p->sop1_plug, 0, revision);
     return send_frame(p, UPD_SOP1, &p->tx_msg_id_sop1, header, payload, num_objs * 4);
 }
 
@@ -271,7 +272,8 @@ static void phy_isr(pd_phy_t *p)
                 }
 
                 delay_us(30);   /* tInterFrameGap ≥ 25us（同 WCH EVT） */
-                uint16_t goodcrc = sop1 ? pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, 1, 0, h.revision)
+                /* SOP' 的 GoodCRC：对方是线材（bit8 = 1）则我们是端口（0）；对方是端口（0）则我们扮演线材（1） */
+                uint16_t goodcrc = sop1 ? pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, h.power_role ? 0 : 1, 0, h.revision)
                                         : pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
                 p->tx_buf[0] = goodcrc & 0xFF;
                 p->tx_buf[1] = goodcrc >> 8;

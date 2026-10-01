@@ -69,6 +69,18 @@ static void put_bytes(wr_t *w, const void *src, uint8_t len)
 
 static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
 {
+    if (arg[0] == 4)
+    {
+        /* 协议 v10：后端线材 E-Marker：status u8, flags u8（bit0 硬件可供 VCONN，bit1 声明 5A，bit2 已按 5A 放宽后端电流上限，bit3 另一根 CC 脚有 Ra）, n u8, vdo u32[n] */
+        uint32_t vdo[BE_CABLE_VDOS];
+        uint8_t n = be_cable_vdos(vdo);
+        put8(w, be_cable_status());
+        put8(w, (be_vconn_available() ? 0x01 : 0) | (be_cable_5a() ? 0x02 : 0) | (bridge_back_max_ma() > cfg()->max_ma ? 0x04 : 0) | (be_cable_ra() ? 0x08 : 0));
+        put8(w, n);
+        for (uint8_t i = 0; i < n; i++)
+            put32(w, vdo[i]);
+        return ST_OK;
+    }
     if (arg[0] == 3)
     {
         /* PD 信息透传：设备电量、双方身份（格式见 pdinfo_status） */

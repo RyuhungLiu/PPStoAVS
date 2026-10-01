@@ -36,6 +36,7 @@ static uint8_t logged_len = 0xFF;
 
 static bool back_caps_dirty;
 static bool back_hard_reset;
+static bool back_cable_5a;      /* 后端线材 E-Marker 读到 5A（be_source 读取） */
 
 /* Lab：后端 AVS 二次握手（CFG_BE_AVS_2ND）——先给 PPS，设备在 Sink_Capabilities_Extended 中声明支持 AVS 后才给 AVS */
 static bool avs_held;           /* 本可提供 AVS，但尚未确认设备支持 */
@@ -207,7 +208,9 @@ static int8_t find_pps_covering(const pdo_t *fc, uint8_t n, uint16_t mv)
 
 static void build_back_caps(void)
 {
-    const cfg_t *c = cfg();
+    cfg_t eff = *cfg();
+    eff.max_ma = bridge_back_max_ma();      /* 线材 5A 时放宽默认的 3A 上限（Source 不支持 EPR，只到 20V） */
+    const cfg_t *c = &eff;
     back_n = 0;
     avs_held = false;
 
@@ -672,6 +675,46 @@ fe_target_t bridge_on_front_caps(bool *for_bridge)
     return t;
 }
 
+/*
+ * 后端电流上限：设置里的上限；默认 3A 视为“自动”，后端线材的 E-Marker 读到 5A 时放宽到 5A
+ * （充电器自己给的各档电流仍是上限，所以 5A 只会出现在充电器提供 5A 的档位，通常是 20V）。
+ * 线材策略 CFG3_CABLE5A（按 5A 处理，焊接线用）等同线材已声明 5A；用户改过上限（≠ 3A）或选了固定 3A（CFG3_NO_CABLE5A）时按设置
+ */
+uint16_t bridge_back_max_ma(void)
+{
+    const cfg_t *c = cfg();
+    if ((back_cable_5a || (c->flags3 & CFG3_CABLE5A)) && !(c->flags3 & CFG3_NO_CABLE5A) && c->max_ma == CFG_MAX_MA)
+        return CFG_MAX_MA_5A;
+    return c->max_ma;
+}
+
+/* 过流阈值：自动放宽到 5A 时，阈值至少为上限的 7/6（与默认 3A / 3.5A 的比例相同），最高 5.5A（电流检测约 5.8A 饱和） */
+static uint16_t ocp_limit_ma(void)
+{
+    const cfg_t *c = cfg();
+    uint16_t ma = bridge_back_max_ma();
+    uint16_t ocp = c->ocp_ma;
+    if (ma > c->max_ma)
+    {
+        uint16_t need = (uint16_t)((uint32_t)ma * 7 / 6);
+        if (need > CFG_OCP_MAX_MA_5A)
+            need = CFG_OCP_MAX_MA_5A;
+        if (ocp < need)
+            ocp = need;
+    }
+    return ocp;
+}
+
+/* 后端线材 E-Marker 的电流能力变化（5A 与否）：重建能力并重新广播 */
+void bridge_on_back_cable(bool five_amp)
+{
+    if (back_cable_5a == five_amp)
+        return;
+    back_cable_5a = five_amp;
+    if (fe_caps_available())
+        reevaluate();
+}
+
 void bridge_on_cfg_changed(void)
 {
     evlog_add(EV_CFG, cfg(), sizeof(cfg_t));
@@ -946,9 +989,10 @@ uint8_t bridge_rear_avs_2nd_state(void)
 void bridge_on_back_detach(void)
 {
     rear_queried = false;
-    if (rear_avs_ok)
+    if (rear_avs_ok || back_cable_5a)
     {
         rear_avs_ok = false;
+        back_cable_5a = false;
         rebuild_back_caps();
     }
 }
@@ -1120,7 +1164,7 @@ void bridge_process(void)
 
     /* 过流：超过设定电流持续设定时间 */
     uint16_t i = analog_current_ma();
-    if (i > c->ocp_ma)
+    if (i > ocp_limit_ma())
     {
         if (!ocp_active)
         {

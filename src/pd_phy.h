@@ -28,7 +28,8 @@ typedef struct
 
     uint8_t tx_msg_id;              /* 下一条待发报文的 MessageID */
     uint8_t tx_msg_id_sop1;         /* 虚拟 E-Marker 的 SOP' MessageID */
-    volatile bool sop1_en;          /* 接收并应答 SOP'（虚拟 E-Marker） */
+    volatile bool sop1_en;          /* 接收并应答 SOP'（前端：虚拟 E-Marker；后端：读线材 E-Marker） */
+    uint8_t sop1_plug;              /* SOP' 报文头 bit8（Cable Plug）：前端扮演线材 = 1，后端是端口 = 0 */
 
     uint8_t rx_buf[PD_BUF_LEN] __attribute__((aligned(4)));
     uint8_t tx_buf[PD_BUF_LEN] __attribute__((aligned(4)));

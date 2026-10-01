@@ -4,6 +4,7 @@
 #pragma once
 
 #include "fe_sink.h"
+#include <stdbool.h>
 #include "pd_defs.h"
 
 typedef enum
@@ -20,6 +21,10 @@ void bridge_on_front_reset(void);           /* 前端 Hard Reset / Soft Reset */
 
 /* 上位机修改设置后调用：重建后端能力，必要时让后端 Hard Reset */
 void bridge_on_cfg_changed(void);
+
+/* 后端电流上限（见 bridge.c）与线材 E-Marker 5A 通知 */
+uint16_t bridge_back_max_ma(void);
+void bridge_on_back_cable(bool five_amp);
 
 /* 后端调用 */
 bool bridge_front_ready_for_vsafe5v(void);  /* 前端处于 5V 且空闲，可以打开 MOS */

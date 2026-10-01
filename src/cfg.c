@@ -105,6 +105,8 @@ bool cfg_valid(const cfg_t *c)
     if (c->comp_mode > CFG_COMP_R || (c->comp_mode == CFG_COMP_V && c->comp_val > CFG_COMP_V_MAX) ||
         (c->comp_mode == CFG_COMP_R && c->comp_val > CFG_COMP_R_MAX))
         return false;
+    if ((c->flags3 & (CFG3_NO_CABLE5A | CFG3_CABLE5A)) == (CFG3_NO_CABLE5A | CFG3_CABLE5A))
+        return false;   /* 线材策略互斥 */
     return c->mode <= CFG_MODE_FIXED && (c->hide_fixed & ~0x0Fu) == 0 && (c->flags & ~CFG_FLAGS_MASK) == 0 &&
            (c->max_mv == 15000 || c->max_mv == 20000) &&
            c->max_ma >= 500 && c->max_ma <= (a5 ? CFG_MAX_MA_5A : CFG_MAX_MA) && c->max_ma % 50 == 0 &&

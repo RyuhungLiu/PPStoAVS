@@ -43,7 +43,9 @@ typedef enum
 #define CFG2_MASK           (CFG2_AVS_PPS5 | CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS | CFG2_PPS_CUSTOM | CFG2_UFCS | CFG2_ID_FE | CFG2_ID_BE)
 /* flags3 位 */
 #define CFG3_LOG            (1u << 0)   /* 事件记录（默认关闭，需在网页开启；关闭时不写 Flash） */
-#define CFG3_MASK           (CFG3_LOG)
+#define CFG3_NO_CABLE5A     (1u << 1)   /* 不因后端线材 E-Marker 为 5A 而把 3A 默认上限放宽到 5A（默认 0 = 自动放宽） */
+#define CFG3_CABLE5A        (1u << 2)   /* 后端线材按 5A 处理（焊接线没有 E-Marker 时用）：不读线材，后端上限放宽到 5A，并以虚拟 5A E-Marker 应答设备的 SOP' 查询；与 CFG3_NO_CABLE5A 互斥 */
+#define CFG3_MASK           (CFG3_LOG | CFG3_NO_CABLE5A | CFG3_CABLE5A)
 #define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
 #define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */

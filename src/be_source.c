@@ -2,6 +2,7 @@
 #include "analog.h"
 #include "board.h"
 #include "bridge.h"
+#include "cfg.h"
 #include "evlog.h"
 #include "pdinfo.h"
 #include "pd_phy.h"
@@ -25,6 +26,13 @@
 #define N_HARD_RESET_COUNT      2
 #define T_QUERY_DELAY_MS        200     /* 合约建立后稍等再查询设备（Lab 二次握手、信息透传） */
 #define T_QUERY_GAP_MS          30      /* 连续查询之间的间隔 */
+#define T_CABLE_RETRY_MS        100     /* 线材 Discover Identity 重试间隔（BUSY 或无应答） */
+#define N_CABLE_TRIES           4       /* 线材无应答 / BUSY 的最多尝试次数（无 VCONN 时线材不会回应，不必久等） */
+/* 虚拟 E-Marker（CFG3_CABLE5A）：无源线材，C 口、<10ns、20V、5A、USB 2.0、不支持 EPR、不需要 VCONN */
+#define VCABLE_ID_HEADER        ((3u << 27) | PI_VID)
+#define VCABLE_PRODUCT_VDO      ((uint32_t)PI_PID << 16)
+#define VCABLE_VDO1             ((2u << 18) | (1u << 13) | (2u << 5))
+#define PI_Q_CABLE              0x80    /* 本地查询项：向线材（SOP'）Discover Identity，与 pdinfo 的 PI_Q_* 不重叠 */
 
 /* 参考手册 §15.2.15 端口寄存器 */
 #define PORT_CE                 (1u << 7)
@@ -75,6 +83,93 @@ static bool caps_sent_once;
 static uint8_t last_rx_id;
 static uint8_t query;               /* 进行中的查询 PI_Q_*，0 = 无 */
 static uint16_t query_gap;          /* READY 后多久可以发下一项查询 */
+
+/* 后端线材 E-Marker：每次连接都向线材发 SOP' Discover Identity（不看 Ra：单 CC 焊盘没有另一根 CC）；E-Marker 需要 VCONN 供电才会应答 */
+static uint8_t cable_status;        /* be_cable_status_t */
+
+static bool cable_virtual(void)
+{
+    return (cfg()->flags3 & CFG3_CABLE5A) != 0;
+}
+static uint8_t cable_tries;
+static bool cable_ra;               /* 另一根 CC 脚出现 Ra（仅供显示） */
+static uint8_t cable_n;             /* 已读到的 VDO 数 */
+static uint32_t cable_vdo[BE_CABLE_VDOS];
+static uint8_t cable_last_rx_id;
+
+/*
+ * VCONN：原版硬件没有 VCONN 开关，改用 MCU 引脚直接驱动线材的 VCONN 脚：另一根 CC 脚（PA0/PA1）推挽输出 3.3V。
+ * 只在检测到 Ra（线材带 E-Marker）时供电。3.3V 低于规范的 4.75V，也受引脚驱动能力限制（Ra 1k 约 3.3mA + E-Marker 电流），
+ * 但无源 E-Marker 多数能在 3.0V 以上工作；读不到时才需要硬件 VCONN 开关（5V），那时覆盖这两个弱函数。
+ */
+static uint16_t vconn_pin;                  /* 正在供电的 CC 引脚，0 = 未供电 */
+
+__attribute__((weak)) void be_vconn_set(bool on)
+{
+    GPIO_InitTypeDef gpio = {0};
+    gpio.GPIO_Speed = GPIO_Speed_30MHz;
+    if (vconn_pin)
+    {
+        gpio.GPIO_Pin = vconn_pin;
+        gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+        GPIO_Init(GPIOA, &gpio);
+        vconn_pin = 0;
+    }
+    if (on && cable_ra)
+    {
+        vconn_pin = attach_cc == 0 ? GPIO_Pin_1 : GPIO_Pin_0;     /* 与通信的 CC 相反的那根 */
+        GPIOA->BSHR = vconn_pin;
+        gpio.GPIO_Pin = vconn_pin;
+        gpio.GPIO_Mode = GPIO_Mode_Out_PP;
+        GPIO_Init(GPIOA, &gpio);
+    }
+}
+__attribute__((weak)) bool be_vconn_available(void)
+{
+    return true;                            /* 3.3V 引脚供电（见上） */
+}
+
+static void cable_clear(void)
+{
+    cable_status = CABLE_NONE;
+    cable_ra = false;
+    cable_tries = 0;
+    cable_n = 0;
+    cable_last_rx_id = 0xFF;
+    phy->sop1_en = false;
+    be_vconn_set(false);
+}
+
+uint8_t be_cable_status(void)
+{
+    return cable_status;
+}
+
+bool be_cable_ra(void)
+{
+    return cable_ra;
+}
+
+uint8_t be_cable_vdos(uint32_t *out)
+{
+    memcpy(out, cable_vdo, cable_n * 4);
+    return cable_n;
+}
+
+/* Cable VDO1（第 4 个 VDO）bit6:5 = VBUS 电流能力：01 = 3A，10 = 5A；产品类型须是无源 / 有源线材（ID Header bit29:27 = 3 / 4） */
+bool be_cable_5a(void)
+{
+    uint8_t type = (cable_vdo[0] >> 27) & 7;
+    return cable_status == CABLE_OK && cable_n >= 4 && (type == 3 || type == 4) && ((cable_vdo[3] >> 5) & 3) == 2;
+}
+
+/* 记录线材读取结果（开启记录时写入 Flash） */
+static void log_cable(void)
+{
+    ev_cable_t e = {cable_status, (uint8_t)((cable_ra ? 1 : 0) | (be_vconn_available() ? 2 : 0)), cable_n, {0}};
+    memcpy(e.vdo, cable_vdo, cable_n * 4);
+    evlog_add(EV_CABLE, &e, 3 + cable_n * 4);
+}
 
 static void set_state(be_state_t s)
 {
@@ -144,6 +239,7 @@ static void log_reset(uint8_t kind)
 
 static void go_unattached(void)
 {
+    cable_clear();
     power_sw_set(false);
     pdinfo_dev_reset();
     pdinfo_dev_attached(false);
@@ -164,6 +260,7 @@ static void go_unattached(void)
 static void on_detach(void)
 {
     evlog_add(EV_BE_DETACH, NULL, 0);
+    cable_clear();
     pdinfo_dev_reset();
     pdinfo_dev_attached(false);
     bridge_on_back_reset();
@@ -191,6 +288,8 @@ static void start_hard_reset(bool send)
 /* 下一项查询：Lab 二次握手优先，其次信息透传 */
 static uint8_t next_query(void)
 {
+    if (cable_status == CABLE_PENDING && cable_tries < N_CABLE_TRIES && phy->revision >= PD_REV_30)
+        return PI_Q_CABLE;
     if (bridge_rear_query_wanted())
         return PI_Q_EXTCAPS;
     return pdinfo_dev_next_query();
@@ -202,6 +301,8 @@ static bool send_query(uint8_t q)
     uint32_t vdm = VDM_DISC_IDENT_REQ;
     switch (q)
     {
+    case PI_Q_CABLE:
+        return pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &vdm, PD_REV_30);
     case PI_Q_IDENT:
         return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
     case PI_Q_EXTCAPS:
@@ -216,6 +317,19 @@ static bool send_query(uint8_t q)
 /* 查询结束（数据已交给 pdinfo / 协议桥，或设备拒绝、超时） */
 static void query_end(void)
 {
+    if (query == PI_Q_CABLE)
+    {
+        /* 线材无应答 / BUSY / NAK：BUSY 与无应答重试，次数用完记为无应答 */
+        if (cable_status == CABLE_PENDING && ++cable_tries >= N_CABLE_TRIES)
+        {
+            cable_status = CABLE_NO_REPLY;
+            log_cable();
+        }
+        query = 0;
+        query_gap = T_CABLE_RETRY_MS;
+        set_state(BE_ST_READY);
+        return;
+    }
     if (query == PI_Q_EXTCAPS && bridge_rear_query_wanted())
         bridge_on_rear_sink_modes(-1);
     pdinfo_dev_query_done(query);
@@ -271,6 +385,78 @@ static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
         return;
     }
     send_not_supported();
+}
+
+/* 虚拟 E-Marker：设备（端口，bit8 = 0）发来的 SOP' 请求，以 5A 无源线材应答 */
+static void virtual_cable_reply(const pd_rx_msg_t *m, const pd_header_t *h)
+{
+    uint8_t rev = h->revision < PD_REV_30 ? h->revision : PD_REV_30;
+    phy->sop1_plug = 1;                 /* 以线材身份发送 */
+    if (!h->extended && h->num_objs == 0 && h->msg_type == MSG_TYPE_Soft_Reset)
+    {
+        cable_last_rx_id = 0xFF;
+        phy->tx_msg_id_sop1 = 0;
+        pd_phy_send_sop1(phy, MSG_TYPE_Accept, 0, NULL, rev);
+    }
+    else if (h->msg_id != cable_last_rx_id)
+    {
+        cable_last_rx_id = h->msg_id;
+        uint32_t vdm = pd_get_u32(&m->data[2]);
+        if (!h->extended && h->msg_type == MSG_TYPE_Vendor_Defined && h->num_objs > 0 && VDM_STRUCTURED(vdm) &&
+            VDM_CMD_TYPE(vdm) == 0)
+        {
+            if (VDM_IS_DISC_IDENT(vdm))
+            {
+                uint32_t o[5] = {VDM_REPLY(vdm, VDM_ACK), VCABLE_ID_HEADER, 0, VCABLE_PRODUCT_VDO, VCABLE_VDO1};
+                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 5, o, rev);
+            }
+            else
+            {
+                uint32_t nak = VDM_REPLY(vdm, VDM_NAK);
+                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &nak, rev);
+            }
+        }
+    }
+    phy->sop1_plug = 0;
+}
+
+/* 线材（SOP'）的应答：Discover Identity */
+static void handle_cable_msg(const pd_rx_msg_t *m)
+{
+    pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
+    if (!h.power_role)                  /* 端口发来的（不是线材的应答） */
+    {
+        if (cable_status == CABLE_VIRTUAL)
+            virtual_cable_reply(m, &h);
+        return;
+    }
+    if (h.msg_id == cable_last_rx_id)
+        return;
+    cable_last_rx_id = h.msg_id;
+    if (h.extended || h.msg_type != MSG_TYPE_Vendor_Defined || h.num_objs == 0)
+        return;
+    uint32_t vdm = pd_get_u32(&m->data[2]);
+    if (!VDM_STRUCTURED(vdm) || VDM_CMD_TYPE(vdm) == 0 || !VDM_IS_DISC_IDENT(vdm))
+        return;
+    if (state != BE_ST_QUERY_WAIT || query != PI_Q_CABLE)
+        return;
+    uint8_t cmd = VDM_CMD_TYPE(vdm);
+    if (cmd == VDM_ACK && h.num_objs > 1)
+    {
+        uint8_t k = h.num_objs - 1 > BE_CABLE_VDOS ? BE_CABLE_VDOS : h.num_objs - 1;
+        for (uint8_t i = 0; i < k; i++)
+            cable_vdo[i] = pd_get_u32(&m->data[6 + 4 * i]);
+        cable_n = k;
+        cable_status = CABLE_OK;
+        log_cable();
+        bridge_on_back_cable(be_cable_5a());
+    }
+    else if (cmd == VDM_NAK)
+    {
+        cable_status = CABLE_NAK;
+        log_cable();
+    }
+    query_end();
 }
 
 static void handle_request(uint32_t rdo)
@@ -478,6 +664,11 @@ static void poll_attach(void)
         open_count = 0;
         rx_skip_count = 0;
         hard_reset_count = 0;
+        cable_clear();
+        cable_ra = (attach_cc == 0 ? s2 : s1) == CC_RA;
+        cable_status = cable_virtual() ? CABLE_VIRTUAL : CABLE_PENDING;     /* 不论有无 Ra，都向线材发 Discover Identity；策略为 5A 时不读线材 */
+        phy->tx_msg_id_sop1 = 0;
+        phy->sop1_en = true;
         uint8_t cc = (uint8_t)attach_cc;
         evlog_add(EV_BE_ATTACH, &cc, 1);
         pdinfo_dev_attached(true);
@@ -543,6 +734,14 @@ void be_process(void)
         return;
     }
 
+    /* 线材策略在连接期间被修改：切换虚拟 E-Marker / 读取 */
+    if (cable_virtual() != (cable_status == CABLE_VIRTUAL) && (cable_status == CABLE_VIRTUAL || cable_status == CABLE_PENDING ||
+                                                                 cable_status == CABLE_NO_REPLY || cable_status == CABLE_NAK))
+    {
+        cable_status = cable_virtual() ? CABLE_VIRTUAL : CABLE_PENDING;
+        cable_tries = 0;
+    }
+
     if (state == BE_ST_DETACH_DISCHARGE)
     {
         bool front_5v = bridge_front_ready_for_vsafe5v() && analog_vbus_mv() < VBUS_DISCHARGED_MV;
@@ -568,7 +767,12 @@ void be_process(void)
     while (pd_phy_rx_pop(phy, &m))
     {
         if (pd_active_state())
-            handle_msg(&m);
+        {
+            if (m.sop)
+                handle_cable_msg(&m);
+            else
+                handle_msg(&m);
+        }
     }
 
     if (pd_active_state() && state != BE_ST_NO_PD && bridge_take_back_hard_reset())
@@ -583,6 +787,8 @@ void be_process(void)
         if (bridge_front_ready_for_vsafe5v())
         {
             power_sw_set(true);
+            if (!cable_virtual())
+                be_vconn_set(true);     /* VBUS 之后供 VCONN（单 CC 焊盘没有 Ra 可查，硬件自行决定），tVCONNStable 内线材上电 */
             set_state(BE_ST_STARTUP);
         }
         break;
@@ -677,7 +883,7 @@ void be_process(void)
         break;
 
     case BE_ST_QUERY_WAIT:
-        if (elapsed > T_SENDER_RESPONSE_MS)
+        if (elapsed > (query == PI_Q_CABLE ? T_SENDER_RESPONSE_MS + 10 : T_SENDER_RESPONSE_MS))
             query_end();
         break;
 

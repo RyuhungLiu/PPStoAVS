@@ -319,6 +319,7 @@ input[type=file] { max-width: 100%; }
       <div class="card"><h3><span data-i18n="infoDev"></span><span class="tag" id="batTag"></span></h3><div id="infoDev"></div></div>
       <div class="card"><h3 data-i18n="infoChg"></h3><div id="infoChg"></div></div>
     </div>
+    <div class="card" id="cableCard"><h3><span data-i18n="cableT"></span><span class="tag" id="cableTag"></span></h3><div id="cableInfo"></div></div>
   </div>
 
   <!-- ===== 韌體（線上升級） ===== -->
@@ -372,6 +373,15 @@ input[type=file] { max-width: 100%; }
           </div>
           <div class="lbl" data-i18n="maxI"></div>
           <div class="inline"><input type="number" id="maxMa" min="500" max="3000" step="50"><span class="muted">mA</span><span class="small muted" id="maxIdTxt" data-i18n="maxId"></span></div>
+          <div class="lbl" data-i18n="cableP"></div>
+          <div>
+            <div class="seg">
+              <label><input type="radio" name="cablePol" value="0"><span data-i18n="cablePA"></span></label>
+              <label><input type="radio" name="cablePol" value="1"><span>3 A</span></label>
+              <label><input type="radio" name="cablePol" value="2"><span data-i18n="cableP5"></span></label>
+            </div>
+            <div class="small muted" style="margin-top:6px" data-i18n="cablePD"></div>
+          </div>
           <div class="lbl" data-i18n="hide"></div>
           <div>
             <div class="inline">
@@ -521,6 +531,7 @@ input[type=file] { max-width: 100%; }
     <div class="card">
       <h3><span data-i18n="simOut"></span></h3>
       <div class="small muted" id="simCfg" style="margin-bottom:8px"></div>
+      <label class="check" style="margin-bottom:8px"><input type="checkbox" id="simCable5a"><div><b data-i18n="simCable5a"></b></div></label>
       <div id="simResult"></div>
     </div>
   </div>
@@ -595,6 +606,17 @@ const T = {
     secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000", maxId5: "500–5000 (5A Lab)",
     hide: "Hide Fixed", hideD: "Hiding 15 V also removes AVS; hiding 20 V limits AVS to 15 V.",
     secProt: "Protection", ovp: "Over-voltage", uvp: "Under-voltage", uvpD: "not checked on PPS contracts", ocp: "Over-current",
+    cableP: "Output cable", cablePA: "Auto", cableP5: "5 A (no e-marker)",
+    cablePD: "Auto: read the cable's e-marker and raise the default 3 A limit to 5 A when it says 5 A (the charger's own current per voltage still applies). 3 A: always keep 3 A. 5 A: for a soldered cable without e-marker whose wire you know can carry 5 A. The cable is not read, the limit is 5 A, and the converter answers a device's cable query as a 5 A passive cable (20 V, no EPR). Only applies while the current limit is the default 3 A.",
+    cableT: "Output cable (e-marker)", cableNone: "No device attached.",
+    cableRa: "Reading the cable identity…", cableNoReply: "The cable did not answer: it has no e-marker, or the e-marker is not powered.", cableRaSeen: "Ra seen on the other CC pin, so the cable has an e-marker.",
+    cableNoVconn: "This board cannot supply VCONN, so a passive e-marked cable stays silent.",
+    cableWeakVconn: "VCONN comes straight from a 3.3 V MCU pin (the spec asks for 4.75–5.5 V). Some e-markers need more; a 5 V VCONN switch is needed on the next hardware.",
+    cableNak: "The cable refused Discover Identity.", cableVirtual: "Cable policy is 5 A: the cable is not read. The converter answers a device's cable query as a 5 A passive cable (20 V, no EPR).", cableOld: "Firmware too old for cable detection (needs v0.11.0).", cableIdle: "No device attached.",
+    cType: "Type", cPassive: "Passive cable", cActive: "Active cable", cOther: "Other", cCur: "Current", cVmax: "Max voltage", cSpeed: "Highest speed", cEpr: "EPR capable", cYes: "yes", cNo: "no",
+    cLimit: "Output limit", cLimitAuto: "5 A (set by the cable)", cLimitCfg: "from settings",
+    cSpeeds: ["USB 2.0", "USB 3.2 Gen 1", "USB 3.2 Gen 2", "USB4 Gen 3", "USB4 Gen 4"], cCurs: ["USB default (up to 3 A)", "3 A", "5 A", "reserved"],
+    simCable5a: "Output cable is 5 A e-marked",
     secLog: "Records", logOn: "Record events to flash", logOnD: "Off by default. Turn on to record boot, capabilities and requests (needs firmware v0.10.1 or newer). Recording is written to flash; turn it off when you are done.", logPps: "Record device PPS requests",
     logPpsD: "Off by default. PPS devices adjust voltage very often; failed requests are always recorded.",
     logPpsWarn: "PPS devices can adjust voltage several times per second.\n\nConsecutive adjustments are merged, but the 64-record limit per session may still fill up quickly and flash wear increases.\n\nRecord PPS requests anyway?",
@@ -609,7 +631,7 @@ const T = {
     colTime: "Time", colEvent: "Event", colDetail: "Detail", noRecords: "No records.", logOffHint: "Recording is off. Turn on \"Record events to flash\" in Settings and apply.",
     crcBad: "page CRC errors", dropped: "records dropped (per-session limit)",
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
-    ev: { 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
+    ev: { 18: "Cable e-marker", 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
           12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
@@ -773,6 +795,17 @@ const T = {
     secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000", maxId5: "500–5000（5A Lab）",
     hide: "隱藏 Fixed", hideD: "隱藏 15V 會同時取消 AVS；隱藏 20V 會讓 AVS 只到 15V。",
     secProt: "保護", ovp: "過壓", uvp: "欠壓", uvpD: "PPS 合約時不檢查", ocp: "過流",
+    cableP: "輸出線材", cablePA: "自動", cableP5: "5 A（無 E-Marker）",
+    cablePD: "自動：讀線材的 E-Marker，聲明 5A 時把預設 3A 上限放寬到 5A（充電器各電壓檔位自己給的電流仍然是上限）。3 A：一律維持 3A。5 A：給沒有 E-Marker、但你確認線徑能過 5A 的焊接線；不讀線材，上限放寬到 5A，並以 5A 無源線材（20V、不支援 EPR）應答設備的線材查詢。只在電流上限保持預設 3A 時生效。",
+    cableT: "輸出線材（E-Marker）", cableNone: "沒有設備插入。",
+    cableRa: "讀取線材身份中…", cableNoReply: "線材沒有回應：沒有 E-Marker，或 E-Marker 沒有供電。", cableRaSeen: "另一根 CC 腳出現 Ra，說明線材帶 E-Marker。",
+    cableNoVconn: "本板不能供 VCONN，無源 E-Marker 線材不會回應。",
+    cableWeakVconn: "VCONN 直接由 MCU 的 3.3V 引腳供電（規範要求 4.75–5.5V），部分 E-Marker 需要更高電壓；下一版硬體需要加 5V VCONN 開關。",
+    cableNak: "線材拒絕了 Discover Identity。", cableVirtual: "線材策略為 5A：不讀線材，並以 5A 無源線材（20V、不支援 EPR）應答設備的線材查詢。", cableOld: "韌體太舊，不支援線材偵測（需要 v0.11.0）。", cableIdle: "沒有設備插入。",
+    cType: "類型", cPassive: "無源線材", cActive: "有源線材", cOther: "其他", cCur: "電流", cVmax: "最高電壓", cSpeed: "最高速率", cEpr: "支援 EPR", cYes: "是", cNo: "否",
+    cLimit: "輸出上限", cLimitAuto: "5 A（由線材決定）", cLimitCfg: "按設定",
+    cSpeeds: ["USB 2.0", "USB 3.2 Gen 1", "USB 3.2 Gen 2", "USB4 Gen 3", "USB4 Gen 4"], cCurs: ["USB 預設（最高 3A）", "3 A", "5 A", "保留"],
+    simCable5a: "輸出線材是 5A E-Marker",
     secLog: "記錄", logOn: "記錄事件到 Flash", logOnD: "預設關閉。開啟後才會記錄開機、能力與請求（需韌體 v0.10.1 以上）。記錄會寫入 Flash，用完請關閉。", logPps: "記錄設備的 PPS 請求",
     logPpsD: "預設關閉。PPS 設備會頻繁調壓；失敗的請求一律會記錄。",
     logPpsWarn: "PPS 設備可能每秒調壓好幾次。\n\n連續微調會合併成一條，但每段 64 條的上限仍可能很快用完，Flash 寫入也會增加。\n\n確定要記錄 PPS 請求？",
@@ -787,7 +820,7 @@ const T = {
     colTime: "時間", colEvent: "事件", colDetail: "內容", noRecords: "沒有記錄。", logOffHint: "記錄已關閉。到「設定」開啟「記錄事件到 Flash」並套用。",
     crcBad: "頁 CRC 錯誤", dropped: "筆記錄因每段上限被捨棄",
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
-    ev: { 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
+    ev: { 18: "線材 E-Marker", 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
           13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
@@ -912,7 +945,7 @@ const T = {
 };
 /* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
 T.zhs = (() => {
-  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组運运帶带將将繼继嗎吗證证檔档裝装";
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组運运帶带將将繼继嗎吗證证檔档裝装腳脚決决";
   const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
   const phr = [["韌體", "固件"], ["檔案", "文件"], ["裝置", "设备"], ["應用程式", "应用程序"], ["位元組", "字节"], ["映像", "镜像"], ["程式", "程序"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
   const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
@@ -1054,6 +1087,7 @@ async function refreshStatus() {
   state.rearCaps = Array.from({ length: m }, (_, i) => u32(b, 1 + i * 4));
   state.rearSrc = Array.from({ length: m }, (_, i) => b[1 + m * 4 + i]);
   state.pdInfo = state.info && state.info.proto >= 5 ? parsePdInfo(await request(0x02, [3])) : null;
+  state.cable = state.info && state.info.proto >= 10 ? parseCable(await request(0x02, [4])) : null;
   renderStatus();
 }
 
@@ -1159,6 +1193,7 @@ function renderStatus() {
     $("frontCaps").innerHTML = capsTable([], 0); $("rearCaps").innerHTML = capsTable([], 0, []); $("rearCaps2").innerHTML = capsTable([], 0, []);
     renderAxis(null);
     renderPdInfo();
+    renderCable();
     return;
   }
   setTag("feTag", feState(s));
@@ -1237,6 +1272,49 @@ function renderPdInfo() {
   ]);
 }
 
+/* ================= 後端線材 E-Marker ================= */
+/* part 4：status u8（0 無、1 讀取中、2 無回應、3 NAK、4 已讀到）, flags u8（bit0 硬體可供 VCONN、bit1 聲明 5A、bit2 已放寬到 5A）, n u8, vdo u32[n]（ID Header、Cert Stat、Product、Cable VDO1、VDO2） */
+function parseCable(p) {
+  return { status: p[0], flags: p[1], n: p[2], vdo: Array.from({ length: p[2] }, (_, i) => u32(p, 3 + i * 4)) };
+}
+/* VDO → 說明（狀態頁與記錄共用） */
+function cableFields(vdo) {
+  const id = (vdo[0] ?? 0) >>> 0, v1 = (vdo[3] ?? 0) >>> 0, type = (id >>> 27) & 7;
+  return { id, v1, type, cur: (v1 >>> 5) & 3, vmax: [20, 30, 40, 50][(v1 >>> 9) & 3], speed: v1 & 7, epr: (v1 >>> 17) & 1, vid: id & 0xFFFF, pid: (vdo[2] ?? 0) >>> 16 };
+}
+function cableText(status, flags, vdo) {
+  if (status === 2) return t("cableNoReply") + (flags & 1 ? " · " + t("cableRaSeen") : "");
+  if (status === 3) return t("cableNak");
+  const f = cableFields(vdo);
+  return [t(f.type === 3 ? "cPassive" : f.type === 4 ? "cActive" : "cOther"), t("cCurs")[f.cur], `${f.vmax} V`, t("cSpeeds")[f.speed] ?? "?", f.epr ? "EPR" : "", idText(f.vid, f.pid)].filter(Boolean).join(" · ");
+}
+function renderCable() {
+  const c = state.cable, s = state.status;
+  $("cableCard").hidden = !dev;
+  if (!dev) return;
+  const set = (tag, html) => { setTag("cableTag", tag); $("cableInfo").innerHTML = html; };
+  const msg = (k) => `<div class="empty">${t(k)}</div>`;
+  if (!c) return set(["", ""], msg("cableOld"));
+  if (!(s && s.flags & 2) || c.status === 0) return set(["", ""], msg("cableNone"));
+  if (c.status === 1) return set(["", ""], msg("cableRa"));
+  if (c.status === 2) return set([c.flags & 8 ? "Ra" : "", c.flags & 8 ? "warn" : ""], msg("cableNoReply") +
+    `<div class="small muted" style="margin-top:6px">${c.flags & 8 ? t("cableRaSeen") + " " : ""}${t(c.flags & 1 ? "cableWeakVconn" : "cableNoVconn")}</div>`);
+  if (c.status === 3) return set(["E-Marker", "warn"], msg("cableNak"));
+  if (c.status === 5) return set(["5 A", "ok"], msg("cableVirtual"));
+  const id = c.vdo[0] >>> 0, v1 = (c.vdo[3] ?? 0) >>> 0, type = (id >>> 27) & 7;
+  const cur = (v1 >>> 5) & 3, vmax = [20, 30, 40, 50][(v1 >>> 9) & 3], speed = v1 & 7;
+  const kv = (rows) => `<div class="kv">${rows.map(([k, v]) => `<div>${esc(k)}</div><div>${v}</div>`).join("")}</div>`;
+  set([t("cCurs")[cur] ?? "", cur === 2 ? "ok" : ""], kv([
+    [t("idLbl"), esc(idText(id & 0xFFFF, (c.vdo[2] ?? 0) >>> 16))],
+    [t("cType"), t(type === 3 ? "cPassive" : type === 4 ? "cActive" : "cOther")],
+    [t("cCur"), esc(t("cCurs")[cur])],
+    [t("cVmax"), `${vmax} V`],
+    [t("cSpeed"), esc(t("cSpeeds")[speed] ?? "?")],
+    [t("cEpr"), t((v1 >>> 17) & 1 ? "cYes" : "cNo")],
+    [t("cLimit"), c.flags & 4 ? t("cLimitAuto") : t("cLimitCfg")],
+  ]));
+}
+
 /* ================= PDO 轉換模擬 ================= */
 /* SIM-BEGIN：移植自韌體 bridge.c build_back_caps()，韌體修改轉換規則時必須同步 */
 const P_FIX = 0, P_PPS = 12, P_EAVS = 13, P_SAVS = 14;
@@ -1261,6 +1339,8 @@ const eavsRaw = (lo, hi, pdp) => ((0xD << 28) | (Math.floor(hi / 100) << 17) | (
  */
 function simBuild(c, raws, o = {}) {
   const min = Math.min, MAXN = 7;
+  /* 後端線材 E-Marker 5A：預設 3A 上限自動放寬到 5A（韌體 bridge_back_max_ma） */
+  if ((o.cable5a || ((c.flags3 ?? 0) & 4)) && !((c.flags3 ?? 0) & 2) && c.maxMa === 3000) c = { ...c, maxMa: 5000 };
   const fc = raws.map(pdoParse), n = fc.length;
   const flags = c.flags ?? 0, flags2 = c.flags2 ?? 0;
   if (n === 0) { const ma = min(500, c.maxMa); return { pdos: [fixRaw(5000, ma)], src: [1], held: false }; }
@@ -1417,15 +1497,17 @@ function renderSim() {
   const raws = simRows.map(simRaw);
   const eprMode = !!(c.flags & 32) && raws.some((v) => v >>> 28 === 0xD);
   $("simCfg").textContent = `${t("simUsing")} ${cfgText(c)}`;
-  const r1 = simBuild(c, raws, { eprMode, rearAvsOk: false });
+  const cable5a = $("simCable5a").checked;
+  const r1 = simBuild(c, raws, { eprMode, rearAvsOk: false, cable5a });
   let h = r1.held ? `<div class="simsub">${t("simHeld")}</div>` : "";
   h += capsTable(r1.pdos, 0, r1.src, raws);
   if (r1.held) {
-    const r2 = simBuild(c, raws, { eprMode, rearAvsOk: true });
+    const r2 = simBuild(c, raws, { eprMode, rearAvsOk: true, cable5a });
     h += `<div class="simsub">${t("simAvsOk")}</div>` + capsTable(r2.pdos, 0, r2.src, raws);
   }
   $("simResult").innerHTML = h;
 }
+$("simCable5a").addEventListener("change", renderSim);
 $("simRows").addEventListener("input", (e) => {
   const el = e.target;
   if (el.dataset.j) { simRows[+el.dataset.i][+el.dataset.j] = Number(el.value); simSave(); renderSim(); }
@@ -1499,7 +1581,7 @@ function readForm() {
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
     flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0) | ($("idFe").checked ? 32 : 0) | ($("idBe").checked ? 64 : 0) | ($("avs2ppsMin5").checked ? 128 : 0),
     /* flags3：bit0 開啟記錄（韌體 v0.10.1 起；舊韌體沒有） */
-    flags3: state.cfg && state.cfg.flags3 == null ? null : $("logOn").checked ? 1 : 0,
+    flags3: state.cfg && state.cfg.flags3 == null ? null : ($("logOn").checked ? 1 : 0) | [0, 2, 4][radio("cablePol")],
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
@@ -1515,6 +1597,8 @@ function writeForm(c) {
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
   $("logOn").checked = !!((c.flags3 ?? 0) & 1); $("logOn").disabled = !(state.info && state.info.fw >= 0xA1);
+  const pol = (c.flags3 ?? 0) & 2 ? 1 : (c.flags3 ?? 0) & 4 ? 2 : 0;
+  document.querySelectorAll("input[name=cablePol]").forEach((r) => { r.checked = Number(r.value) === pol; r.disabled = !(state.info && state.info.fw >= 0xB0); });
   $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
@@ -1875,6 +1959,7 @@ function decodeRecords(records) {
         const info = code === 2 || code === 3 || code === 5 || code === 6 || code === 7;
         cls = info ? "acc" : "warn"; cat = info ? "" : "bad"; break; }
       case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24, d.length >= 32)); cls = "acc"; break;
+      case 18: text = cableText(d[0], d[1], Array.from({ length: d[2] }, (_, i) => u32(d, 3 + i * 4))); cls = d[0] === 4 ? "acc" : ""; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;
       case 17: {

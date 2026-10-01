@@ -240,7 +240,7 @@ bool pdinfo_fe_skedb(uint8_t *out)
     if (!pdinfo_on() || !dev_skedb_ok)
         return false;
     const cfg_t *c = cfg();
-    uint8_t pdp = (uint32_t)c->max_mv * c->max_ma / 1000000;
+    uint8_t pdp = (uint32_t)c->max_mv * bridge_back_max_ma() / 1000000;
     memcpy(out, dev_skedb, SKEDB_LEN);
     if (!pdinfo_id_on())
         own_vid_pid(out, true, true);

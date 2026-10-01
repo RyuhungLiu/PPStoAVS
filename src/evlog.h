@@ -37,6 +37,7 @@ typedef enum
     EV_IDENT        = 15,   /* ev_ident_t：读到充电器 / 设备的身份（Discover Identity） */
     EV_UFCS_PKT     = 16,   /* ev_ufcs_pkt_t：UFCS 原始报文（探测固件） */
     EV_UFCS_STEP    = 17,   /* ev_ufcs_step_t：UFCS 探测流程节点 */
+    EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -144,6 +145,14 @@ typedef struct __attribute__((packed))
     uint16_t pid;
     uint16_t bcd;           /* bcdDevice */
 } ev_ident_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  status;        /* be_cable_status_t：2 无应答、3 NAK、4 已读到 */
+    uint8_t  flags;         /* bit0 另一根 CC 脚出现 Ra，bit1 硬件可供 VCONN */
+    uint8_t  n;             /* VDO 数 */
+    uint32_t vdo[5];        /* ID Header、Cert Stat、Product、Cable VDO1、Cable VDO2；记录时只写 n 个 */
+} ev_cable_t;
 
 typedef struct __attribute__((packed))
 {
