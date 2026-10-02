@@ -190,6 +190,8 @@ static int8_t find_native_avs(const pdo_t *c, uint8_t n)
  *  - Lab 后端二次握手：确认设备支持 AVS 之前不给 AVS、改给全部 PPS
  *  - Lab EPR AVS（CFG_EPR_AVS，前端 EPR 模式）：AVS 来源优先取 EPR AVS，只用 15~20V（电流 min(PDP÷20V, 5A)）；
  *    9~15V 段空缺，只有 9V、15V 两点走 Fixed，9~15V 电流 = min(9V、15V Fixed 电流)
+ *  - Lab 自订 PDO 列表（CFGX_PDO，需强制 PPS）：列表里的 Fixed / PPS / AVS 勾选取代上面的来源规则（模式 a~d 仍过滤，隐藏 Fixed、12V 转换、自订 Fixed / PPS 忽略）；
+ *    Fixed 取覆盖该电压的 PPS → 充电器 Fixed → 9V 起 AVS，PPS 取完整覆盖的 PPS → AVS，电流取 min(设定, 来源, 电流上限)；AVS 沿用上面的来源与电流规则
  *  - Lab AVS 转 PPS（CFG_AVS_TO_PPS，模式 b/c）：充电器原生 AVS 另外提供为 9V（默认）或 5V（CFG2_AVS_PPS5）~AVS 最高电压的 PPS，
  *    电流取两段 AVS 电流较小者；同一最高电压已有充电器 PPS 时以充电器 PPS 为准
  */
@@ -204,6 +206,55 @@ static int8_t find_pps_covering(const pdo_t *fc, uint8_t n, uint16_t mv)
             best = i;
     }
     return best;
+}
+
+/* 完整覆盖 lo~hi 且电流最大的充电器 PPS；没有时，9V 起的范围可由 SPR AVS 提供（请求按 100mV 四舍五入） */
+static bool pps_from_source(const pdo_t *fc, uint8_t n, uint16_t lo, uint16_t hi, uint16_t ma, back_entry_t *out)
+{
+    int8_t best = -1;
+    for (uint8_t i = 0; i < n && lo < hi; i++)
+    {
+        if (fc[i].type == PPS_PDO && fc[i].min_mv <= lo && fc[i].max_mv >= hi &&
+            (best < 0 || fc[i].max_ma > fc[best].max_ma))
+            best = i;
+    }
+    uint16_t src_ma = best >= 0 ? fc[best].max_ma : 0;
+    if (best < 0 && lo >= 9000 && lo < hi)
+    {
+        int8_t a = find_native_avs(fc, n);
+        if (a >= 0 && fc[a].max_mv >= hi)
+        {
+            best = a;
+            src_ma = (hi > 15000 && fc[a].max_ma_20v) ? min_u16(fc[a].max_ma, fc[a].max_ma_20v) : fc[a].max_ma;
+        }
+    }
+    if (best < 0 || src_ma == 0)
+        return false;
+    back_entry_t e = {PPS_PDO, fc[best].type, best + 1, lo, hi, min_u16(src_ma, ma), 0};
+    *out = e;
+    return true;
+}
+
+/* 自订 PDO 列表里的 Fixed：强制 PPS，覆盖该电压的 PPS 优先，其次充电器同电压 Fixed，最后 9V 起的原生 AVS；电流取 min(设定, 来源) */
+static bool list_fixed(const pdo_t *fc, uint8_t n, const pdo_t *p, uint16_t max_ma, back_entry_t *out)
+{
+    uint16_t mv = p->max_mv;
+    int8_t s = find_pps_covering(fc, n, mv);
+    if (s < 0 && find_front_fixed(mv))
+        s = find_front_fixed(mv) - 1;
+    uint16_t src_ma = s >= 0 ? fc[s].max_ma : 0;
+    if (s < 0)
+    {
+        s = find_native_avs(fc, n);
+        if (s < 0 || mv < 9000 || mv > fc[s].max_mv)
+            return false;
+        src_ma = (mv > 15000 && fc[s].max_ma_20v) ? fc[s].max_ma_20v : fc[s].max_ma;
+    }
+    if (src_ma == 0)
+        return false;
+    back_entry_t e = {FPDO, fc[s].type, s + 1, mv, mv, min_u16(min_u16(p->max_ma, max_ma), src_ma), 0};
+    *out = e;
+    return true;
 }
 
 static void build_back_caps(void)
@@ -237,10 +288,32 @@ static void build_back_caps(void)
     bool want_avs = c->mode == CFG_MODE_AVS || c->mode == CFG_MODE_AVS_PPS;
     bool want_pps = c->mode == CFG_MODE_PPS || c->mode == CFG_MODE_AVS_PPS;
 
+    /* Lab 自订 PDO 档位（强制 PPS 下）：Fixed / AVS / PPS 都取自列表，仍按模式 a~d 过滤；AVS 须同时有 15V 与 20V Fixed（设置里已校验） */
+    bool force_pps = (c->flags2 & CFG2_FORCE_PPS) != 0;
+    const cfg_ext_t *x = cfg_ext();
+    bool list = force_pps && (x->flags & CFGX_PDO);
+    pdo_t lp[CFGX_MAX_PDOS];
+    uint8_t nl = list ? x->pdo_n : 0;
+    for (uint8_t i = 0; i < nl; i++)
+        lp[i] = pd_parse_pdo(x->pdo[i]);
+    if (list)
+    {
+        bool avs_item = false;
+        for (uint8_t i = 0; i < nl; i++)
+            avs_item |= lp[i].type == SPR_AVS_PDO;
+        want_avs &= avs_item;
+    }
+
     /* 1. 充电器 Fixed */
     back_entry_t fixed[PD_MAX_DATA_OBJS];
     uint8_t nf = 0;
-    for (uint8_t i = 0; i < n; i++)
+    for (uint8_t i = 0; i < nl; i++)
+    {
+        back_entry_t e;
+        if (lp[i].type == FPDO && lp[i].max_mv <= c->max_mv && list_fixed(fc, n, &lp[i], c->max_ma, &e))
+            insert_sorted(fixed, &nf, &e);
+    }
+    for (uint8_t i = 0; i < n && !list; i++)
     {
         uint16_t mv = fc[i].max_mv;
         if (fc[i].type != FPDO || fc[i].raw == 0 || mv > c->max_mv || fixed_hidden(mv))
@@ -253,8 +326,7 @@ static void build_back_caps(void)
      * 1b. Lab 强制 PPS：Fixed 改由覆盖该电压的 PPS 提供（电流大者优先），电流按 PPS。
      * 前端合约因此都是 PPS，压降补偿对所有档位生效；没有 PPS 覆盖的电压仍走充电器 Fixed
      */
-    bool force_pps = (c->flags2 & CFG2_FORCE_PPS) != 0;
-    if (force_pps)
+    if (force_pps && !list)
     {
         for (uint8_t k = 0; k < nf; k++)
         {
@@ -358,7 +430,14 @@ static void build_back_caps(void)
     /* 3. PPS 透传（二次握手第一阶段用 PPS 代替 AVS） */
     back_entry_t pps[PD_MAX_DATA_OBJS];
     uint8_t np = 0;
-    if (want_pps || avs_held)
+    for (uint8_t i = 0; i < nl && want_pps; i++)
+    {
+        back_entry_t e;
+        if (lp[i].type == PPS_PDO && lp[i].min_mv < c->max_mv &&
+            pps_from_source(fc, n, lp[i].min_mv, min_u16(lp[i].max_mv, c->max_mv), min_u16(lp[i].max_ma, c->max_ma), &e))
+            insert_sorted(pps, &np, &e);
+    }
+    if ((want_pps || avs_held) && !list)
     {
         for (uint8_t i = 0; i < n; i++)
         {
@@ -390,30 +469,11 @@ static void build_back_caps(void)
      */
     bool has_custom = false;
     back_entry_t custom;
-    if (c->flags2 & CFG2_PPS_CUSTOM)
+    if ((c->flags2 & CFG2_PPS_CUSTOM) && !list)
     {
         uint16_t lo = c->pps_min_dv * 100, hi = min_u16(c->pps_max_dv * 100, c->max_mv);
-        int8_t best = -1;
-        for (uint8_t i = 0; i < n && lo < hi; i++)
+        if (pps_from_source(fc, n, lo, hi, min_u16(c->pps_ma50 * 50, c->max_ma), &custom))
         {
-            if (fc[i].type == PPS_PDO && fc[i].min_mv <= lo && fc[i].max_mv >= hi &&
-                (best < 0 || fc[i].max_ma > fc[best].max_ma))
-                best = i;
-        }
-        uint16_t src_ma = best >= 0 ? fc[best].max_ma : 0;
-        if (best < 0 && lo >= 9000 && lo < hi)
-        {
-            int8_t a = find_native_avs(fc, n);
-            if (a >= 0 && fc[a].max_mv >= hi)
-            {
-                best = a;
-                src_ma = (hi > 15000 && fc[a].max_ma_20v) ? min_u16(fc[a].max_ma, fc[a].max_ma_20v) : fc[a].max_ma;
-            }
-        }
-        if (best >= 0 && src_ma > 0)
-        {
-            back_entry_t e = {PPS_PDO, fc[best].type, best + 1, lo, hi, min_u16(min_u16(src_ma, c->pps_ma50 * 50), c->max_ma), 0};
-            custom = e;
             has_custom = true;
             int8_t k = find_mv(pps, np, hi);
             if (k >= 0)
@@ -437,7 +497,11 @@ static void build_back_caps(void)
 
     /* 4. 转换 Fixed：12V 转换或 Lab 自订 Fixed（互斥） */
     uint16_t conv_mv = 0, conv_ma = c->max_ma;
-    if ((c->flags & CFG_FIX12) && !fixed_hidden(12000))
+    if (list)
+    {
+        /* 自订 PDO 列表已包含全部 Fixed，不再转换 */
+    }
+    else if ((c->flags & CFG_FIX12) && !fixed_hidden(12000))
     {
         conv_mv = 12000;
     }
@@ -678,12 +742,14 @@ fe_target_t bridge_on_front_caps(bool *for_bridge)
 /*
  * 后端电流上限：设置里的上限；默认 3A 视为“自动”，后端线材的 E-Marker 读到 5A 时放宽到 5A
  * （充电器自己给的各档电流仍是上限，所以 5A 只会出现在充电器提供 5A 的档位，通常是 20V）。
- * 线材策略 CFG3_CABLE5A（按 5A 处理，焊接线用）等同线材已声明 5A；用户改过上限（≠ 3A）或选了固定 3A（CFG3_NO_CABLE5A）时按设置
+ * 虚拟 E-Marker（CFGX_CABLE）开启时以它的电流位为准（3A 即不放宽）；用户改过上限（≠ 3A）时按设置
  */
 uint16_t bridge_back_max_ma(void)
 {
     const cfg_t *c = cfg();
-    if ((back_cable_5a || (c->flags3 & CFG3_CABLE5A)) && !(c->flags3 & CFG3_NO_CABLE5A) && c->max_ma == CFG_MAX_MA)
+    const cfg_ext_t *x = cfg_ext();
+    bool five = (x->flags & CFGX_CABLE) ? cfg_ext_cable_5a(x) : back_cable_5a;
+    if (five && c->max_ma == CFG_MAX_MA)
         return CFG_MAX_MA_5A;
     return c->max_ma;
 }

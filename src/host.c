@@ -20,6 +20,10 @@ enum
     CMD_CFG_GET      = 0x10,
     CMD_CFG_SET      = 0x11,
     CMD_CFG_DEFAULT  = 0x12,
+    CMD_CFGX_GET     = 0x13,    /* 协议 v11：扩展设置 cfg_ext_t（52 字节） */
+    CMD_CFGX_SET     = 0x14,
+    CMD_CFGF_GET     = 0x15,    /* 协议 v11：前端虚拟 E-Marker VDO（20 字节） */
+    CMD_CFGF_SET     = 0x16,
     CMD_LOG_SESSIONS = 0x20,
     CMD_LOG_READ     = 0x21,
     CMD_LOG_CLEAR    = 0x22,
@@ -143,6 +147,19 @@ static uint8_t cmd_cfg_set(const cfg_t *c)
     return ST_OK;
 }
 
+static uint8_t cmd_cfgx_set(const uint8_t *arg, bool front)
+{
+    cfg_ext_t x = *cfg_ext();
+    if (front)
+        memcpy(x.fcable, arg, CFGF_SIZE);
+    else
+        memcpy(&x, arg, CFGX_BASE_SIZE);
+    if (!cfg_ext_set(&x))
+        return ST_BAD_ARG;
+    bridge_on_cfg_changed();
+    return ST_OK;
+}
+
 static bool enter_bl_pending;
 
 static uint8_t handle(const uint8_t *req, wr_t *w)
@@ -178,9 +195,27 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
     case CMD_CFG_DEFAULT:
     {
         cfg_t c;
+        cfg_ext_t x;
         cfg_defaults(&c);
-        return cmd_cfg_set(&c);
+        cfg_ext_defaults(&x);
+        return cfg_ext_set(&x) ? cmd_cfg_set(&c) : ST_BAD_ARG;
     }
+
+    case CMD_CFGX_GET:
+        put_bytes(w, cfg_ext(), CFGX_BASE_SIZE);
+        put8(w, cfg_save_pending());
+        return ST_OK;
+
+    case CMD_CFGF_GET:
+        put_bytes(w, cfg_ext()->fcable, CFGF_SIZE);
+        put8(w, cfg_save_pending());
+        return ST_OK;
+
+    case CMD_CFGX_SET:
+        return cmd_cfgx_set(arg, false);
+
+    case CMD_CFGF_SET:
+        return cmd_cfgx_set(arg, true);
 
     case CMD_LOG_SESSIONS:
     {

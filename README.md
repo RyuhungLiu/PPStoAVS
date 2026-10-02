@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR).
+unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR). v0.12.0 replaces the 3 A / 5 A output cable setting with a fully editable virtual e-marker (off by default) and adds an optional custom PDO list (up to 7 levels, with AVS) to the Lab force PPS mode.
 
 ## Pin assignment
 
@@ -153,10 +153,7 @@ flash log as a "Cable e-marker" record.
   The charger's own current per voltage is still the ceiling, so 5 A normally appears only at 20 V (Fixed, SPR AVS 15–20 V, PPS).
   The Source never offers EPR (no Fixed above 20 V, no EPR AVS, Enter_EPR is answered with Not_Supported).
 - OCP follows the new limit: at least 7/6 of it, at most 5.5 A (the current sense saturates near 5.8 A).
-- Settings → Output cable: **Auto** (read the e-marker, the behavior above), **3 A** (never raise) or **5 A** (settings byte `flags3`
-  bit 1 = 3 A, bit 2 = 5 A). 5 A is for a soldered cable without e-marker whose wire you know can carry 5 A: the cable is not read,
-  the limit is 5 A, and the rear answers a device's SOP' Discover Identity as a virtual 5 A passive cable (Type-C, 20 V, USB 2.0, no EPR,
-  VCONN not required). The limit is only raised while it is at the default 3 A; any other value set by the user is kept.
+- Settings → Output cable: the 3 A / 5 A choice of v0.11.0 became the virtual e-marker (below). Off (default) = read the real cable.
 - To get 5 A from the charger as well, use the Lab virtual E-Marker on the front (otherwise the charger offers at most 3 A).
 - **Hardware limit:** an e-marker is powered from VCONN, and this MCU cannot supply it from its CC pins. A passive e-marked cable stays
   silent, so the host tool shows "no answer". The default `be_vconn_set()` (weak, in `src/be_source.c`) drives the other CC pin with 3.3 V when Ra is seen (works with the 5 A cable tested); it is called after VBUS
@@ -191,6 +188,28 @@ Adds one PPS APDO with a user-set range of 3.3–21.0 V (100 mV steps) and a cur
   - It takes a slot before PPS passthrough and converted Fixed PDOs, and replaces a passthrough PPS with the same maximum.
 - The configuration grows to 24 bytes (host protocol v6). Earlier settings are migrated.
 
+### Virtual e-marker (v0.12.0)
+
+The web tool has an **E-Marker** tab for both sides. Rear = what the converter answers to the device (this section). Front = what it answers to the charger: the Lab "Virtual E-Marker" checkbox (moved to that tab) now answers with fully editable VDOs (default: passive 50 V / 5 A / EPR cable). PA2 (pin 10, plug B5/VCONN through 1 kΩ) is pulled low as Ra only when the front Cable VDO1 says 5 A; with 3 A or with the option off it floats. The front VDOs are stored in `cfg_ext_t.fcable` and use host commands `0x15` / `0x16` (20 bytes).
+
+Settings → Output cable → "Virtual e-marker" (off by default). When on, the rear does not read the cable and answers a device's
+SOP' Discover Identity (and Soft_Reset) from stored VDOs: ID Header, Cert Stat, Product, Cable VDO1 and, for an active cable (ID Header
+product type 4), Cable VDO2. A card in Settings edits every field (product type, USB host/device capable, connector type, VID, XID,
+PID, bcdDevice, current, maximum voltage, USB speed, plug type, termination, latency, EPR, VBUS through cable) or the raw hex of each
+VDO. Defaults are a generic passive Type-C cable (VID 1209, PID 0001, 3 A, 20 V, USB 2.0, < 10 ns, no EPR); the "Generic 3 A" /
+"Generic 5 A" buttons reset to them.
+
+- The current bits (Cable VDO1 bits 6:5) decide the rear limit: 3 A (default) gives the same PDOs as the old fixed-3 A setting, 5 A the
+  same as the old 5 A setting (default 3 A limit raised to 5 A, OCP at least 7/6 of it). Source still never offers EPR.
+- Self Q&A: if the sink has not sent a SOP' query 300 ms after the first Source_Capabilities, the converter plays both sides once per
+  attach on SOP' (port Discover Identity, cable GoodCRC, cable ACK with the virtual VDOs, port GoodCRC) so a sniffer/tester on the CC
+  line can read the cable. Skipped when the sink queries by itself.
+- Changing other fields is not spec-compliant. It is only for testing e-marker readers and sinks. The Status tab shows the virtual data
+  as "Virtual".
+- Stored in `cfg_ext_t` (52 bytes, flags + 5 cable VDOs + 7 PDOs), saved on the same Flash page as `cfg_t` (magic `PCF5`; `PCF4` pages
+  load with defaults). The old `flags3` bits 1/2 (3 A / 5 A) are migrated into the virtual e-marker once. Host protocol 11: commands
+  `0x13` CFGX_GET / `0x14` CFGX_SET; `0x12` restores both.
+
 ### Lab mode: force PPS
 
 Every Fixed level that a charger PPS covers is served from that PPS instead of the charger's Fixed. The PPS with the highest current
@@ -198,6 +217,18 @@ is used first, and the Fixed current offered becomes the PPS current. AVS is tra
 range as the charger's native AVS. The front contract is then always PPS, so voltage compensation applies to every level. It is
 still capped at the PPS maximum, so there is no compensation at 20 V with PPS 5–20 V. Voltages no PPS covers still use the
 charger's Fixed. Works in all modes.
+
+**Custom PDO list (v0.12.0, needs force PPS).** Off by default (the original charger PDOs pass through with the rules above). When on,
+the Settings page edits a list of up to 7 PDOs: Fixed (5–20 V, 0.1 V steps, 0.5–5 A), PPS (min ≥ 3.3 V, max ≤ 21 V, 0.5–5 A) and an AVS
+tick box (one slot). The 5 V Fixed is mandatory; AVS requires one 15 V and one 20 V Fixed in the list, which the host tool checks and the
+firmware re-checks. Output modes still filter the list: a keeps Fixed + AVS, b Fixed + PPS, c all, d only Fixed. Hide Fixed, 12 V
+conversion and the custom Fixed / PPS options are ignored while the list is on.
+
+- Each level is offered only if the charger can supply it. Fixed: from a charger PPS covering the voltage (highest current first), else the
+  charger's own Fixed, else a native AVS from 9 V. PPS: from a charger PPS covering the whole range (else native AVS from 9 V).
+  The current is min(your value, charger source, current limit, 5 A cable rule); the maximum voltage setting still caps the list.
+- AVS follows the existing rule: source = native AVS or a PPS reaching 15/20 V; 9–15 V current follows the 15 V Fixed, 15–20 V the 20 V Fixed.
+- The device list is sorted Fixed (ascending), AVS, PPS. The Simulator tab shows the result (the port in `simBuild` follows `build_back_caps`).
 
 ## Host tool
 

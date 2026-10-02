@@ -43,9 +43,9 @@ typedef enum
 #define CFG2_MASK           (CFG2_AVS_PPS5 | CFG2_NO_INFO | CFG2_ID_PT | CFG2_FORCE_PPS | CFG2_PPS_CUSTOM | CFG2_UFCS | CFG2_ID_FE | CFG2_ID_BE)
 /* flags3 位 */
 #define CFG3_LOG            (1u << 0)   /* 事件记录（默认关闭，需在网页开启；关闭时不写 Flash） */
-#define CFG3_NO_CABLE5A     (1u << 1)   /* 不因后端线材 E-Marker 为 5A 而把 3A 默认上限放宽到 5A（默认 0 = 自动放宽） */
-#define CFG3_CABLE5A        (1u << 2)   /* 后端线材按 5A 处理（焊接线没有 E-Marker 时用）：不读线材，后端上限放宽到 5A，并以虚拟 5A E-Marker 应答设备的 SOP' 查询；与 CFG3_NO_CABLE5A 互斥 */
-#define CFG3_MASK           (CFG3_LOG | CFG3_NO_CABLE5A | CFG3_CABLE5A)
+#define CFG3_OLD_NO5A       (1u << 1)   /* v0.11.x 的线材策略（固定 3A）；v0.12.0 起改为虚拟 E-Marker（cfg_ext_t），读到旧设置时迁移 */
+#define CFG3_OLD_5A         (1u << 2)   /* v0.11.x 的线材策略（5A） */
+#define CFG3_MASK           CFG3_LOG
 #define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
 #define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */
@@ -92,6 +92,40 @@ typedef enum
 
 #define CFG_COMP_V_MAX      1000
 #define CFG_COMP_R_MAX      500
+
+/*
+ * 扩展设置（v0.12.0）：与 cfg_t 一起存在同一页 Flash，由单独的上位机指令读写（协议 v11）
+ *  - 虚拟 E-Marker（CFGX_CABLE）：后端不读线材，按这里的 VDO 应答设备的 SOP' Discover Identity；
+ *    Cable VDO1 的电流位为 5A 时后端上限按 5A，为 3A 时不放宽
+ *  - 自订 PDO 档位（CFGX_PDO，需 CFG2_FORCE_PPS）：最多 7 个原始 PDO（Fixed、PPS、至多一个 AVS）
+ */
+#define CFGX_CABLE          (1u << 0)
+#define CFGX_PDO            (1u << 1)
+#define CFGX_MASK           (CFGX_CABLE | CFGX_PDO)
+#define CFGX_MAX_PDOS       7
+typedef struct __attribute__((packed))
+{
+    uint8_t  flags;         /* CFGX_* */
+    uint8_t  pdo_n;         /* 自订 PDO 个数（0 ~ 7） */
+    uint16_t reserved;
+    uint32_t cable[5];      /* ID Header、Cert Stat、Product、Cable VDO1、Cable VDO2（有源线材才发送） */
+    uint32_t pdo[CFGX_MAX_PDOS];   /* 原始 PDO：Fixed、PPS APDO、SPR AVS APDO（电流位忽略）；顺序随意，固件按电压升序输出 */
+    uint32_t fcable[5];     /* 前端虚拟 E-Marker（CFG_FE_EMARKER）应答充电器 SOP' 的 VDO，格式同 cable[]；上位机用 CMD_CFGF_* 单独读写 */
+} cfg_ext_t;
+#define CFGX_BASE_SIZE      52          /* CMD_CFGX_* 传输的前 52 字节（flags ~ pdo） */
+#define CFGF_SIZE           20          /* CMD_CFGF_* 传输的 fcable */
+/* 虚拟 E-Marker 的 VDO 个数（含 ID Header ~ Cable VDO1；有源线材，ID Header 产品类型 = 4，多一个 Cable VDO2） */
+static inline uint8_t cfg_cable_n(uint32_t id_header)
+{
+    return ((id_header >> 27) & 7) == 4 ? 5 : 4;
+}
+
+const cfg_ext_t *cfg_ext(void);
+void cfg_ext_defaults(cfg_ext_t *x);
+bool cfg_ext_valid(const cfg_ext_t *x);
+bool cfg_ext_set(const cfg_ext_t *x);
+bool cfg_ext_cable_5a(const cfg_ext_t *x);
+bool cfg_ext_fe_5a(const cfg_ext_t *x);         /* 前端 Cable VDO1 电流位 = 5A */      /* Cable VDO1 电流位 = 5A */
 
 void cfg_init(void);                    /* 从 Flash 读取，无效则用默认值 */
 const cfg_t *cfg(void);

@@ -166,12 +166,16 @@ td.v::before { content: ""; display: inline-block; width: 9px; height: 9px; bord
 .empty { color: var(--muted); padding: 10px 0; }
 
 /* ---------- 設定：左邊是段落名稱，右邊是控制項 ---------- */
-#view-settings, #view-fw { gap: 0; }
-#view-settings .grid2 { display: block; }
-#view-settings .card, #view-fw .card { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 32px; padding: 22px 0 24px; }
-#view-settings .card > h3, #view-fw .card > h3 { grid-column: 1; grid-row: 1 / span 12; align-self: start; margin: 0; }
-#view-settings .card > :not(h3), #view-fw .card > :not(h3) { grid-column: 2; min-width: 0; }
-@media (max-width: 760px) { #view-settings .card, #view-fw .card { display: block; } #view-settings .card > h3, #view-fw .card > h3 { margin-bottom: 12px; } }
+#view-settings, #view-em, #view-fw { gap: 0; }
+#view-settings .grid2 , #view-em .grid2 { display: block; }
+#view-settings .card, #view-em .card, #view-fw .card { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 32px; padding: 22px 0 24px; }
+#view-settings .card > h3, #view-em .card > h3, #view-fw .card > h3 { grid-column: 1; grid-row: 1 / span 12; align-self: start; margin: 0; }
+#view-settings .card > :not(h3), #view-em .card > :not(h3), #view-fw .card > :not(h3) { grid-column: 2; min-width: 0; }
+#view-settings .card[hidden] , #view-em .card[hidden] { display: none; }
+.fields > .lbl.vcgrp { grid-column: 1 / -1; margin-top: 6px; color: inherit; font-weight: 600; }
+.fields input.hex { width: 7.5em; }
+#pdolMsg { margin-top: 6px; }
+@media (max-width: 760px) { #view-settings .card, #view-em .card, #view-fw .card { display: block; } #view-settings .card > h3, #view-em .card > h3, #view-fw .card > h3 { margin-bottom: 12px; } }
 .tab:disabled { opacity: .35; cursor: default; }
 .fwbar { height: 10px; border: 1px solid var(--line-strong); border-radius: 5px; overflow: hidden; background: var(--soft); margin-top: 12px; max-width: 420px; }
 .fwbar > div { height: 100%; width: 0; background: var(--gold); }
@@ -219,6 +223,7 @@ input[type=file] { max-width: 100%; }
 .labin { margin: 8px 0 0 44px; }
 .labin input[type=number] { width: 84px; }
 @media (max-width: 640px) { .labhead { flex-wrap: wrap; } .labtags { margin-left: 44px; justify-content: flex-start; } .lab details, .labin { margin-left: 44px; } }
+#applyBar { display: contents; } #applyBar[hidden] { display: none; }
 .actions { position: sticky; bottom: 0; z-index: 4; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 14px; box-shadow: 0 -8px 20px rgba(0, 0, 0, .14); margin-top: 12px; }
 @media (max-width: 640px) { .fields { grid-template-columns: 1fr; gap: 4px 0; } .fields > .lbl { margin-top: 10px; } }
@@ -276,6 +281,7 @@ input[type=file] { max-width: 100%; }
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-tab="status" data-i18n="tabStatus"></button>
     <button class="tab" role="tab" data-tab="settings" data-i18n="tabSettings"></button>
+    <button class="tab" role="tab" data-tab="em" data-i18n="tabEm"></button>
     <button class="tab" role="tab" data-tab="log" data-i18n="tabLog"></button>
     <button class="tab" role="tab" data-tab="fw" data-i18n="tabFw"></button>
     <button class="tab" role="tab" data-tab="sim" data-i18n="tabSim"></button>
@@ -373,15 +379,6 @@ input[type=file] { max-width: 100%; }
           </div>
           <div class="lbl" data-i18n="maxI"></div>
           <div class="inline"><input type="number" id="maxMa" min="500" max="3000" step="50"><span class="muted">mA</span><span class="small muted" id="maxIdTxt" data-i18n="maxId"></span></div>
-          <div class="lbl" data-i18n="cableP"></div>
-          <div>
-            <div class="seg">
-              <label><input type="radio" name="cablePol" value="0"><span data-i18n="cablePA"></span></label>
-              <label><input type="radio" name="cablePol" value="1"><span>3 A</span></label>
-              <label><input type="radio" name="cablePol" value="2"><span data-i18n="cableP5"></span></label>
-            </div>
-            <div class="small muted" style="margin-top:6px" data-i18n="cablePD"></div>
-          </div>
           <div class="lbl" data-i18n="hide"></div>
           <div>
             <div class="inline">
@@ -453,10 +450,6 @@ input[type=file] { max-width: 100%; }
           <label class="labhead"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndS"></span></div><span class="labtags"></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fe2ndL"></ul></details>
         </div>
-        <div class="lab" id="lab-emarker">
-          <label class="labhead"><input type="checkbox" id="emarker"><div><b data-i18n="emarker"></b><span data-i18n="emarkerS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagHw"></span><span class="tag acc" data-i18n="tag5a"></span></span></label>
-          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="emarkerL"></ul></details>
-        </div>
       </div>
       <h4 class="labgrp" data-i18n="labRear"></h4>
       <div class="labs">
@@ -478,6 +471,19 @@ input[type=file] { max-width: 100%; }
         </div>
         <div class="lab" id="lab-forcePps">
           <label class="labhead"><input type="checkbox" id="forcePps"><div><b data-i18n="forcePps"></b><span data-i18n="forcePpsS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
+          <div class="labin" id="pdolIn">
+            <label class="check"><input type="checkbox" id="pdol"><div><b data-i18n="pdol"></b><span data-i18n="pdolS"></span></div></label>
+            <div id="pdolEd" hidden style="margin-top:8px">
+              <div id="pdolRows"></div>
+              <div class="inline" style="margin-top:10px">
+                <button class="btn keep" id="pdolAddF" data-i18n="pdolAddF"></button>
+                <button class="btn keep" id="pdolAddP" data-i18n="pdolAddP"></button>
+                <label class="inline" style="gap:6px"><input type="checkbox" id="pdolAvs"><span data-i18n="pdolAvs"></span></label>
+                <span class="small muted" id="pdolCount"></span>
+              </div>
+              <div class="small" id="pdolMsg"></div>
+            </div>
+          </div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="forcePpsL"></ul></details>
         </div>
         <div class="lab" id="lab-fixc">
@@ -505,14 +511,6 @@ input[type=file] { max-width: 100%; }
       <div class="scroll" id="rearCaps2"></div>
     </div>
 
-    <div class="actions">
-      <span class="tag" id="cfgState"></span>
-      <span class="small muted" id="dirtyText"></span>
-      <span class="spacer"></span>
-      <button class="btn" id="btnDefaults" data-i18n="defaults"></button>
-      <button class="btn" id="btnRevert" data-i18n="revert"></button>
-      <button class="btn primary" id="btnApply" data-i18n="apply"></button>
-    </div>
   </div>
 
   <!-- ===== 記錄 ===== -->
@@ -533,6 +531,50 @@ input[type=file] { max-width: 100%; }
       <div class="small muted" id="simCfg" style="margin-bottom:8px"></div>
       <label class="check" style="margin-bottom:8px"><input type="checkbox" id="simCable5a"><div><b data-i18n="simCable5a"></b></div></label>
       <div id="simResult"></div>
+    </div>
+  </div>
+
+  <!-- ===== E-Marker 模擬 ===== -->
+  <div class="view" id="view-em" hidden>
+    <div class="card" id="vcCard">
+      <h3 data-i18n="emRear"></h3>
+      <label class="check"><input type="checkbox" id="vcable"><div><b data-i18n="vcable"></b><span data-i18n="vcableS"></span></div></label>
+      <div id="vcBody">
+        <div class="small muted" data-i18n="vcNote" style="margin:10px 0"></div>
+        <div class="inline" style="margin-bottom:14px">
+          <button class="btn keep" id="vcPre3" data-i18n="vcPre3"></button>
+          <button class="btn keep" id="vcPre5" data-i18n="vcPre5"></button>
+        </div>
+        <div class="fields" id="vcFields"></div>
+      </div>
+    </div>
+    <div class="card" id="fcCard">
+      <h3 data-i18n="emFront"></h3>
+      <div class="labs">
+        <div class="lab" id="lab-emarker">
+          <label class="labhead"><input type="checkbox" id="emarker"><div><b data-i18n="emarker"></b><span data-i18n="emarkerS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagHw"></span><span class="tag acc" data-i18n="tag5a"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="emarkerL"></ul></details>
+        </div>
+      </div>
+      <div id="fcBody">
+        <div class="small muted" data-i18n="fcNote" style="margin:10px 0"></div>
+        <div class="inline" style="margin-bottom:14px">
+          <button class="btn keep" id="fcPre3" data-i18n="vcPre3"></button>
+          <button class="btn keep" id="fcPre5" data-i18n="vcPre5"></button>
+        </div>
+        <div class="fields" id="fcFields"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="applyBar" hidden>
+    <div class="actions">
+      <span class="tag" id="cfgState"></span>
+      <span class="small muted" id="dirtyText"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="btnDefaults" data-i18n="defaults"></button>
+      <button class="btn" id="btnRevert" data-i18n="revert"></button>
+      <button class="btn primary" id="btnApply" data-i18n="apply"></button>
     </div>
   </div>
 
@@ -606,13 +648,36 @@ const T = {
     secLimits: "Output limits", maxV: "Max voltage", maxI: "Current limit", maxId: "500–3000", maxId5: "500–5000 (5A Lab)",
     hide: "Hide Fixed", hideD: "Hiding 15 V also removes AVS; hiding 20 V limits AVS to 15 V.",
     secProt: "Protection", ovp: "Over-voltage", uvp: "Under-voltage", uvpD: "not checked on PPS contracts", ocp: "Over-current",
-    cableP: "Output cable", cablePA: "Auto", cableP5: "5 A (no e-marker)",
-    cablePD: "Auto: read the cable's e-marker and raise the default 3 A limit to 5 A when it says 5 A (the charger's own current per voltage still applies). 3 A: always keep 3 A. 5 A: for a soldered cable without e-marker whose wire you know can carry 5 A. The cable is not read, the limit is 5 A, and the converter answers a device's cable query as a 5 A passive cable (20 V, no EPR). Only applies while the current limit is the default 3 A.",
+    cableP: "Output cable",
+    vcable: "Virtual e-marker (custom cable data)",
+    vcableS: "Off (default): the real cable's e-marker is read. On: the cable is not read; the converter answers a device's cable query with the data below.",
+    tabEm: "E-Marker", emRear: "Rear (device side)", emFront: "Front (charger side)",
+    fcNote: "The charger's SOP' Discover Identity is answered with these VDOs. When Cable VDO1 says 5 A, PA2 is pulled low (Ra, so the charger supplies VCONN and asks); with 3 A it floats (no Ra). Defaults: passive 50 V / 5 A / EPR cable. The cable current only changes the Ra pin; the current limit and EPR follow the checkbox above.",
+    vcTitle: "Virtual e-marker",
+    vcNote: "Current 3 A (default) gives the same output as the old fixed 3 A setting; 5 A raises the default 3 A limit to 5 A (the charger's own current per voltage still applies). The Source never offers EPR. Changing other fields is not spec-compliant and is only meant for testing e-marker readers and sinks. If the device has not queried the cable 300 ms after Source_Capabilities, the converter asks and answers once itself on SOP' so a tester on the CC line can read it.",
+    vcPre3: "Generic 3 A", vcPre5: "Generic 5 A",
+    vcGrpId: "ID Header", vcGrpCert: "Cert Stat", vcGrpProd: "Product", vcGrpCable: "Cable VDO", vcRaw: "Raw VDOs (hex)", vcVdo2: "Cable VDO2 (active cable)",
+    vcType: "Product type", vcTypes: ["Undefined", "PD USB hub", "PD USB peripheral", "Passive cable", "Active cable", "Alternate-mode adapter", "VCONN-powered USB device"],
+    vcHost: "USB host capable", vcDev: "USB device capable", vcModal: "Modal operation", vcConn: "Connector type",
+    vcConns: ["Reserved (0)", "Reserved (1)", "USB Type-C receptacle", "USB Type-C plug"],
+    vcVid: "Vendor ID (VID)", vcXid: "XID (USB-IF)", vcPid: "Product ID (PID)", vcBcd: "bcdDevice",
+    vcVolts: ["20 V", "30 V", "40 V", "50 V"], vcPlug: "Plug type", vcPlugs: ["Reserved (0)", "Reserved (1)", "USB Type-C", "Captive"],
+    vcTerm: "Termination", vcTerms: ["Passive, no VCONN needed", "Passive, VCONN needed", "Active, one end", "Active, both ends"],
+    vcLat: "Latency", vcLats: ["Reserved", "< 10 ns (~1 m)", "10–20 ns (~2 m)", "20–30 ns (~3 m)", "30–40 ns (~4 m)", "40–50 ns (~5 m)", "50–60 ns (~6 m)", "60–70 ns (~7 m)", "> 70 ns", "~1000 ns", "~2000 ns", "~3000 ns", "Reserved", "Reserved", "Reserved", "Reserved"],
+    vcEpr: "EPR capable", vcThru: "VBUS through cable", vcTag: "Virtual",
+    pdol: "Custom PDO list", pdolS: "Replaces the output levels with your own list (up to 7). A level is only offered when the charger can supply it; the current is the lower of your value and the charger's.",
+    pdolAddF: "Add Fixed", pdolAddP: "Add PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 slots`,
+    pdolErr5: "Exactly one 5 V Fixed is required.", pdolErrV: "Fixed: 5–20 V in 0.1 V steps (no duplicate voltage), 0.5–5 A in 0.05 A steps.",
+    pdolErrP: "PPS: min ≥ 3.3 V, max ≤ 21 V, min < max, 0.5–5 A in 0.05 A steps.", pdolErrAvs: "AVS needs exactly one 15 V Fixed and one 20 V Fixed in the list.",
+    pdolErrDup: "Duplicate PDO.", pdolErrN: "At most 7 PDOs including AVS.",
+    pdolL: ["Only used while Force PPS is on. Output modes a–d still filter the list: a keeps Fixed + AVS, b Fixed + PPS, c all three, d only Fixed. Hide Fixed, 12 V conversion and the custom Fixed / PPS options are ignored.",
+      "Fixed: from a charger PPS covering that voltage (highest current first), otherwise the charger's own Fixed, otherwise AVS from 9 V. PPS: from a charger PPS covering the whole range, otherwise AVS (9 V and up). The current limit and the 5 A cable rule still cap the current.",
+      "AVS takes one slot. Its 9–15 V current follows your 15 V Fixed and its 15–20 V current your 20 V Fixed, limited by what the charger offers. The 5 V Fixed is mandatory."],
     cableT: "Output cable (e-marker)", cableNone: "No device attached.",
     cableRa: "Reading the cable identity…", cableNoReply: "The cable did not answer: it has no e-marker, or the e-marker is not powered.", cableRaSeen: "Ra seen on the other CC pin, so the cable has an e-marker.",
     cableNoVconn: "This board cannot supply VCONN, so a passive e-marked cable stays silent.",
     cableWeakVconn: "VCONN comes straight from a 3.3 V MCU pin (the spec asks for 4.75–5.5 V). Some e-markers need more; a 5 V VCONN switch is needed on the next hardware.",
-    cableNak: "The cable refused Discover Identity.", cableVirtual: "Cable policy is 5 A: the cable is not read. The converter answers a device's cable query as a 5 A passive cable (20 V, no EPR).", cableOld: "Firmware too old for cable detection (needs v0.11.0).", cableIdle: "No device attached.",
+    cableNak: "The cable refused Discover Identity.", cableVirtual: "Virtual e-marker is on: the cable is not read. The converter answers a device's cable query with the data from Settings.", cableOld: "Firmware too old for cable detection (needs v0.11.0).", cableIdle: "No device attached.",
     cType: "Type", cPassive: "Passive cable", cActive: "Active cable", cOther: "Other", cCur: "Current", cVmax: "Max voltage", cSpeed: "Highest speed", cEpr: "EPR capable", cYes: "yes", cNo: "no",
     cLimit: "Output limit", cLimitAuto: "5 A (set by the cable)", cLimitCfg: "from settings",
     cSpeeds: ["USB 2.0", "USB 3.2 Gen 1", "USB 3.2 Gen 2", "USB4 Gen 3", "USB4 Gen 4"], cCurs: ["USB default (up to 3 A)", "3 A", "5 A", "reserved"],
@@ -690,9 +755,9 @@ const T = {
       "Chargers with a second handshake then re-advertise, replacing PPS with SPR AVS.",
       "Off: reply Not_Supported; the charger keeps PPS.",
       "Record: \"AVS 2nd handshake · front declared\"."],
-    emarker: "Virtual 5 A E-Marker (with EPR)", emarkerS: "Answer the charger as a 50 V / 5 A / EPR cable to unlock 5 A and EPR.",
-    emarkerL: ["Presents Ra by driving PA2 low (plug B5/VCONN → 1 kΩ → PA2, hardware revision). On the v0.1 PCB only chargers that query the cable without Ra will ask.",
-      "Answers SOP' Discover Identity: passive USB-C to USB-C cable, 50 V, 5 A, EPR capable.",
+    emarker: "Virtual E-Marker (custom, with EPR)", emarkerS: "Answer the charger as the cable described below; allows a 5 A limit and EPR.",
+    emarkerL: ["Presents Ra by driving PA2 low only when Cable VDO1 says 5 A (plug B5/VCONN → 1 kΩ → PA2, hardware revision). On the v0.1 PCB only chargers that query the cable without Ra will ask.",
+      "Answers SOP' Discover Identity with the editable VDOs (default: passive USB-C to USB-C cable, 50 V, 5 A, EPR capable).",
       "Current limit up to 5 A, OCP up to 5.5 A. The device-side cable must be rated for 5 A — the converter cannot check it.",
       "If the charger supports EPR, the front enters EPR mode, reads EPR capabilities (including EPR AVS) and sends EPR_KeepAlive every 250 ms. It never requests more than 20 V.",
       "The front starts right at power-up (no 300 ms debug window); reflash with power-off erase.",
@@ -795,13 +860,36 @@ const T = {
     secLimits: "輸出限制", maxV: "最高電壓", maxI: "電流上限", maxId: "500–3000", maxId5: "500–5000（5A Lab）",
     hide: "隱藏 Fixed", hideD: "隱藏 15V 會同時取消 AVS；隱藏 20V 會讓 AVS 只到 15V。",
     secProt: "保護", ovp: "過壓", uvp: "欠壓", uvpD: "PPS 合約時不檢查", ocp: "過流",
-    cableP: "輸出線材", cablePA: "自動", cableP5: "5 A（無 E-Marker）",
-    cablePD: "自動：讀線材的 E-Marker，聲明 5A 時把預設 3A 上限放寬到 5A（充電器各電壓檔位自己給的電流仍然是上限）。3 A：一律維持 3A。5 A：給沒有 E-Marker、但你確認線徑能過 5A 的焊接線；不讀線材，上限放寬到 5A，並以 5A 無源線材（20V、不支援 EPR）應答設備的線材查詢。只在電流上限保持預設 3A 時生效。",
+    cableP: "輸出線材",
+    vcable: "虛擬 E-Marker（自訂線材資料）",
+    vcableS: "關閉（預設）：讀取實際線材的 E-Marker。開啟：不讀線材，由轉換器按下方資料應答設備的線材查詢。",
+    tabEm: "E-Marker 模擬", emRear: "後端（設備側）", emFront: "前端（充電器側）",
+    fcNote: "以下 VDO 用來回覆充電器的 SOP' Discover Identity。Cable VDO1 宣告 5A 時 PA2 拉低（Ra，充電器才會供 VCONN 並來查詢）；宣告 3A 時高阻（不呈現 Ra）。預設為無源 50V / 5A / EPR 線材。線材電流只影響 Ra 腳；電流上限與 EPR 仍由上方勾選項決定。",
+    vcTitle: "虛擬 E-Marker",
+    vcNote: "電流 3A（預設）時輸出與原本固定 3A 的設定一致；5A 時把預設 3A 上限放寬到 5A（充電器各電壓檔位自己給的電流仍是上限）。Source 不提供 EPR。修改其他欄位並不符合規範，只用於測試 E-Marker 讀取儀器與 Sink。若設備在 Source_Capabilities 後 300ms 內沒有查詢線材，轉換器會在 SOP' 上自問自答一次，方便 CC 線上的儀器讀取。",
+    vcPre3: "通用 3A", vcPre5: "通用 5A",
+    vcGrpId: "ID Header", vcGrpCert: "Cert Stat", vcGrpProd: "Product", vcGrpCable: "Cable VDO", vcRaw: "原始 VDO（十六進位）", vcVdo2: "Cable VDO2（有源線材）",
+    vcType: "產品類型", vcTypes: ["未定義", "PD USB 集線器", "PD USB 周邊", "無源線材", "有源線材", "替代模式轉接器", "VCONN 供電的 USB 設備"],
+    vcHost: "支援 USB 主機", vcDev: "支援 USB 裝置", vcModal: "模態操作", vcConn: "連接器類型",
+    vcConns: ["保留（0）", "保留（1）", "USB Type-C 母座", "USB Type-C 公頭"],
+    vcVid: "廠商 ID（VID）", vcXid: "XID（USB-IF 分配）", vcPid: "產品 ID（PID）", vcBcd: "bcdDevice",
+    vcVolts: ["20 V", "30 V", "40 V", "50 V"], vcPlug: "插頭類型", vcPlugs: ["保留（0）", "保留（1）", "USB Type-C", "固定線（Captive）"],
+    vcTerm: "終端", vcTerms: ["無源，不需要 VCONN", "無源，需要 VCONN", "有源，單端", "有源，雙端"],
+    vcLat: "延遲", vcLats: ["保留", "< 10 ns（約 1 m）", "10–20 ns（約 2 m）", "20–30 ns（約 3 m）", "30–40 ns（約 4 m）", "40–50 ns（約 5 m）", "50–60 ns（約 6 m）", "60–70 ns（約 7 m）", "> 70 ns", "約 1000 ns", "約 2000 ns", "約 3000 ns", "保留", "保留", "保留", "保留"],
+    vcEpr: "支援 EPR", vcThru: "VBUS 穿過線材", vcTag: "虛擬",
+    pdol: "自訂 PDO 檔位", pdolS: "用你自己的列表（最多 7 組）取代輸出檔位。充電器供得出才會提供該檔；電流取你的設定與充電器之間較小者。",
+    pdolAddF: "新增 Fixed", pdolAddP: "新增 PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 組`,
+    pdolErr5: "必須有且只有一個 5V Fixed。", pdolErrV: "Fixed：5–20V（0.1V 步進，電壓不可重複），0.5–5A（0.05A 步進）。",
+    pdolErrP: "PPS：最低 ≥ 3.3V，最高 ≤ 21V，最低 < 最高，0.5–5A（0.05A 步進）。", pdolErrAvs: "AVS 需要列表裡有且只有一個 15V Fixed 和一個 20V Fixed。",
+    pdolErrDup: "PDO 重複。", pdolErrN: "含 AVS 最多 7 組 PDO。",
+    pdolL: ["只在「強制 PPS」開啟時生效。輸出模式 a~d 仍會過濾列表：a 保留 Fixed + AVS，b 保留 Fixed + PPS，c 全部保留，d 只保留 Fixed。隱藏 Fixed、12V 轉換與自訂 Fixed / PPS 選項都被忽略。",
+      "Fixed：優先由覆蓋該電壓的充電器 PPS 提供（電流大者優先），其次是充電器自己的 Fixed，最後是 9V 起的 AVS。PPS：由完整覆蓋該範圍的充電器 PPS 提供，沒有時用 AVS（9V 起）。電流上限與 5A 線材規則仍會限制電流。",
+      "AVS 占一個名額。它的 9~15V 電流跟隨你設定的 15V Fixed，15~20V 電流跟隨 20V Fixed，並受充電器實際能力限制。5V Fixed 是必須的。"],
     cableT: "輸出線材（E-Marker）", cableNone: "沒有設備插入。",
     cableRa: "讀取線材身份中…", cableNoReply: "線材沒有回應：沒有 E-Marker，或 E-Marker 沒有供電。", cableRaSeen: "另一根 CC 腳出現 Ra，說明線材帶 E-Marker。",
     cableNoVconn: "本板不能供 VCONN，無源 E-Marker 線材不會回應。",
     cableWeakVconn: "VCONN 直接由 MCU 的 3.3V 引腳供電（規範要求 4.75–5.5V），部分 E-Marker 需要更高電壓；下一版硬體需要加 5V VCONN 開關。",
-    cableNak: "線材拒絕了 Discover Identity。", cableVirtual: "線材策略為 5A：不讀線材，並以 5A 無源線材（20V、不支援 EPR）應答設備的線材查詢。", cableOld: "韌體太舊，不支援線材偵測（需要 v0.11.0）。", cableIdle: "沒有設備插入。",
+    cableNak: "線材拒絕了 Discover Identity。", cableVirtual: "已開啟虛擬 E-Marker：不讀線材，由轉換器按設定頁的資料應答設備的線材查詢。", cableOld: "韌體太舊，不支援線材偵測（需要 v0.11.0）。", cableIdle: "沒有設備插入。",
     cType: "類型", cPassive: "無源線材", cActive: "有源線材", cOther: "其他", cCur: "電流", cVmax: "最高電壓", cSpeed: "最高速率", cEpr: "支援 EPR", cYes: "是", cNo: "否",
     cLimit: "輸出上限", cLimitAuto: "5 A（由線材決定）", cLimitCfg: "按設定",
     cSpeeds: ["USB 2.0", "USB 3.2 Gen 1", "USB 3.2 Gen 2", "USB4 Gen 3", "USB4 Gen 4"], cCurs: ["USB 預設（最高 3A）", "3 A", "5 A", "保留"],
@@ -879,9 +967,9 @@ const T = {
       "支援二次握手的充電器會重新廣播，用 SPR AVS 取代 PPS。",
       "關閉時回覆 Not_Supported，充電器維持 PPS。",
       "記錄：「AVS 二次握手 · 前端已宣告」。"],
-    emarker: "虛擬 5A E-Marker（含 EPR）", emarkerS: "以 50V / 5A / EPR 線材的身分回覆充電器，取得 5A 與 EPR 能力。",
-    emarkerL: ["PA2 拉低呈現 Ra（公頭 B5/VCONN 經 1kΩ 接 PA2，需硬體改版）。v0.1 板上只有不偵測 Ra 也會查詢線材的充電器才會來問。",
-      "回覆 SOP' Discover Identity：無源 USB-C 對 USB-C 線材、50V、5A、支援 EPR。",
+    emarker: "虛擬 E-Marker（可自訂，含 EPR）", emarkerS: "以下方設定的線材身分回覆充電器；電流上限可設到 5A，並可進入 EPR。",
+    emarkerL: ["線材 VDO 宣告 5A 時才拉低 PA2 呈現 Ra（公頭 B5/VCONN 經 1kΩ 接 PA2，需硬體改版）。v0.1 板上只有不偵測 Ra 也會查詢線材的充電器才會來問。",
+      "以可編輯的 VDO 回覆 SOP' Discover Identity（預設：無源 USB-C 對 USB-C 線材、50V、5A、支援 EPR）。",
       "電流上限可設到 5A、OCP 到 5.5A。設備端線材必須能承受 5A，轉換器無法檢查。",
       "充電器支援 EPR 時，前端進入 EPR 模式，讀取 EPR 能力（含 EPR AVS），之後每 250ms 送 EPR_KeepAlive；永遠只請求 20V 以下。",
       "開啟後上電立即接管前端（沒有 300ms 偵錯窗口），重燒請用斷電擦除。",
@@ -945,7 +1033,7 @@ const T = {
 };
 /* 简体中文由繁體字典在執行時轉換產生：先換詞，再逐字換 */
 T.zhs = (() => {
-  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组運运帶带將将繼继嗎吗證证檔档裝装腳脚決决";
+  const ch = "並并來来個个側侧偵侦備备傳传僅仅償偿優优儲储內内兩两則则剛刚動动匯汇協协單单啟启問问圍围執执壓压實实寫写對对導导幾几廠厂廣广強强後后從从復复態态捨舍換换擇择擋挡擬拟擴扩敗败數数斷断於于時时暫暂會会條条棄弃標标樣样機机檢检沒没測测準准溫温滿满瀏浏為为無无燒烧狀状獨独現现環环異异當当發发確确穩稳筆笔範范約约細细結结絕绝給给經经維维緒绪線线續续聲声腦脑與与著着蓋盖虛虚螢萤補补裡里規规見见覽览訂订訊讯記记設设許许註注詢询試试該该詳详誤误說说調调請请論论議议護护讀读讓让資资賴赖較较載载輸输轉转這这連连進进過过遠远適适選选錄录錯错閉闭開开閒闲間间關关際际隱隐電电韌韧頁页項项須须預预頭头頻频類类顯显驗验驟骤體体併并刪删報报嘗尝應应餘余組组運运帶带將将繼继嗎吗證证檔档裝装腳脚決决寬宽儀仪義义產产邊边終终雙双遲迟複复濾滤額额隨随舊旧欄栏";
   const map = new Map(); for (let i = 0; i < ch.length; i += 2) map.set(ch[i], ch[i + 1]);
   const phr = [["韌體", "固件"], ["檔案", "文件"], ["裝置", "设备"], ["應用程式", "应用程序"], ["位元組", "字节"], ["映像", "镜像"], ["程式", "程序"], ["硬體", "硬件"], ["預設", "默认"], ["設定", "设置"], ["連線", "连接"], ["支援", "支持"], ["資訊", "信息"], ["訊息", "信息"], ["螢幕", "屏幕"], ["擋位", "档位"], ["載入", "加载"], ["匯出", "导出"], ["儲存", "保存"], ["套用", "应用"], ["偵測", "检测"], ["相容", "兼容"], ["回覆", "回复"], ["筆記錄", "条记录"], ["自訂", "自定义"], ["「", "“"], ["」", "”"]];
   const cv = (x) => { for (const [a, b] of phr) x = x.split(a).join(b); return [...x].map((c) => map.get(c) ?? c).join(""); };
@@ -1101,15 +1189,16 @@ function renderConn() {
   document.querySelectorAll(".tab").forEach((b) => (b.disabled = isBl() && !["fw", "sim"].includes(b.dataset.tab)));
   $("guide").hidden = !!dev;
   /* 設定表單離線也可修改（供轉換模擬）；套用等按鈕需要連線 */
-  document.querySelectorAll("#view-settings button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
-  document.querySelectorAll("#view-settings input").forEach((el) => (el.disabled = false));
+  document.querySelectorAll("#view-settings button:not(.keep), #applyBar button, #view-log button, #sessionSel").forEach((el) => (el.disabled = !dev));
+  document.querySelectorAll("#view-settings input, #view-em input").forEach((el) => (el.disabled = false));
   applyCurLimits(); applyComp(); applyInfo();
   if (dev) updateDirty();
 }
 function setTab(name) {
   state.tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-  ["status", "settings", "log", "fw", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  ["status", "settings", "em", "log", "fw", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
+  $("applyBar").hidden = name !== "settings" && name !== "em";
   if (name === "sim") renderSim();
   if (name === "fw") renderFw();
   try { localStorage.setItem("tab", name); } catch (e) {}
@@ -1300,11 +1389,11 @@ function renderCable() {
   if (c.status === 2) return set([c.flags & 8 ? "Ra" : "", c.flags & 8 ? "warn" : ""], msg("cableNoReply") +
     `<div class="small muted" style="margin-top:6px">${c.flags & 8 ? t("cableRaSeen") + " " : ""}${t(c.flags & 1 ? "cableWeakVconn" : "cableNoVconn")}</div>`);
   if (c.status === 3) return set(["E-Marker", "warn"], msg("cableNak"));
-  if (c.status === 5) return set(["5 A", "ok"], msg("cableVirtual"));
+  const virt = c.status === 5;
   const id = c.vdo[0] >>> 0, v1 = (c.vdo[3] ?? 0) >>> 0, type = (id >>> 27) & 7;
   const cur = (v1 >>> 5) & 3, vmax = [20, 30, 40, 50][(v1 >>> 9) & 3], speed = v1 & 7;
   const kv = (rows) => `<div class="kv">${rows.map(([k, v]) => `<div>${esc(k)}</div><div>${v}</div>`).join("")}</div>`;
-  set([t("cCurs")[cur] ?? "", cur === 2 ? "ok" : ""], kv([
+  set([(virt ? t("vcTag") + " · " : "") + (t("cCurs")[cur] ?? ""), cur === 2 ? "ok" : virt ? "warn" : ""], (virt ? `<div class="small muted" style="margin-bottom:8px">${t("cableVirtual")}</div>` : "") + kv([
     [t("idLbl"), esc(idText(id & 0xFFFF, (c.vdo[2] ?? 0) >>> 16))],
     [t("cType"), t(type === 3 ? "cPassive" : type === 4 ? "cActive" : "cOther")],
     [t("cCur"), esc(t("cCurs")[cur])],
@@ -1340,7 +1429,8 @@ const eavsRaw = (lo, hi, pdp) => ((0xD << 28) | (Math.floor(hi / 100) << 17) | (
 function simBuild(c, raws, o = {}) {
   const min = Math.min, MAXN = 7;
   /* 後端線材 E-Marker 5A：預設 3A 上限自動放寬到 5A（韌體 bridge_back_max_ma） */
-  if ((o.cable5a || ((c.flags3 ?? 0) & 4)) && !((c.flags3 ?? 0) & 2) && c.maxMa === 3000) c = { ...c, maxMa: 5000 };
+  const x = c.x, virt = !!(x && x.flags & 1);
+  if ((virt ? ((x.cable[3] >>> 5) & 3) === 2 : o.cable5a) && c.maxMa === 3000) c = { ...c, maxMa: 5000 };
   const fc = raws.map(pdoParse), n = fc.length;
   const flags = c.flags ?? 0, flags2 = c.flags2 ?? 0;
   if (n === 0) { const ma = min(500, c.maxMa); return { pdos: [fixRaw(5000, ma)], src: [1], held: false }; }
@@ -1355,15 +1445,41 @@ function simBuild(c, raws, o = {}) {
   const nativeAvs = () => fc.findIndex((p) => p.type === P_SAVS && p.ma > 0);
   const ppsCovering = (mv) => { let b = -1; fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= mv && p.max >= mv && (b < 0 || p.ma > fc[b].ma)) b = i; }); return b; };
   const E = (type, fe, pos, lo, mv, ma, ma20 = 0) => ({ type, fe, pos, lo, mv, ma, ma20 });
-  const wantAvs = c.mode === 0 || c.mode === 2, wantPps = c.mode === 1 || c.mode === 2;
+  let wantAvs = c.mode === 0 || c.mode === 2;
+  const wantPps = c.mode === 1 || c.mode === 2;
   let held = false;
+  const ppsFrom = (lo, hi, ma) => {
+    let best = -1;
+    if (lo < hi) fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= lo && p.max >= hi && (best < 0 || p.ma > fc[best].ma)) best = i; });
+    let srcMa = best >= 0 ? fc[best].ma : 0;
+    if (best < 0 && lo >= 9000 && lo < hi) {
+      const a = nativeAvs();
+      if (a >= 0 && fc[a].max >= hi) { best = a; srcMa = hi > 15000 && fc[a].ma20 ? min(fc[a].ma, fc[a].ma20) : fc[a].ma; }
+    }
+    return best >= 0 && srcMa > 0 ? E(P_PPS, fc[best].type, best + 1, lo, hi, min(srcMa, ma)) : null;
+  };
+  /* Lab 自訂 PDO 列表（強制 PPS 下）：Fixed 優先取覆蓋該電壓的 PPS，其次充電器 Fixed，最後 9V 起的原生 AVS */
+  const force = !!(flags2 & 4);
+  const list = force && x && x.flags & 2 ? x.pdo.map(pdoParse) : null;
+  if (list) wantAvs = wantAvs && list.some((p) => p.type === P_SAVS);
+  const listFixed = (p) => {
+    let k = ppsCovering(p.max), srcMa = 0;
+    if (k < 0) k = fc.findIndex((q) => q.type === P_FIX && q.raw !== 0 && q.max === p.max);
+    if (k >= 0) srcMa = fc[k].ma;
+    else {
+      k = nativeAvs();
+      if (k < 0 || p.max < 9000 || p.max > fc[k].max) return null;
+      srcMa = p.max > 15000 && fc[k].ma20 ? fc[k].ma20 : fc[k].ma;
+    }
+    return srcMa ? E(P_FIX, fc[k].type, k + 1, p.max, p.max, min(p.ma, c.maxMa, srcMa)) : null;
+  };
 
   /* 1. 充電器 Fixed */
   let fixed = [];
-  fc.forEach((p, i) => { if (p.type === P_FIX && p.raw !== 0 && p.max <= c.maxMv && !hidden(p.max)) insertSorted(fixed, E(P_FIX, P_FIX, i + 1, p.max, p.max, min(p.ma, c.maxMa))); });
+  if (list) list.forEach((p) => { const e = p.type === P_FIX && p.max <= c.maxMv ? listFixed(p) : null; if (e) insertSorted(fixed, e); });
+  else fc.forEach((p, i) => { if (p.type === P_FIX && p.raw !== 0 && p.max <= c.maxMv && !hidden(p.max)) insertSorted(fixed, E(P_FIX, P_FIX, i + 1, p.max, p.max, min(p.ma, c.maxMa))); });
   /* 1b. Lab 強制 PPS */
-  const force = !!(flags2 & 4);
-  if (force) fixed.forEach((f) => { const k = ppsCovering(f.mv); if (k >= 0) { f.fe = P_PPS; f.pos = k + 1; f.ma = min(fc[k].ma, c.maxMa); } });
+  if (force && !list) fixed.forEach((f) => { const k = ppsCovering(f.mv); if (k >= 0) { f.fe = P_PPS; f.pos = k + 1; f.ma = min(fc[k].ma, c.maxMa); } });
 
   /* 2. AVS */
   let avs = null;
@@ -1408,7 +1524,8 @@ function simBuild(c, raws, o = {}) {
 
   /* 3. PPS 透傳（二次握手第一階段用 PPS 代替 AVS） */
   let pps = [];
-  if (wantPps || held) {
+  if (list && wantPps) list.forEach((p) => { const e = p.type === P_PPS && p.min < c.maxMv ? ppsFrom(p.min, min(p.max, c.maxMv), min(p.ma, c.maxMa)) : null; if (e) insertSorted(pps, e); });
+  if ((wantPps || held) && !list) {
     fc.forEach((p, i) => {
       if (p.type !== P_PPS || p.min >= c.maxMv) return;
       const e = E(P_PPS, P_PPS, i + 1, p.min, min(p.max, c.maxMv), min(p.ma, c.maxMa));
@@ -1425,19 +1542,10 @@ function simBuild(c, raws, o = {}) {
   }
   /* 3b. Lab 自訂 PPS */
   let custom = null;
-  if (flags2 & 8 && c.ppsLo != null) {
+  if (flags2 & 8 && c.ppsLo != null && !list) {
     const lo = c.ppsLo * 100, hi = min(c.ppsHi * 100, c.maxMv);
-    let best = -1;
-    if (lo < hi) fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= lo && p.max >= hi && (best < 0 || p.ma > fc[best].ma)) best = i; });
-    let srcMa = best >= 0 ? fc[best].ma : 0;
-    if (best < 0 && lo >= 9000 && lo < hi) {
-      const a = nativeAvs();
-      if (a >= 0 && fc[a].max >= hi) { best = a; srcMa = hi > 15000 && fc[a].ma20 ? min(fc[a].ma, fc[a].ma20) : fc[a].ma; }
-    }
-    if (best >= 0 && srcMa > 0) {
-      custom = E(P_PPS, fc[best].type, best + 1, lo, hi, min(srcMa, c.ppsMa50 * 50, c.maxMa));
-      const k = findMv(pps, hi); if (k >= 0) pps.splice(k, 1);
-    }
+    custom = ppsFrom(lo, hi, min(c.ppsMa50 * 50, c.maxMa));
+    if (custom) { const k = findMv(pps, hi); if (k >= 0) pps.splice(k, 1); }
   }
   const room = MAXN - fixed.length - (avs ? 1 : 0) - (custom ? 1 : 0);
   if (pps.length > room) pps = pps.slice(pps.length - room);
@@ -1445,7 +1553,8 @@ function simBuild(c, raws, o = {}) {
 
   /* 4. 轉換 Fixed：12V 轉換或自訂 Fixed */
   let convMv = 0, convMa = c.maxMa;
-  if (flags & 1 && !hidden(12000)) convMv = 12000;
+  if (list) convMv = 0;
+  else if (flags & 1 && !hidden(12000)) convMv = 12000;
   else if (flags & 128) { convMv = c.fixDv * 100; convMa = min(convMa, c.fixMa50 * 50); }
   if (convMv && convMv <= c.maxMv && findMv(fixed, convMv) < 0 && fixed.length + (avs ? 1 : 0) + pps.length < MAXN) {
     let best = ppsCovering(convMv), srcMa = best >= 0 ? fc[best].ma : 0;
@@ -1538,8 +1647,7 @@ $("simLoad").onclick = () => {
   });
   simRows = r; simSave(); simRowsHtml(); renderSim();
 };
-$("view-settings").addEventListener("input", () => renderSim());
-$("view-settings").addEventListener("change", () => renderSim());
+["view-settings", "view-em"].forEach((id) => { $(id).addEventListener("input", () => renderSim()); $(id).addEventListener("change", () => renderSim()); });
 
 /* ================= settings ================= */
 /* hasComp：20 字節格式（韌體 v0.6.0 / 協議 v5 起）才有補償欄位 */
@@ -1550,6 +1658,25 @@ function cfgFromBytes(p, hasComp, hasPps, hasId) {
     fixDv: p[13] ?? 0, fixMa50: p[14] ?? 0, compMode: hasComp ? p[16] : null, compVal: hasComp ? u16(p, 18) : 0,
     flags2: hasComp ? p[15] : null, ppsLo: hasPps ? p[20] : null, ppsHi: hasPps ? p[21] : null, ppsMa50: hasPps ? p[22] : null,
     feVid: hasId ? u16(p, 24) : null, fePid: hasId ? u16(p, 26) : null, beVid: hasId ? u16(p, 28) : null, bePid: hasId ? u16(p, 30) : null, flags3: hasId ? p[23] : null };
+}
+/* 擴充設定（協議 v11，52 字節）：flags u8, pdo_n u8, 保留 u16, cable u32[5], pdo u32[7] */
+function extFromBytes(p) {
+  const n = Math.min(p[1], 7);
+  let pdo = Array.from({ length: n }, (_, i) => u32(p, 24 + i * 4));
+  if (!pdo.length) pdo = PDOL_DEFAULT.map(simRaw);
+  return { flags: p[0], cable: Array.from({ length: 5 }, (_, i) => u32(p, 4 + i * 4)), pdo };
+}
+function extToBytes(x) {
+  const b = new Uint8Array(52), dv = new DataView(b.buffer);
+  b[0] = x.flags; b[1] = x.pdo.length;
+  x.cable.forEach((v, i) => dv.setUint32(4 + i * 4, v >>> 0, true));
+  x.pdo.forEach((v, i) => dv.setUint32(24 + i * 4, v >>> 0, true));
+  return Array.from(b);
+}
+function fcToBytes(v) {
+  const b = new Uint8Array(20), dv = new DataView(b.buffer);
+  v.forEach((x, i) => dv.setUint32(i * 4, x >>> 0, true));
+  return Array.from(b);
 }
 function cfgToBytes(c) {
   const b = new Uint8Array(32);
@@ -1581,14 +1708,16 @@ function readForm() {
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
     flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0) | ($("idFe").checked ? 32 : 0) | ($("idBe").checked ? 64 : 0) | ($("avs2ppsMin5").checked ? 128 : 0),
     /* flags3：bit0 開啟記錄（韌體 v0.10.1 起；舊韌體沒有） */
-    flags3: state.cfg && state.cfg.flags3 == null ? null : ($("logOn").checked ? 1 : 0) | [0, 2, 4][radio("cablePol")],
+    flags3: state.cfg && state.cfg.flags3 == null ? null : $("logOn").checked ? 1 : 0,
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
     ppsMa50: state.cfg && state.cfg.ppsMa50 == null ? null : $("ppsc").checked ? Math.round(Number($("ppscA").value) * 20) || 0 : state.cfg?.ppsMa50 ?? 60,
     /* 自訂 ID 未勾選時輸入框寫錯就沿用原值；舊韌體沒有（欄位順序須與 cfgFromBytes 相同） */
     feVid: idHex("feVid", "idFe", "feVid", 0x5A1E), fePid: idHex("fePid", "idFe", "fePid", 0x30A6),
-    beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5) };
+    beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5),
+    /* 擴充設定（協議 v11 起；舊韌體沒有） */
+    x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws() } };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -1597,8 +1726,7 @@ function writeForm(c) {
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
   $("logOn").checked = !!((c.flags3 ?? 0) & 1); $("logOn").disabled = !(state.info && state.info.fw >= 0xA1);
-  const pol = (c.flags3 ?? 0) & 2 ? 1 : (c.flags3 ?? 0) & 4 ? 2 : 0;
-  document.querySelectorAll("input[name=cablePol]").forEach((r) => { r.checked = Number(r.value) === pol; r.disabled = !(state.info && state.info.fw >= 0xB0); });
+  writeExt(c.x);
   $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
   document.querySelectorAll("input[name=compMode]").forEach((r) => (r.checked = Number(r.value) === (c.compMode ?? 0)));
@@ -1613,7 +1741,156 @@ function writeForm(c) {
   applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
   updateDirty();
 }
-const isDirty = () => !!state.cfg && JSON.stringify(readForm()) !== JSON.stringify(state.cfg);
+/* ================= 虛擬 E-Marker 與自訂 PDO 列表（協議 v11） ================= */
+const FC_DEFAULT = [((3 << 27) | 0x1209) >>> 0, 0, (0x0001 << 16) >>> 0, ((2 << 18) | (1 << 17) | (1 << 13) | (3 << 9) | (2 << 5)) >>> 0, 0];
+const VC_DEFAULT = [((3 << 27) | 0x1209) >>> 0, 0, (0x0001 << 16) >>> 0, ((2 << 18) | (1 << 13) | (1 << 5)) >>> 0, 0];
+const PDOL_DEFAULT = [["fix", 5, 3], ["fix", 9, 3], ["fix", 12, 3], ["fix", 15, 3], ["fix", 20, 3], ["pps", 3.3, 21, 3]];
+state.vc = VC_DEFAULT.slice(); state.fc = FC_DEFAULT.slice(); state.pdoRows = PDOL_DEFAULT.map((r) => r.slice()); state.pdoAvs = false;
+const bitsGet = (v, sh, n) => (n === 32 ? v >>> 0 : ((v >>> sh) & ((1 << n) - 1)) >>> 0);
+const bitsSet = (v, sh, n, x) => { if (n === 32) return x >>> 0; const m = ((1 << n) - 1) << sh; return ((v & ~m) | ((x << sh) & m)) >>> 0; };
+const hexN = (v, n) => (v >>> 0).toString(16).toUpperCase().padStart(n, "0");
+/* [VDO 序號, 起始位, 位數, 控件, 名稱, 選項表] */
+const VCF = [
+  ["vcGrpId"],
+  [0, 27, 3, "sel", "vcType", "vcTypes"], [0, 31, 1, "chk", "vcHost"], [0, 30, 1, "chk", "vcDev"], [0, 26, 1, "chk", "vcModal"],
+  [0, 21, 2, "sel", "vcConn", "vcConns"], [0, 0, 16, "hex", "vcVid"],
+  ["vcGrpCert"], [1, 0, 32, "hex", "vcXid"],
+  ["vcGrpProd"], [2, 16, 16, "hex", "vcPid"], [2, 0, 16, "hex", "vcBcd"],
+  ["vcGrpCable"],
+  [3, 5, 2, "sel", "cCur", "cCurs"], [3, 9, 2, "sel", "cVmax", "vcVolts"], [3, 0, 3, "sel", "cSpeed", "cSpeeds"],
+  [3, 18, 2, "sel", "vcPlug", "vcPlugs"], [3, 11, 2, "sel", "vcTerm", "vcTerms"], [3, 13, 4, "sel", "vcLat", "vcLats"],
+  [3, 17, 1, "chk", "vcEpr"], [3, 4, 1, "chk", "vcThru"],
+];
+const VC_RAW = ["vcGrpId", "vcGrpCert", "vcGrpProd", "vcGrpCable", "vcVdo2"];
+/* w："vc" = 後端、"fc" = 前端，兩者欄位相同 */
+const EMBOX = { vc: "vcFields", fc: "fcFields" };
+function emHtml(w) {
+  let h = "";
+  VCF.forEach((f, i) => {
+    if (f.length === 1) { h += `<div class="lbl vcgrp">${esc(t(f[0]))}</div>`; return; }
+    const [vi, sh, n, kind, key, lk] = f, v = bitsGet(state[w][vi], sh, n);
+    let c;
+    if (kind === "sel") {
+      const l = t(lk);
+      c = `<select data-f="${i}">${l.map((x, k) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(x)}</option>`).join("")}${v >= l.length ? `<option value="${v}" selected>#${v}</option>` : ""}</select>`;
+    } else if (kind === "chk") c = `<input type="checkbox" data-f="${i}"${v ? " checked" : ""}>`;
+    else c = `<input type="text" class="hex" data-f="${i}" maxlength="${n / 4}" value="${hexN(v, n / 4)}" spellcheck="false" autocomplete="off">`;
+    h += `<div class="lbl">${esc(t(key))}</div><div class="inline">${c}</div>`;
+  });
+  h += `<div class="lbl vcgrp">${esc(t("vcRaw"))}</div>`;
+  state[w].forEach((v, i) => { h += `<div class="lbl">${esc(t(VC_RAW[i]))}</div><div class="inline"><input type="text" class="hex" data-raw="${i}" maxlength="8" value="${hexN(v, 8)}" spellcheck="false" autocomplete="off"></div>`; });
+  $(EMBOX[w]).innerHTML = h;
+}
+function vcHtml() { emHtml("vc"); emHtml("fc"); }
+/* 輸入後同步其他控件（不重繪，避免失去焦點） */
+function emSync(w) {
+  const box = "#" + EMBOX[w];
+  document.querySelectorAll(box + " [data-f]").forEach((el) => {
+    if (el === document.activeElement) return;
+    const [vi, sh, n, kind] = VCF[+el.dataset.f], v = bitsGet(state[w][vi], sh, n);
+    if (kind === "chk") el.checked = !!v;
+    else if (kind === "hex") el.value = hexN(v, n / 4);
+    else { if (!Array.from(el.options).some((o) => +o.value === v)) el.add(new Option(`#${v}`, v)); el.value = v; }
+  });
+  document.querySelectorAll(box + " [data-raw]").forEach((el) => { if (el !== document.activeElement) el.value = hexN(state[w][+el.dataset.raw], 8); });
+}
+Object.keys(EMBOX).forEach((w) => $(EMBOX[w]).addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset.f) {
+    const [vi, sh, n, kind] = VCF[+el.dataset.f];
+    let x;
+    if (kind === "hex") { if (!/^[0-9a-f]*$/i.test(el.value)) return; x = parseInt(el.value || "0", 16); }
+    else x = kind === "chk" ? (el.checked ? 1 : 0) : Number(el.value);
+    state[w][vi] = bitsSet(state[w][vi], sh, n, x);
+  } else if (el.dataset.raw) {
+    if (!/^[0-9a-f]*$/i.test(el.value)) return;
+    state[w][+el.dataset.raw] = parseInt(el.value || "0", 16) >>> 0;
+  } else return;
+  emSync(w);
+}));
+/* 預設：後端 3A / 5A；前端 5A（含 EPR）/ 3A */
+$("vcPre3").onclick = () => { state.vc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); renderSim(); };
+$("vcPre5").onclick = () => { state.vc = VC_DEFAULT.slice(); state.vc[3] = bitsSet(state.vc[3], 5, 2, 2); vcHtml(); updateDirty(); renderSim(); };
+$("fcPre5").onclick = () => { state.fc = FC_DEFAULT.slice(); vcHtml(); updateDirty(); };
+$("fcPre3").onclick = () => { state.fc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); };
+
+function pdolErr() {
+  const r = state.pdoRows, tenth = (x) => Math.abs(x * 10 - Math.round(x * 10)) < 1e-6;
+  const maOk = (x) => Math.abs(x * 20 - Math.round(x * 20)) < 1e-6 && x >= 0.5 && x <= 5;
+  if (r.length + (state.pdoAvs ? 1 : 0) > 7) return "pdolErrN";
+  let n5 = 0, n15 = 0, n20 = 0;
+  const seen = new Set();
+  for (const row of r) {
+    const key = row[0] === "fix" ? "f" + row[1] : row.join();
+    if (seen.has(key)) return "pdolErrDup";
+    seen.add(key);
+    if (row[0] === "fix") {
+      const [, v, a] = row;
+      if (!(v >= 5 && v <= 20) || !tenth(v) || !maOk(a)) return "pdolErrV";
+      n5 += v === 5; n15 += v === 15; n20 += v === 20;
+    } else {
+      const [, lo, hi, a] = row;
+      if (!(lo >= 3.3 && hi <= 21 && lo < hi) || !tenth(lo) || !tenth(hi) || !maOk(a)) return "pdolErrP";
+    }
+  }
+  if (n5 !== 1) return "pdolErr5";
+  if (state.pdoAvs && (n15 !== 1 || n20 !== 1)) return "pdolErrAvs";
+  return "";
+}
+const pdolRaws = () => [...state.pdoRows.map(simRaw), ...(state.pdoAvs ? [savsRaw(0, 0)] : [])].slice(0, 7);
+function pdolStatus() {
+  const e = pdolErr();
+  $("pdolCount").textContent = t("pdolCount")(state.pdoRows.length + (state.pdoAvs ? 1 : 0));
+  $("pdolMsg").textContent = e ? t(e) : "";
+  $("pdolMsg").style.color = e ? "var(--bad)" : "";
+  $("pdolAddF").disabled = $("pdolAddP").disabled = state.pdoRows.length + (state.pdoAvs ? 1 : 0) >= 7;
+}
+function pdolHtml() {
+  const lbl = (k) => (k.length <= 1 ? k : t(k)), F = { fix: ["V", "A"], pps: ["simVmin", "simVmax", "A"] };
+  $("pdolRows").innerHTML = state.pdoRows.map((r, i) => {
+    const inputs = F[r[0]].map((k, j) => `<label class="inline" style="gap:4px"><input type="number" step="0.05" min="0" data-i="${i}" data-j="${j + 1}" value="${r[j + 1] ?? ""}"><span class="muted">${esc(lbl(k))}</span></label>`).join("");
+    return `<div class="simrow"><div class="muted">#${i + 1}</div><select data-i="${i}">${["fix", "pps"].map((k) => `<option value="${k}"${k === r[0] ? " selected" : ""}>${t("simT_" + k)}</option>`).join("")}</select>` +
+      `<div class="inline simf">${inputs}</div><button class="btn keep" data-del="${i}" aria-label="${esc(t("simDel"))}">×</button></div>`;
+  }).join("");
+  $("pdolAvs").checked = state.pdoAvs;
+  pdolStatus();
+}
+$("pdolRows").addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset.j) { state.pdoRows[+el.dataset.i][+el.dataset.j] = Number(el.value); pdolStatus(); }
+});
+$("pdolRows").addEventListener("change", (e) => {
+  const el = e.target;
+  if (el.tagName === "SELECT") { state.pdoRows[+el.dataset.i] = [el.value, ...(el.value === "fix" ? [9, 3] : [3.3, 11, 3])]; pdolHtml(); }
+});
+$("pdolRows").addEventListener("click", (e) => {
+  const i = e.target.dataset.del;
+  if (i != null) { state.pdoRows.splice(+i, 1); pdolHtml(); updateDirty(); renderSim(); }
+});
+$("pdolAddF").onclick = () => { state.pdoRows.push(["fix", 9, 3]); pdolHtml(); updateDirty(); renderSim(); };
+$("pdolAddP").onclick = () => { state.pdoRows.push(["pps", 3.3, 11, 3]); pdolHtml(); updateDirty(); renderSim(); };
+$("pdolAvs").addEventListener("change", (e) => { state.pdoAvs = e.target.checked; pdolStatus(); });
+$("vcable").addEventListener("change", () => { applyLabDeps(); updateDirty(); renderSim(); });
+$("pdol").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updateDirty(); renderSim(); });
+$("forcePps").addEventListener("change", applyLabDeps);
+function writeExt(x) {
+  const old = !!state.cfg && !state.cfg.x;
+  const v = x || { flags: 0, cable: VC_DEFAULT, fcable: FC_DEFAULT, pdo: PDOL_DEFAULT.map(simRaw) };
+  $("vcable").checked = !!(v.flags & 1); $("pdol").checked = !!(v.flags & 2);
+  state.vc = v.cable.slice(); state.fc = (v.fcable || FC_DEFAULT).slice();
+  state.pdoRows = []; state.pdoAvs = false;
+  v.pdo.forEach((raw) => {
+    const p = pdoParse(raw);
+    if (p.type === P_FIX) state.pdoRows.push(["fix", p.max / 1000, p.ma / 1000]);
+    else if (p.type === P_PPS) state.pdoRows.push(["pps", p.min / 1000, p.max / 1000, p.ma / 1000]);
+    else if (p.type === P_SAVS) state.pdoAvs = true;
+  });
+  $("vcable").disabled = $("pdol").disabled = old;
+  vcHtml(); pdolHtml();
+}
+
+const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
+const isDirty = () => !!state.cfg && stable(readForm()) !== stable(state.cfg);
 function updateDirty() {
   const d = isDirty();
   $("dirtyText").textContent = state.cfg ? (d ? t("dirty") : t("clean")) : dev ? "" : t("offlineEdit");
@@ -1631,6 +1908,12 @@ async function loadCfg(force) {
   const wasDirty = isDirty();
   const v5 = !!state.info && state.info.proto >= 5, v6 = !!state.info && state.info.proto >= 6, v8 = !!state.info && state.info.proto >= 8;
   state.cfg = cfgFromBytes(p, v5, v6, v8); state.cfgSaving = !!p[v8 ? 32 : v6 ? 24 : v5 ? 20 : 16];
+  if (state.info && state.info.proto >= 11) {
+    const px = await request(0x13);
+    state.cfg.x = extFromBytes(px); state.cfgSaving = state.cfgSaving || !!px[52];
+    const pf = await request(0x15);
+    state.cfg.x.fcable = Array.from({ length: 5 }, (_, i) => u32(pf, i * 4)); state.cfgSaving = state.cfgSaving || !!pf[20];
+  } else state.cfg.x = null;
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
 }
@@ -1638,8 +1921,13 @@ async function applyCfg(defaults) {
   const f = readForm();
   if (!defaults && $("ppsc").checked && !(f.ppsLo < f.ppsHi)) { msg(t("ppscBad")); return; }
   if (!defaults && (($("idFe").checked && !f.feVid) || ($("idBe").checked && !f.beVid))) { msg(t("idBad")); return; }
+  if (!defaults && $("pdol").checked && pdolErr()) { msg(t(pdolErr())); return; }
   try {
-    if (defaults) await request(0x12); else await request(0x11, cfgToBytes(readForm()));
+    if (defaults) await request(0x12);
+    else {
+      await request(0x11, cfgToBytes(f));
+      if (f.x) { await request(0x14, extToBytes(f.x)); await request(0x16, fcToBytes(f.x.fcable)); }
+    }
     await loadCfg(true);
     msg(""); flash(t("applied"));
     setTimeout(() => refreshStatus().catch(() => {}), 400);
@@ -2027,7 +2315,7 @@ function applyI18n() {
   $("lang").value = lang;
   renderAll();
 }
-function renderAll() { renderConn(); renderFw(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); simRowsHtml(); renderSim(); }
+function renderAll() { renderConn(); renderFw(); renderStatus(); renderCfgState(); updateDirty(); if (state.log) loadSessionsLabelsOnly(); renderLog(); simRowsHtml(); renderSim(); vcHtml(); pdolHtml(); }
 function loadSessionsLabelsOnly() {
   const sel = $("sessionSel");
   Array.from(sel.options).forEach((o) => {
@@ -2039,8 +2327,7 @@ function loadSessionsLabelsOnly() {
 /* ================= wiring ================= */
 document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
 $("btnConnect").onclick = connect;
-$("view-settings").addEventListener("input", updateDirty);
-$("view-settings").addEventListener("change", updateDirty);
+["view-settings", "view-em"].forEach((id) => { $(id).addEventListener("input", updateDirty); $(id).addEventListener("change", updateDirty); });
 $("logPps").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("logPpsWarn"))) { e.target.checked = false; updateDirty(); } });
 /* 5A E-Marker：電流上限 5A、OCP 5.5A；關閉時收回到 3A / 5A */
 function applyCurLimits() {
@@ -2059,6 +2346,10 @@ function applyLabDeps() {
   $("fixcIn").hidden = !$("fixc").checked;
   $("ppscIn").hidden = !$("ppsc").checked;
   $("avs2ppsIn").hidden = !$("avs2pps").checked;
+  $("vcBody").hidden = !$("vcable").checked;
+  $("fcBody").hidden = !$("emarker").checked;
+  $("pdolIn").hidden = !$("forcePps").checked;
+  $("pdolEd").hidden = !$("pdol").checked;
   const oldMin = !!state.cfg && state.cfg.feVid == null;   /* 協議 v8 起才有 */
   ["avs2ppsMin9", "avs2ppsMin5"].forEach((id) => ($(id).disabled = oldMin));
 }
@@ -2133,10 +2424,11 @@ setInterval(async () => {
 
 let startTab = "status";
 try { startTab = localStorage.getItem("tab") || startTab; } catch (e) {}
-setTab(["status", "settings", "log", "fw", "sim"].includes(startTab) ? startTab : "status");
+setTab(["status", "settings", "em", "log", "fw", "sim"].includes(startTab) ? startTab : "status");
 /* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
 const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
-  compMode: 2, compVal: 15, flags2: 0, flags3: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60 };
+  compMode: 2, compVal: 15, flags2: 0, flags3: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60,
+  x: { flags: 0, cable: VC_DEFAULT.slice(), fcable: FC_DEFAULT.slice(), pdo: PDOL_DEFAULT.map(simRaw) } };
 writeForm(CFG_DEFAULT);
 applyI18n();
 

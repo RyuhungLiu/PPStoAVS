@@ -68,6 +68,8 @@ bool pd_phy_send_ext(pd_phy_t *p, uint8_t msg_type, const uint8_t *data, uint8_t
 /* 请求扩展报文的第 chunk 个分块 */
 bool pd_phy_send_chunk_request(pd_phy_t *p, uint8_t msg_type, uint8_t chunk);
 /* 以线材身份（Cable Plug）发 SOP' 报文 */
+/* 单次发送 SOP' 帧，不等 GoodCRC、不改 MessageID（虚拟 E-Marker 自问自答用） */
+void pd_phy_send_sop1_raw(pd_phy_t *p, uint16_t header, const uint32_t *objs, uint8_t num_objs);
 bool pd_phy_send_sop1(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uint32_t *objs, uint8_t revision);
 void pd_phy_send_hard_reset(pd_phy_t *p);
 

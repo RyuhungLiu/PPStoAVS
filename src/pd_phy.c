@@ -195,6 +195,19 @@ bool pd_phy_send_sop1(pd_phy_t *p, uint8_t msg_type, uint8_t num_objs, const uin
     return send_frame(p, UPD_SOP1, &p->tx_msg_id_sop1, header, payload, num_objs * 4);
 }
 
+void pd_phy_send_sop1_raw(pd_phy_t *p, uint16_t header, const uint32_t *objs, uint8_t num_objs)
+{
+    uint8_t len = 2 + num_objs * 4;
+    NVIC_DisableIRQ(p->irqn);
+    p->tx_buf[0] = header & 0xFF;
+    p->tx_buf[1] = header >> 8;
+    for (uint8_t i = 0; i < num_objs; i++)
+        pd_put_u32(&p->tx_buf[2 + i * 4], objs[i]);
+    phy_tx_blocking(p, len, UPD_SOP1);
+    NVIC_EnableIRQ(p->irqn);
+    p->last_act_ms = millis();
+}
+
 static bool send_ext_frame(pd_phy_t *p, uint8_t msg_type, uint16_t ext, const uint8_t *data, uint8_t size)
 {
     uint8_t payload[PD_MAX_DATA_OBJS * 4] = {0};

@@ -17,6 +17,7 @@
 #define T_DETACH_DISCHARGE_MS   650     /* tVBUSOFF：拔出后先把前端降到 5V 再关 MOS */
 #define VBUS_DISCHARGED_MV      5750    /* 前端 VBUS 已回到 vSafe5V 附近（含 ADC 误差） */
 #define T_VBUS_ON_SETTLE_MS     50      /* 打开 MOS 后等待 VBUS 建立，再发首条能力报文（tFirstSourceCap 250ms 内） */
+#define T_SELFQA_MS             300     /* 虚拟 E-Marker：Source_Capabilities 后无 SOP' 查询则自问自答 */
 #define T_SEND_CAPS_MS          150     /* tTypeCSendSourceCap 100~200ms */
 #define N_CAPS_COUNT            50
 #define T_SENDER_RESPONSE_MS    30
@@ -28,10 +29,6 @@
 #define T_QUERY_GAP_MS          30      /* 连续查询之间的间隔 */
 #define T_CABLE_RETRY_MS        100     /* 线材 Discover Identity 重试间隔（BUSY 或无应答） */
 #define N_CABLE_TRIES           4       /* 线材无应答 / BUSY 的最多尝试次数（无 VCONN 时线材不会回应，不必久等） */
-/* 虚拟 E-Marker（CFG3_CABLE5A）：无源线材，C 口、<10ns、20V、5A、USB 2.0、不支持 EPR、不需要 VCONN */
-#define VCABLE_ID_HEADER        ((3u << 27) | PI_VID)
-#define VCABLE_PRODUCT_VDO      ((uint32_t)PI_PID << 16)
-#define VCABLE_VDO1             ((2u << 18) | (1u << 13) | (2u << 5))
 #define PI_Q_CABLE              0x80    /* 本地查询项：向线材（SOP'）Discover Identity，与 pdinfo 的 PI_Q_* 不重叠 */
 
 /* 参考手册 §15.2.15 端口寄存器 */
@@ -80,6 +77,10 @@ static uint8_t caps_count;
 static uint8_t hard_reset_count;
 static bool has_contract;
 static bool caps_sent_once;
+static bool selfqa_armed;               /* 虚拟 E-Marker：Source_Capabilities 已发出，等待 Sink 的 SOP' 查询 */
+static bool selfqa_done;                /* 本次连接已有 SOP' 查询（或已自问自答），不再触发 */
+static uint32_t selfqa_ts;
+static uint8_t selfqa_cable_id;         /* 自问自答中"线材"一侧的 MessageID */
 static uint8_t last_rx_id;
 static uint8_t query;               /* 进行中的查询 PI_Q_*，0 = 无 */
 static uint16_t query_gap;          /* READY 后多久可以发下一项查询 */
@@ -89,7 +90,7 @@ static uint8_t cable_status;        /* be_cable_status_t */
 
 static bool cable_virtual(void)
 {
-    return (cfg()->flags3 & CFG3_CABLE5A) != 0;
+    return (cfg_ext()->flags & CFGX_CABLE) != 0;
 }
 static uint8_t cable_tries;
 static bool cable_ra;               /* 另一根 CC 脚出现 Ra（仅供显示） */
@@ -136,6 +137,9 @@ static void cable_clear(void)
     cable_tries = 0;
     cable_n = 0;
     cable_last_rx_id = 0xFF;
+    selfqa_armed = false;
+    selfqa_done = false;
+    selfqa_cable_id = 0;
     phy->sop1_en = false;
     be_vconn_set(false);
 }
@@ -150,8 +154,19 @@ bool be_cable_ra(void)
     return cable_ra;
 }
 
+/* 虚拟 E-Marker 的 VDO 个数：有源线材（ID Header 产品类型 = 4）多一个 Cable VDO2 */
+static uint8_t virtual_cable_n(void)
+{
+    return cfg_cable_n(cfg_ext()->cable[0]);
+}
+
 uint8_t be_cable_vdos(uint32_t *out)
 {
+    if (cable_virtual())
+    {
+        memcpy(out, cfg_ext()->cable, virtual_cable_n() * 4);
+        return virtual_cable_n();
+    }
     memcpy(out, cable_vdo, cable_n * 4);
     return cable_n;
 }
@@ -159,6 +174,8 @@ uint8_t be_cable_vdos(uint32_t *out)
 /* Cable VDO1（第 4 个 VDO）bit6:5 = VBUS 电流能力：01 = 3A，10 = 5A；产品类型须是无源 / 有源线材（ID Header bit29:27 = 3 / 4） */
 bool be_cable_5a(void)
 {
+    if (cable_virtual())
+        return cfg_ext_cable_5a(cfg_ext());
     uint8_t type = (cable_vdo[0] >> 27) & 7;
     return cable_status == CABLE_OK && cable_n >= 4 && (type == 3 || type == 4) && ((cable_vdo[3] >> 5) & 3) == 2;
 }
@@ -387,7 +404,7 @@ static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
     send_not_supported();
 }
 
-/* 虚拟 E-Marker：设备（端口，bit8 = 0）发来的 SOP' 请求，以 5A 无源线材应答 */
+/* 虚拟 E-Marker：设备（端口，bit8 = 0）发来的 SOP' 请求，按自订的 VDO 应答 */
 static void virtual_cable_reply(const pd_rx_msg_t *m, const pd_header_t *h)
 {
     uint8_t rev = h->revision < PD_REV_30 ? h->revision : PD_REV_30;
@@ -407,8 +424,9 @@ static void virtual_cable_reply(const pd_rx_msg_t *m, const pd_header_t *h)
         {
             if (VDM_IS_DISC_IDENT(vdm))
             {
-                uint32_t o[5] = {VDM_REPLY(vdm, VDM_ACK), VCABLE_ID_HEADER, 0, VCABLE_PRODUCT_VDO, VCABLE_VDO1};
-                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 5, o, rev);
+                uint32_t o[6] = {VDM_REPLY(vdm, VDM_ACK)};
+                memcpy(&o[1], cfg_ext()->cable, sizeof(cfg_ext()->cable));
+                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1 + virtual_cable_n(), o, rev);
             }
             else
             {
@@ -420,6 +438,29 @@ static void virtual_cable_reply(const pd_rx_msg_t *m, const pd_header_t *h)
     phy->sop1_plug = 0;
 }
 
+/* 虚拟 E-Marker 自问自答：Sink 在 Source_Capabilities 后 T_SELFQA_MS 内没有查询线材时，
+ * 由本端同时扮演端口与线材，在 CC 上完整走一遍 Discover Identity（供抓包仪器读取线材信息）：
+ * 端口 Discover Identity → 线材 GoodCRC → 线材 ACK → 端口 GoodCRC */
+static void selfqa_run(void)
+{
+    uint8_t pid = phy->tx_msg_id_sop1;
+    uint8_t cid = selfqa_cable_id;
+    uint32_t req = VDM_DISC_IDENT_REQ;
+    uint32_t o[6] = {VDM_REPLY(req, VDM_ACK)};
+    memcpy(&o[1], cfg_ext()->cable, sizeof(cfg_ext()->cable));
+
+    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_Vendor_Defined, 1, pid, 0, 0, PD_REV_30), &req, 1);
+    delay_us(30);
+    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_GoodCRC, 0, pid, 1, 0, PD_REV_30), NULL, 0);
+    delay_ms(1);
+    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_Vendor_Defined, 1 + virtual_cable_n(), cid, 1, 0, PD_REV_30), o,
+                         1 + virtual_cable_n());
+    delay_us(30);
+    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_GoodCRC, 0, cid, 0, 0, PD_REV_30), NULL, 0);
+    phy->tx_msg_id_sop1 = (pid + 1) & 0x7;
+    selfqa_cable_id = (cid + 1) & 0x7;
+}
+
 /* 线材（SOP'）的应答：Discover Identity */
 static void handle_cable_msg(const pd_rx_msg_t *m)
 {
@@ -427,7 +468,10 @@ static void handle_cable_msg(const pd_rx_msg_t *m)
     if (!h.power_role)                  /* 端口发来的（不是线材的应答） */
     {
         if (cable_status == CABLE_VIRTUAL)
+        {
+            selfqa_done = true;         /* Sink 自己来查了 */
             virtual_cable_reply(m, &h);
+        }
         return;
     }
     if (h.msg_id == cable_last_rx_id)
@@ -781,6 +825,13 @@ void be_process(void)
     }
 
     uint32_t elapsed = millis() - state_ts;
+
+    if (selfqa_armed && (state == BE_ST_WAIT_REQUEST || state == BE_ST_READY) && millis() - selfqa_ts >= T_SELFQA_MS)
+    {
+        selfqa_armed = false;
+        selfqa_done = true;
+        selfqa_run();
+    }
     switch (state)
     {
     case BE_ST_WAIT_VSAFE5V:
@@ -808,6 +859,11 @@ void be_process(void)
             caps_sent_once = true;
             if (send_caps())
             {
+                if (cable_status == CABLE_VIRTUAL && !selfqa_armed && !selfqa_done)
+                {
+                    selfqa_armed = true;
+                    selfqa_ts = millis();
+                }
                 set_state(BE_ST_WAIT_REQUEST);
             }
             else if (++caps_count > N_CAPS_COUNT)

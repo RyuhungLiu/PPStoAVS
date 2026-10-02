@@ -615,13 +615,14 @@ static void send_sink_caps_ext(void)
 
 /*
  * Lab（CFG_FE_EMARKER）：扮演无源 5A 线材（E-Marker），应答充电器 SOP' 的 Discover Identity。
- * 格式参照实测 5A 线材：ID Header 产品类型 = 无源线材；Cable VDO：USB-C 对 USB-C、50V、5A、EPR、USB 2.0。
- * 充电器在 VCONN 脚检测到 Ra 才会供 VCONN、查询线材：公头 B5 经 1kΩ 接 PA2，PA2 拉低即为 Ra
+ * VDO 全部可自订（cfg_ext_t.fcable，默认 = 实测 5A 无源线材：C-C、50V、5A、EPR、USB 2.0）。
+ * 充电器在 VCONN 脚检测到 Ra 才会供 VCONN、查询线材：公头 B5 经 1kΩ 接 PA2；Cable VDO1 声明 5A 时 PA2 拉低即为 Ra，声明 3A 时高阻
  */
 void fe_ra_apply(void)
 {
     static int8_t applied = -1;
-    int8_t on = (cfg()->flags & CFG_FE_EMARKER) != 0;
+    /* 5A：拉低作 Ra（充电器供 VCONN 并查询线材）；3A / 关闭：高阻 */
+    int8_t on = (cfg()->flags & CFG_FE_EMARKER) != 0 && cfg_ext_fe_5a(cfg_ext());
     if (on == applied)
         return;
     applied = on;
@@ -640,11 +641,6 @@ void fe_ra_apply(void)
     }
     GPIO_Init(GPIOA, &gpio);
 }
-#define EMARKER_ID_HEADER       ((3u << 27) | 0x1209u)      /* 无源线材，VID 0x1209 */
-#define EMARKER_PRODUCT_VDO     (0x0001u << 16)             /* PID 0x0001 */
-/* C-C、EPR Capable、延迟 <10ns、50V、5A、USB 2.0（EPR 要求线材 50V/5A/EPR；本机只请求 ≤ 20V） */
-#define EMARKER_CABLE_VDO       ((2u << 18) | (1u << 17) | (1u << 13) | (3u << 9) | (2u << 5))
-
 static void handle_cable_msg(const pd_rx_msg_t *m)
 {
     pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
@@ -667,8 +663,10 @@ static void handle_cable_msg(const pd_rx_msg_t *m)
         return;     /* 只应答结构化 VDM 的 REQ */
     if ((vdm >> 16) == 0xFF00 && (vdm & 0x1F) == 1)
     {
-        uint32_t o[5] = {(vdm & ~0xC0u) | 0x40u, EMARKER_ID_HEADER, 0, EMARKER_PRODUCT_VDO, EMARKER_CABLE_VDO};
-        if (pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 5, o, rev))
+        uint32_t o[6] = {(vdm & ~0xC0u) | 0x40u};
+        uint8_t n = cfg_cable_n(cfg_ext()->fcable[0]);
+        memcpy(&o[1], cfg_ext()->fcable, n * 4);
+        if (pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1 + n, o, rev))
             log_note(NOTE_FE_EMARKER, 0);
     }
     else

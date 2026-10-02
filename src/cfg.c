@@ -1,9 +1,12 @@
 #include "cfg.h"
 #include "flash_io.h"
+#include "pd_defs.h"
 #include <stddef.h>
 #include <string.h>
 
-#define CFG_MAGIC           0x34464350u     /* 'PCF4'：cfg_t 32 字节（v0.9.0 起） */
+#define CFG_MAGIC           0x35464350u     /* 'PCF5'：cfg_t 32 字节 + cfg_ext_t（v0.12.0 起） */
+#define CFG_MAGIC_V4        0x34464350u     /* 'PCF4'：cfg_t 32 字节（v0.9.0 ~ v0.11.x） */
+#define CFG_V4_SIZE         32
 #define CFG_MAGIC_V3        0x33464350u     /* 'PCF3'：cfg_t 前 24 字节（v0.7.0 ~ v0.8.0） */
 #define CFG_V3_SIZE         24
 #define CFG_MAGIC_V2        0x32464350u     /* 'PCF2'：cfg_t 前 20 字节（v0.6.x） */
@@ -16,14 +19,17 @@ typedef struct
     uint32_t magic;
     uint32_t seq;
     cfg_t    cfg;
-    uint32_t crc;           /* magic ~ cfg */
-    uint32_t pad[21];
+    cfg_ext_t ext;
+    uint32_t crc;           /* magic ~ ext */
+    uint32_t pad[3];
 } cfg_page_t;
 
 _Static_assert(sizeof(cfg_t) == 32, "cfg_t size");
+_Static_assert(sizeof(cfg_ext_t) == 72, "cfg_ext_t size");
 _Static_assert(sizeof(cfg_page_t) == FLASH_PAGE_SIZE, "cfg_page_t size");
 
 static cfg_t cur;
+static cfg_ext_t cur_x;
 static uint32_t cur_seq;
 static uint8_t cur_slot;            /* 最近一次有效数据所在页 */
 
@@ -38,7 +44,8 @@ static const cfg_page_t *slot_page(uint8_t slot)
 
 static bool page_valid(const cfg_page_t *p)
 {
-    return p->magic == CFG_MAGIC && p->crc == crc32_calc(p, offsetof(cfg_page_t, crc)) && cfg_valid(&p->cfg);
+    return p->magic == CFG_MAGIC && p->crc == crc32_calc(p, offsetof(cfg_page_t, crc)) && cfg_valid(&p->cfg) &&
+           cfg_ext_valid(&p->ext);
 }
 
 /* 旧格式（magic、seq、cfg 前 size 字节、crc）：已有字段照旧，新增字段取默认值 */
@@ -58,7 +65,7 @@ static bool page_old_load(const cfg_page_t *page, uint32_t magic, uint8_t size, 
 
 static bool page_legacy_load(const cfg_page_t *page, cfg_t *out)
 {
-    return page_old_load(page, CFG_MAGIC_V3, CFG_V3_SIZE, out) || page_old_load(page, CFG_MAGIC_V2, CFG_V2_SIZE, out) ||
+    return page_old_load(page, CFG_MAGIC_V4, CFG_V4_SIZE, out) || page_old_load(page, CFG_MAGIC_V3, CFG_V3_SIZE, out) || page_old_load(page, CFG_MAGIC_V2, CFG_V2_SIZE, out) ||
            page_old_load(page, CFG_MAGIC_V1, CFG_V1_SIZE, out);
 }
 
@@ -85,6 +92,67 @@ void cfg_defaults(cfg_t *c)
     c->be_pid = 0x30A5;
 }
 
+void cfg_ext_defaults(cfg_ext_t *x)
+{
+    memset(x, 0, sizeof(*x));
+    /* 通用数据：无源 C 口线材（<10ns、3A、20V、USB 2.0、不支持 EPR、不需要 VCONN） */
+    x->cable[0] = (3u << 27) | 0x1209u;                         /* 无源线材，VID 同 PI_VID */
+    x->cable[2] = 0x0001u << 16;                                /* PID（同 PI_PID） */
+    x->cable[3] = (2u << 18) | (1u << 13) | (1u << 5);
+    /* 前端：无源 5A 线材（C-C、EPR、<10ns、50V、5A、USB 2.0） */
+    x->fcable[0] = (3u << 27) | 0x1209u;
+    x->fcable[2] = 0x0001u << 16;
+    x->fcable[3] = (2u << 18) | (1u << 17) | (1u << 13) | (3u << 9) | (2u << 5);
+}
+
+bool cfg_ext_fe_5a(const cfg_ext_t *x)
+{
+    return ((x->fcable[3] >> 5) & 3) == 2;
+}
+
+bool cfg_ext_cable_5a(const cfg_ext_t *x)
+{
+    return ((x->cable[3] >> 5) & 3) == 2;
+}
+
+/* 自订 PDO 的合法范围：Fixed 5~20V（50mV 倍数）、PPS 3.3~21V、电流 0.5~5A；5V Fixed 必须有；AVS 至多 1 个，须同时有 15V 与 20V Fixed */
+bool cfg_ext_valid(const cfg_ext_t *x)
+{
+    if ((x->flags & ~CFGX_MASK) || x->pdo_n > CFGX_MAX_PDOS)
+        return false;
+    if (!(x->flags & CFGX_PDO))
+        return true;
+    uint8_t avs = 0, v5 = 0, v15 = 0, v20 = 0;
+    for (uint8_t i = 0; i < x->pdo_n; i++)
+    {
+        pdo_t p = pd_parse_pdo(x->pdo[i]);
+        if (p.type == FPDO)
+        {
+            if (p.max_mv < 5000 || p.max_mv > 20000 || p.max_mv % 100 || p.max_ma < 500 || p.max_ma > CFG_MAX_MA_5A ||
+                p.max_ma % 50 || (x->pdo[i] & 0xC0000000u))
+                return false;
+            v5 += p.max_mv == 5000;
+            v15 += p.max_mv == 15000;
+            v20 += p.max_mv == 20000;
+        }
+        else if (p.type == PPS_PDO)
+        {
+            if (p.min_mv < 3300 || p.max_mv > 21000 || p.min_mv >= p.max_mv || p.max_ma < 500 || p.max_ma > CFG_MAX_MA_5A)
+                return false;
+        }
+        else if (p.type == SPR_AVS_PDO)
+            avs++;
+        else
+            return false;
+        for (uint8_t j = 0; j < i; j++)
+        {
+            if (x->pdo[j] == x->pdo[i])
+                return false;
+        }
+    }
+    return v5 == 1 && avs <= 1 && (!avs || (v15 == 1 && v20 == 1));
+}
+
 bool cfg_valid(const cfg_t *c)
 {
     bool a5 = (c->flags & CFG_FE_EMARKER) != 0;
@@ -105,8 +173,6 @@ bool cfg_valid(const cfg_t *c)
     if (c->comp_mode > CFG_COMP_R || (c->comp_mode == CFG_COMP_V && c->comp_val > CFG_COMP_V_MAX) ||
         (c->comp_mode == CFG_COMP_R && c->comp_val > CFG_COMP_R_MAX))
         return false;
-    if ((c->flags3 & (CFG3_NO_CABLE5A | CFG3_CABLE5A)) == (CFG3_NO_CABLE5A | CFG3_CABLE5A))
-        return false;   /* 线材策略互斥 */
     return c->mode <= CFG_MODE_FIXED && (c->hide_fixed & ~0x0Fu) == 0 && (c->flags & ~CFG_FLAGS_MASK) == 0 &&
            (c->max_mv == 15000 || c->max_mv == 20000) &&
            c->max_ma >= 500 && c->max_ma <= (a5 ? CFG_MAX_MA_5A : CFG_MAX_MA) && c->max_ma % 50 == 0 &&
@@ -118,6 +184,7 @@ bool cfg_valid(const cfg_t *c)
 void cfg_init(void)
 {
     cfg_defaults(&cur);
+    cfg_ext_defaults(&cur_x);
     cur_seq = 0;
     cur_slot = 1;
     for (uint8_t s = 0; s < CFG_FLASH_PAGES; s++)
@@ -127,12 +194,21 @@ void cfg_init(void)
         if (page_valid(p) && p->seq >= cur_seq)
         {
             cur = p->cfg;
+            cur_x = p->ext;
             cur_seq = p->seq;
             cur_slot = s;
         }
         else if (page_legacy_load(p, &v1) && p->seq >= cur_seq)
         {
             cur = v1;
+            cfg_ext_defaults(&cur_x);
+            if (cur.flags3 & (CFG3_OLD_NO5A | CFG3_OLD_5A))
+            {
+                /* v0.11.x 的线材策略 3A / 5A → 虚拟 E-Marker */
+                cur_x.flags = CFGX_CABLE;
+                cur_x.cable[3] = (cur_x.cable[3] & ~(3u << 5)) | ((cur.flags3 & CFG3_OLD_5A) ? 2u << 5 : 1u << 5);
+            }
+            cur.flags3 &= CFG3_MASK;
             cur_seq = p->seq;
             cur_slot = s;
         }
@@ -156,6 +232,21 @@ bool cfg_set(const cfg_t *c)
     return true;
 }
 
+const cfg_ext_t *cfg_ext(void)
+{
+    return &cur_x;
+}
+
+bool cfg_ext_set(const cfg_ext_t *x)
+{
+    if (!cfg_ext_valid(x))
+        return false;
+    cur_x = *x;
+    cur_x.reserved = 0;
+    save_state = SAVE_ERASE;
+    return true;
+}
+
 bool cfg_save_pending(void)
 {
     return save_state != SAVE_IDLE;
@@ -176,6 +267,7 @@ bool cfg_flush_step(void)
         save_buf.magic = CFG_MAGIC;
         save_buf.seq = cur_seq + 1;
         save_buf.cfg = cur;
+        save_buf.ext = cur_x;
         save_buf.crc = crc32_calc(&save_buf, offsetof(cfg_page_t, crc));
         if (flash_page_program(CFG_FLASH_ADDR + slot * FLASH_PAGE_SIZE, (const uint32_t *)&save_buf))
         {
