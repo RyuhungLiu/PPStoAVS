@@ -238,6 +238,10 @@ Plug the front Type-C into a PC (no charger needed; the board runs from the PC's
   the rear PDOs with the charger PDO each one comes from, and the device's identity and battery.
 - **Settings** — mode, 12 V conversion, max voltage (15/20 V), current limit (≤ 3 A), hidden Fixed PDOs,
   OVP/UVP %, OCP mA/ms, PPS request logging. Applied immediately and saved to flash.
+  **Export / Import settings** save the whole form (plus the charger/device PDOs and simulator rows) as a JSON
+  file for bug reports; importing only fills the form, press Apply to write it to the device.
+- **Firmware** — shows the host tool version, checks the latest GitHub release (version + release notes) and can
+  download its application image (`dist/PPStoAVS-app.bin` at the release tag) for flashing.
 - **Records** — the last power sessions (up to 64 records each): charger PDOs, the PDOs offered to the device
   (logged whenever they change, attached or not), every request (device RDO → charger RDO, voltage, result),
   resets, protection trips, attach/detach. Consecutive PPS/AVS steps on the same PDO are merged into one

@@ -62,17 +62,38 @@ int main(void)
 
     cfg_init();
     fe_ra_apply();      /* 虚拟 E-Marker：尽早呈现 Ra */
+    /* 虚拟 E-Marker：充电器一上电就查询线材（早于首次广播），前端 PHY 要在其余初始化之前开始接收 */
+    const bool early_fe = (cfg()->flags & CFG_FE_EMARKER) && !(cfg()->flags2 & CFG2_UFCS)
+#ifdef UFCS_PROBE
+                          && false
+#endif
+        ;
+    if (early_fe)
+    {
+        pd_phy_hw_init();
+        fe_init();
+    }
+
     evlog_init();
+    if (early_fe)
+        fe_cable_poll();
     ev_boot_t boot = {FW_VERSION, reset_flags, *cfg()};
     evlog_add(EV_BOOT, &boot, sizeof(boot));
 
     analog_init();
+    if (early_fe)
+        fe_cable_poll();
     analog_calibrate_current_zero();
 
     power_sw_hvcp_start();
+    if (early_fe)
+        fe_cable_poll();
 
-    pd_phy_hw_init();
+    if (!early_fe)
+        pd_phy_hw_init();
     be_init();
+    if (early_fe)
+        fe_cable_poll();
     /* 前端 D+/D− 与 USB HID 共用：先看 UFCS（设置开启，或探测固件），握手成功则前端走 UFCS，不启动 HID 和 PD 前端 */
 #ifdef UFCS_PROBE
     const bool ufcs_up = ufcs_probe_boot();     /* 阻塞：电平扫描 → 握手 → Ping（此时看门狗尚未启动） */
@@ -81,6 +102,8 @@ int main(void)
 #endif
     if (!ufcs_up)
         usb_hid_init();
+    if (early_fe)
+        fe_cable_poll();
 
     watchdog_init();
     ufcs_set_yield(watchdog_feed);
@@ -105,7 +128,7 @@ int main(void)
         watchdog_feed();
     }
 #endif
-    if (!ufcs_up)
+    if (!ufcs_up && !early_fe)
         fe_init();
 
     while (1)

@@ -347,6 +347,14 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
       </div>
     </div>
     <div class="card">
+      <h3 data-i18n="ghTitle"></h3>
+      <div>
+        <div class="inline"><button class="btn keep" id="ghCheck" data-i18n="ghCheck"></button><button class="btn" id="ghLoad" data-i18n="ghLoad" disabled></button><a class="btn keep" id="ghPage" target="_blank" rel="noopener" hidden data-i18n="ghPage"></a></div>
+        <div class="small" id="ghInfo" style="margin-top:8px"></div>
+        <pre class="small" id="ghNotes" hidden style="white-space:pre-wrap;word-break:break-word;margin:10px 0 0;padding:10px 12px;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px"></pre>
+      </div>
+    </div>
+    <div class="card">
       <h3 data-i18n="fwUpdate"></h3>
       <div>
         <div class="inline"><input type="file" id="fwFile" accept=".bin,.hex"><button class="btn primary" id="fwGo" data-i18n="fwGo"></button></div>
@@ -578,6 +586,9 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
       <span class="tag" id="cfgState"></span>
       <span class="small muted" id="dirtyText"></span>
       <span class="spacer"></span>
+      <button class="btn keep" id="btnCfgExport" data-i18n="cfgExport"></button>
+      <button class="btn keep" id="btnCfgImport" data-i18n="cfgImport"></button>
+      <input type="file" id="cfgFile" accept=".json,application/json" hidden>
       <button class="btn" id="btnDefaults" data-i18n="defaults"></button>
       <button class="btn" id="btnRevert" data-i18n="revert"></button>
       <button class="btn primary" id="btnApply" data-i18n="apply"></button>
@@ -616,6 +627,13 @@ const T = {
     connect: "Connect", disconnect: "Disconnect", connected: "Connected", notConnected: "Not connected",
     noHid: "WebHID is not available in this browser. Use desktop Chrome or Edge.",
     tabStatus: "Status", tabSettings: "Settings", tabLog: "Records", tabFw: "Firmware",
+    fwRowWeb: "Host tool",
+    ghTitle: "Latest release (GitHub)", ghCheck: "Check for updates", ghLoad: "Download firmware", ghPage: "Open release page",
+    ghChecking: "Checking GitHub…", ghDownloading: "Downloading…", ghFail: (m) => `Could not reach GitHub (${m}). Check the network, or download the file from the release page.`,
+    ghLatest: (tag, date) => `Latest release: ${tag}${date ? " · " + date : ""}`,
+    ghRel: (dev, web) => [dev == null ? "" : dev === 0 ? "Device firmware is up to date." : dev < 0 ? "Device firmware is newer than the release." : "A newer device firmware is available.",
+      web === 0 ? "This page is up to date." : web > 0 ? "A newer ppstoavs.html is in the release (re-open it from the release page)." : ""].filter(Boolean).join(" "),
+    ghLoaded: (n) => `Loaded ${n}. Press Flash below to write it.`, ghNoAsset: "This release has no application .bin.", ghNoNotes: "(no release notes)",
     fwRun: "Running", fwUpdate: "Update", fwEnter: "Enter bootloader", fwBoot: "Start application", fwGo: "Flash",
     fwRowMode: "Mode", fwRowApp: "Application", fwRowBl: "Bootloader", fwRowSize: "Application size",
     fwModeApp: "Application", fwModeBl: "Bootloader", fwModeOld: "Application without online update", fwNoDev: "Not connected",
@@ -802,6 +820,8 @@ const T = {
       "Fixed levels are requested at the PPS maximum current, so the charger's current limiting is not used (OCP still applies), and UVP is still checked.",
       "The converter sends the PPS keep-alive request every 5 s. Works in all modes."],
     ppsc: "Custom PPS", ppscS: "Add one PPS with your own voltage range and current.", ppscRange: "3.3–21.0 V · 0.5–5 A", ppscs: "PPS",
+    cfgExport: "Export settings", cfgImport: "Import settings",
+    impOk: "Settings imported into the form. Check them, then press Apply to write them to the device.", impBad: "Not a PPStoAVS settings file.", impFw: "This file was exported from a newer host protocol; unknown fields were ignored.",
     whyNeedPps: "Has no effect in mode A or D (no PPS is offered).", whyNeedAvs: "Has no effect in mode B or D (no AVS is offered).",
     whyList: "Ignored while the custom PDO list is on.", why12Hidden: "Ignored: 12 V is hidden below.", whyEprMv: "Needs max voltage 20 V (EPR AVS covers 15–20 V).",
     errFixcRange: "Custom Fixed: 5.1–20.0 V in 0.1 V steps, 0.5–5 A.", errFixcMax: "Custom Fixed voltage is above the max voltage, so it would never be offered.",
@@ -832,6 +852,13 @@ const T = {
     connect: "連線", disconnect: "中斷連線", connected: "已連線", notConnected: "未連線",
     noHid: "此瀏覽器不支援 WebHID，請改用桌面版 Chrome 或 Edge。",
     tabStatus: "狀態", tabSettings: "設定", tabLog: "記錄", tabFw: "韌體",
+    fwRowWeb: "前端（本頁）",
+    ghTitle: "最新發行版（GitHub）", ghCheck: "檢查更新", ghLoad: "下載韌體", ghPage: "開啟發行頁",
+    ghChecking: "正在查詢 GitHub…", ghDownloading: "下載中…", ghFail: (m) => `無法連到 GitHub（${m}）。請檢查網路，或到發行頁手動下載。`,
+    ghLatest: (tag, date) => `最新發行版：${tag}${date ? " · " + date : ""}`,
+    ghRel: (dev, web) => [dev == null ? "" : dev === 0 ? "裝置韌體已是最新。" : dev < 0 ? "裝置韌體比發行版更新。" : "有較新的裝置韌體。",
+      web === 0 ? "本頁已是最新。" : web > 0 ? "發行版裡有較新的 ppstoavs.html（請從發行頁重新開啟）。" : ""].filter(Boolean).join(""),
+    ghLoaded: (n) => `已載入 ${n}，按下方「刷寫」寫入。`, ghNoAsset: "此發行版沒有應用程式 .bin。", ghNoNotes: "（沒有發行說明）",
     fwRun: "運作狀態", fwUpdate: "更新", fwEnter: "進入 Bootloader", fwBoot: "啟動應用程式", fwGo: "刷寫",
     fwRowMode: "模式", fwRowApp: "應用程式", fwRowBl: "Bootloader", fwRowSize: "應用程式大小",
     fwModeApp: "應用程式", fwModeBl: "Bootloader", fwModeOld: "應用程式（不支援線上更新）", fwNoDev: "未連線",
@@ -1018,6 +1045,8 @@ const T = {
       "Fixed 擋位以 PPS 最大電流請求，不使用充電器的限流功能（過流保護照常），欠壓保護照常檢查。",
       "轉換器每 5 秒發送 PPS 保活請求。所有透傳方式都適用。"],
     ppsc: "自訂 PPS", ppscS: "增加一個自訂電壓範圍與電流的 PPS 擋位。", ppscRange: "3.3–21.0V · 0.5–5A", ppscs: "PPS",
+    cfgExport: "導出設定", cfgImport: "導入設定",
+    impOk: "設定已導入表單，請檢查後按「應用」寫入裝置。", impBad: "這不是 PPStoAVS 的設定檔。", impFw: "此檔案來自較新的主機協議，未知欄位已略過。",
     whyNeedPps: "模式 A、D 不提供 PPS，此項無作用。", whyNeedAvs: "模式 B、D 不提供 AVS，此項無作用。",
     whyList: "自訂 PDO 檔位開啟時忽略此項。", why12Hidden: "已忽略：下方隱藏了 12V。", whyEprMv: "需要最高電壓 20V（EPR AVS 涵蓋 15–20V）。",
     errFixcRange: "自訂 Fixed：5.1–20.0V（0.1V 步進）、0.5–5A。", errFixcMax: "自訂 Fixed 電壓高於最高電壓設定，永遠不會提供。",
@@ -2033,19 +2062,26 @@ function appVersion(b) {
 async function onFwFile() {
   state.fw = null; $("fwMsg").textContent = "";
   const f = $("fwFile").files[0];
+  if (f) loadFwImage(f.name, new Uint8Array(await f.arrayBuffer()));
+  else $("fwFileInfo").textContent = "";
+  renderFw();
+}
+function loadFwImage(name, buf) {
   const sys = state.sys || { appBase: 0x1800, appMax: 0xA600 };
-  if (f) {
-    const buf = new Uint8Array(await f.arrayBuffer());
+  state.fw = null;
+  {
+    const f = { name };
     const bytes = /\.hex$/i.test(f.name) ? parseHex(new TextDecoder().decode(buf), sys.appBase, sys.appMax) : appFromBin(buf, sys.appBase, sys.appMax);
     if (!bytes || bytes.length < 0x800 || !appVersion(bytes) || (bytes[0] & 0x7F) !== 0x6F) $("fwFileInfo").textContent = t("fwBad");
     else if (bytes.length > sys.appMax) $("fwFileInfo").textContent = t("fwBig")(sys.appMax);
     else { state.fw = { name: f.name, bytes, ver: appVersion(bytes), crc: crc32(bytes) }; $("fwFileInfo").textContent = t("fwFile")(f.name, bytes.length, state.fw.ver, state.fw.crc); }
-  } else $("fwFileInfo").textContent = "";
+  }
   renderFw();
 }
 function renderFw() {
+  if (typeof renderGh === "function") renderGh();
   const sys = state.sys, mode = !dev ? -1 : sys ? sys.mode : 0;
-  const kv = [];
+  const kv = [[t("fwRowWeb"), "v" + WEB_VER]];
   kv.push([t("fwRowMode"), !dev ? t("fwNoDev") : mode === 2 ? t("fwModeBl") : mode === 1 ? t("fwModeApp") : t("fwModeOld")]);
   if (dev && mode >= 1) {
     const appVer = mode === 1 ? sys.appVer : sys.appValid ? sys.appVer : 0;
@@ -2114,6 +2150,44 @@ async function runFw(steps) {
   finally { state.busy = false; renderFw(); }
 }
 $("fwFile").onchange = onFwFile;
+
+/* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
+const WEB_VER = "0.12.2";      /* 本頁版本（發版時同步） */
+const GH_REPO = "RyuhungLiu/PPStoAVS";
+const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
+let ghRel = null;
+function ghInfo(text, bad) { $("ghInfo").textContent = text; $("ghInfo").style.color = bad ? "var(--bad)" : ""; }
+async function ghCheck() {
+  ghInfo(t("ghChecking")); $("ghCheck").disabled = true; $("ghLoad").disabled = true;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    ghRel = await r.json();
+    const latest = verNum(ghRel.tag_name), cmp = (a, b) => (a > b ? 1 : a < b ? -1 : 0);
+    const devV = state.sys && state.sys.mode >= 1 ? (state.sys.mode === 1 ? state.sys.appVer : state.sys.appValid ? state.sys.appVer : 0) : 0;
+    const devN = devV ? ((devV >> 8) << 16) | (((devV >> 4) & 15) << 8) | (devV & 15) : 0;
+    ghInfo(t("ghLatest")(ghRel.tag_name, (ghRel.published_at || "").slice(0, 10)) + " " + t("ghRel")(devN ? cmp(latest, devN) : null, cmp(latest, verNum(WEB_VER))));
+    $("ghNotes").textContent = (ghRel.body || "").trim() || t("ghNoNotes"); $("ghNotes").hidden = false;
+    $("ghPage").href = ghRel.html_url; $("ghPage").hidden = false;
+  } catch (e) { ghRel = null; ghInfo(t("ghFail")(e.message), true); }
+  $("ghCheck").disabled = false; renderGh();
+}
+function renderGh() { $("ghLoad").disabled = state.busy || !ghRel || !ghRel.assets.some((a) => /-app\.bin$/.test(a.name)); }
+async function ghLoad() {
+  const a = ghRel && ghRel.assets.find((x) => /-app\.bin$/.test(x.name));
+  if (!a) { ghInfo(t("ghNoAsset"), true); return; }
+  ghInfo(t("ghDownloading")); $("ghLoad").disabled = true;
+  try {
+    /* 發行附件的下載網址不帶 CORS，網頁讀不到；每個發行版的標籤里另放一份 dist/PPStoAVS-app.bin，走 raw.githubusercontent.com */
+    const r = await fetch(`https://raw.githubusercontent.com/${GH_REPO}/${ghRel.tag_name}/dist/PPStoAVS-app.bin`);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    loadFwImage(a.name, new Uint8Array(await r.arrayBuffer()));
+    ghInfo(state.fw ? t("ghLoaded")(a.name) : $("fwFileInfo").textContent, !state.fw);
+  } catch (e) { ghInfo(t("ghFail")(e.message), true); }
+  renderGh();
+}
+$("ghCheck").onclick = ghCheck;
+$("ghLoad").onclick = ghLoad;
 $("fwEnter").onclick = () => { if (confirm(t("fwConfirmEnter"))) runFw(async () => { await doEnterBl(); fwMsg(t("fwHintBl")); }); };
 $("fwBoot").onclick = () => runFw(async () => { await doBoot(); fwMsg(t("fwDone")); setTab("status"); });
 $("fwGo").onclick = () => {
@@ -2497,6 +2571,40 @@ $("avs2pps").addEventListener("change", () => { applyLabDeps(); updateDirty(); }
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
 $("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });
+/* 導出 / 導入設定：把表單（與裝置端已存的設定、充電器 PDO、模擬器列表）存成 JSON，供回報問題與重現；導入只填入表單，按「應用」才寫入 */
+const hexList = (a) => a.map((v) => (v >>> 0).toString(16).padStart(8, "0"));
+function exportCfg() {
+  const f = readForm(), i = state.info;
+  const out = { app: "PPStoAVS", format: 1, exported: new Date().toISOString(),
+    host: { fw: i ? fmtFw(i.fw) : null, fwRaw: i ? i.fw : null, proto: i ? i.proto : null, connected: !!dev, lang },
+    config: f, configBytes: { cfg: Array.from(cfgToBytes(f), (x) => x.toString(16).padStart(2, "0")).join(""), ext: f.x ? Array.from(extToBytes(f.x), (x) => x.toString(16).padStart(2, "0")).join("") : null },
+    device: state.cfg ? state.cfg : null,
+    chargerPdos: hexList(state.frontCaps), devicePdos: hexList(state.rearCaps), simRows: simRows };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+  a.download = `ppstoavs-settings-${i ? fmtFw(i.fw) + "-" : ""}${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importCfg(text) {
+  let o;
+  try { o = JSON.parse(text); } catch (e) { msg(t("impBad")); return; }
+  const c = o && o.app === "PPStoAVS" && o.config;
+  const num = (v) => typeof v === "number" && isFinite(v);
+  if (!c || ![c.mode, c.hide, c.maxMv, c.maxMa, c.ovp, c.uvp, c.ocpMa, c.ocpMs, c.flags].every(num)) { msg(t("impBad")); return; }
+  const base = state.cfg || CFG_DEFAULT, cfg = Object.assign({}, base, c);
+  const x = c.x && Array.isArray(c.x.cable) && c.x.cable.length === 5 && Array.isArray(c.x.pdo) ? { flags: c.x.flags | 0, cable: c.x.cable.map((v) => v >>> 0), fcable: Array.isArray(c.x.fcable) && c.x.fcable.length === 5 ? c.x.fcable.map((v) => v >>> 0) : FC_DEFAULT.slice(), pdo: c.x.pdo.slice(0, 7).map((v) => v >>> 0) } : base.x ?? CFG_DEFAULT.x;
+  cfg.x = state.cfg && !state.cfg.x ? null : x;
+  /* 舊韌體沒有的欄位維持裝置原樣 */
+  ["flags2", "flags3", "compMode", "ppsLo", "ppsHi", "ppsMa50", "feVid", "fePid", "beVid", "bePid"].forEach((k) => { if (state.cfg && state.cfg[k] == null) cfg[k] = null; else if (cfg[k] == null) cfg[k] = CFG_DEFAULT[k] ?? base[k]; });
+  writeForm(cfg);
+  if (Array.isArray(o.simRows) && o.simRows.length && o.simRows.every((r) => Array.isArray(r))) { simRows = o.simRows; simSave(); simRowsHtml(); }
+  renderSim(); updateDirty();
+  msg(t(o.format > 1 ? "impFw" : "impOk"));
+}
+$("btnCfgExport").onclick = exportCfg;
+$("btnCfgImport").onclick = () => $("cfgFile").click();
+$("cfgFile").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importCfg(await f.text()); };
 window.addEventListener("beforeunload", (e) => { if (dev && isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 $("btnApply").onclick = () => applyCfg(false);
 $("btnRevert").onclick = () => state.cfg && writeForm(state.cfg);

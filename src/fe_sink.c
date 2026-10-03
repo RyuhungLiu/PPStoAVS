@@ -824,6 +824,7 @@ void fe_init(void)
     AFIO->PCFR1 = (AFIO->PCFR1 & ~AFIO_SWCFG_Mask) | AFIO_SWCFG_DISABLE;
 
     pd_phy_init(phy, USBPD1, USBPD1_IRQn, 0 /* Sink */, 0 /* UFP */);
+    phy->sop1_en = (cfg()->flags & CFG_FE_EMARKER) != 0;
     phy->regs->PORT_CC1 = 0;                                  /* CC3 不使用 */
     /* CC4R：Rd；BMC 接收经 CC 比较器，接收期间保持 CE=1、0.66V（WCH EVT USBPD_SNK/SRC 均如此） */
     phy->regs->PORT_CC2 = CC_PD | PORT_CE | PORT_CVS_066;
@@ -845,6 +846,18 @@ static void enter_legacy(void)
     evlog_add(EV_FE_LEGACY, &ma, sizeof(ma));
     bool for_bridge;
     bridge_on_front_caps(&for_bridge);
+}
+
+/* 开机初始化期间（主循环还没跑起来）只处理队首的 SOP' 报文，让充电器上电后的线材查询及时得到应答 */
+void fe_cable_poll(void)
+{
+    pd_phy_t *p = phy;
+    while (p->q_tail != p->q_head && p->q[p->q_tail].sop)
+    {
+        pd_rx_msg_t m;
+        pd_phy_rx_pop(p, &m);
+        handle_cable_msg(&m);
+    }
 }
 
 void fe_process(void)

@@ -23,6 +23,7 @@ typedef enum
 } fe_req_status_t;
 
 void fe_init(void);
+void fe_cable_poll(void);   /* 开机初始化期间应答队首的 SOP' 报文 */
 void fe_process(void);
 
 bool fe_is_ready(void);         /* 已有显式合约且无进行中的请求 */
