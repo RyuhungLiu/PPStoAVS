@@ -104,6 +104,7 @@ typedef struct __attribute__((packed))
     uint8_t  kind;          /* rst_kind_t */
     uint8_t  state;         /* 当时的状态机状态（fe/be_state_code） */
     uint16_t rx_err;        /* 该端口累计 RX_RESET 次数 */
+    uint16_t defer;         /* 该端口发送前因 RX 未处理而推迟的累计次数 */
 } ev_reset_t;
 
 typedef enum

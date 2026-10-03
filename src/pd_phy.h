@@ -47,7 +47,7 @@ typedef struct
 
     /* 诊断计数（FE_DIAG 构建时编码进后端 PDO） */
     volatile uint16_t dbg_rx_sel[2];
-    volatile uint16_t dbg_irq, dbg_rx_reset, dbg_rx_act, dbg_sop0, dbg_tx_ok, dbg_tx_fail;
+    volatile uint16_t dbg_irq, dbg_rx_reset, dbg_rx_act, dbg_sop0, dbg_tx_ok, dbg_tx_fail, dbg_defer;
     volatile uint8_t dbg_last_len, dbg_last_sop;
 } pd_phy_t;
 

@@ -101,7 +101,8 @@ typedef enum
  */
 #define CFGX_CABLE          (1u << 0)
 #define CFGX_PDO            (1u << 1)
-#define CFGX_MASK           (CFGX_CABLE | CFGX_PDO)
+#define CFGX_BE_IDLE        (1u << 2)   /* 后端虚拟 E-Marker 常驻应答：没有设备（无 Rd 下拉）、MOS 未开时也监听并应答 SOP' Discover Identity；需 CFGX_CABLE */
+#define CFGX_MASK           (CFGX_CABLE | CFGX_PDO | CFGX_BE_IDLE)
 #define CFGX_MAX_PDOS       7
 typedef struct __attribute__((packed))
 {

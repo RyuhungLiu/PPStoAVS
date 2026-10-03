@@ -150,6 +150,16 @@ static bool send_frame(pd_phy_t *p, uint8_t sop, uint8_t *msg_id, uint16_t heade
     for (uint8_t attempt = 0; attempt <= N_RETRY_COUNT; attempt++)
     {
         NVIC_DisableIRQ(p->irqn);
+        /* 对方帧刚收完、ISR 还没来得及回 GoodCRC 时发送会清掉该帧（PD_ALL_CLR）→ 对方收不到 GoodCRC 而发 Soft Reset：先让 ISR 处理 */
+        for (uint8_t w = 0; w < 3 && (p->regs->STATUS & IF_RX_ACT); w++)
+        {
+            p->dbg_defer++;
+            NVIC_EnableIRQ(p->irqn);
+            uint32_t t0 = micros();
+            while ((p->regs->STATUS & IF_RX_ACT) && (uint32_t)(micros() - t0) < 1500)
+                ;
+            NVIC_DisableIRQ(p->irqn);
+        }
         p->tx_buf[0] = header & 0xFF;
         p->tx_buf[1] = header >> 8;
         memcpy(&p->tx_buf[2], payload, payload_len);

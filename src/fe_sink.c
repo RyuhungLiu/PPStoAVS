@@ -288,7 +288,7 @@ static void request_finished(bool ok)
 
 static void log_reset(uint8_t kind)
 {
-    ev_reset_t e = {0, kind, (uint8_t)state, phy->dbg_rx_reset};
+    ev_reset_t e = {0, kind, (uint8_t)state, phy->dbg_rx_reset, phy->dbg_defer};
     evlog_add(EV_RESET, &e, sizeof(e));
 }
 

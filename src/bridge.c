@@ -773,21 +773,22 @@ uint16_t bridge_back_max_ma(void)
     return c->max_ma;
 }
 
-/* 过流阈值：自动放宽到 5A 时，阈值至少为上限的 7/6（与默认 3A / 3.5A 的比例相同），最高 5.5A（电流检测约 5.8A 饱和） */
+/* 过流：后端进入 5A（E-Marker 5A 且上限放宽到 5A）时固定 5350mA / 50ms，否则按设置 */
+#define OCP_5A_MA 5350
+#define OCP_5A_MS 50
+static bool ocp_is_5a(void)
+{
+    return bridge_back_max_ma() >= CFG_MAX_MA_5A;
+}
+
 static uint16_t ocp_limit_ma(void)
 {
-    const cfg_t *c = cfg();
-    uint16_t ma = bridge_back_max_ma();
-    uint16_t ocp = c->ocp_ma;
-    if (ma > c->max_ma)
-    {
-        uint16_t need = (uint16_t)((uint32_t)ma * 7 / 6);
-        if (need > CFG_OCP_MAX_MA_5A)
-            need = CFG_OCP_MAX_MA_5A;
-        if (ocp < need)
-            ocp = need;
-    }
-    return ocp;
+    return ocp_is_5a() ? OCP_5A_MA : cfg()->ocp_ma;
+}
+
+static uint16_t ocp_time_ms(void)
+{
+    return ocp_is_5a() ? OCP_5A_MS : cfg()->ocp_ms;
 }
 
 /* 后端线材 E-Marker 的电流能力变化（5A 与否）：重建能力并重新广播 */
@@ -1226,7 +1227,6 @@ void bridge_process(void)
         return;
     mon_ts = now;
 
-    const cfg_t *c = cfg();
 
     /* 过/欠压：连续 3 次超出窗口；PPS 合约下充电器可能处于限流模式，只做过压 */
     uint16_t v = analog_vbus_mv();
@@ -1256,7 +1256,7 @@ void bridge_process(void)
             ocp_active = true;
             ocp_ts = now;
         }
-        else if (now - ocp_ts >= c->ocp_ms)
+        else if (now - ocp_ts >= ocp_time_ms())
         {
             protection_trip(PROT_OCP, v, i);
         }

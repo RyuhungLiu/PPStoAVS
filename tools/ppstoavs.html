@@ -549,6 +549,7 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
     <div class="card" id="vcCard">
       <h3 data-i18n="emRear"></h3>
       <label class="check"><input type="checkbox" id="vcable"><div><b data-i18n="vcable"></b><span data-i18n="vcableS"></span></div></label>
+      <label class="check" id="beIdleRow"><input type="checkbox" id="beIdle"><div><b data-i18n="beIdle"></b><span data-i18n="beIdleS"></span></div></label>
       <div id="vcBody">
         <div class="small muted" data-i18n="vcNote" style="margin:10px 0"></div>
         <div class="inline" style="margin-bottom:14px">
@@ -779,6 +780,7 @@ const T = {
       "Chargers with a second handshake then re-advertise, replacing PPS with SPR AVS.",
       "Off: reply Not_Supported; the charger keeps PPS.",
       "Record: \"AVS 2nd handshake · front declared\"."],
+    beIdle: "Always answer cable queries (no device needed)", beIdleS: "Even with no device (no Rd pull-down) and the output switch off, listen on CC and answer SOP' Discover Identity with the data below. Needs the virtual e-marker.",
     emarker: "Virtual E-Marker (custom, with EPR)", emarkerS: "Answer the charger as the cable described below; allows a 5 A limit and EPR.",
     emarkerL: ["Presents Ra by driving PA2 low only when Cable VDO1 says 5 A (plug B5/VCONN → 1 kΩ → PA2, hardware revision). On the v0.1 PCB only chargers that query the cable without Ra will ask.",
       "Answers SOP' Discover Identity with the editable VDOs (default: passive USB-C to USB-C cable, 50 V, 5 A, EPR capable).",
@@ -1004,6 +1006,7 @@ const T = {
       "支援二次握手的充電器會重新廣播，用 SPR AVS 取代 PPS。",
       "關閉時回覆 Not_Supported，充電器維持 PPS。",
       "記錄：「AVS 二次握手 · 前端已宣告」。"],
+    beIdle: "常駐回覆線材查詢（無需接設備）", beIdleS: "沒有設備（無 Rd 下拉）、輸出開關未開時，也在 CC 上監聽，並以下方資料回覆 SOP' Discover Identity。需開啟虛擬 E-Marker。",
     emarker: "虛擬 E-Marker（可自訂，含 EPR）", emarkerS: "以下方設定的線材身分回覆充電器；電流上限可設到 5A，並可進入 EPR。",
     emarkerL: ["線材 VDO 宣告 5A 時才拉低 PA2 呈現 Ra（公頭 B5/VCONN 經 1kΩ 接 PA2，需硬體改版）。v0.1 板上只有不偵測 Ra 也會查詢線材的充電器才會來問。",
       "以可編輯的 VDO 回覆 SOP' Discover Identity（預設：無源 USB-C 對 USB-C 線材、50V、5A、支援 EPR）。",
@@ -1775,7 +1778,7 @@ function readForm() {
     feVid: idHex("feVid", "idFe", "feVid", 0x5A1E), fePid: idHex("fePid", "idFe", "fePid", 0x30A6),
     beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5),
     /* 擴充設定（協議 v11 起；舊韌體沒有） */
-    x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws() } };
+    x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0) | ($("beIdle").checked ? 4 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws() } };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -1928,13 +1931,14 @@ $("pdolRows").addEventListener("click", (e) => {
 $("pdolAddF").onclick = () => { state.pdoRows.push(["fix", 9, 3]); pdolHtml(); updateDirty(); renderSim(); };
 $("pdolAddP").onclick = () => { state.pdoRows.push(["pps", 3.3, 11, 3]); pdolHtml(); updateDirty(); renderSim(); };
 $("pdolAvs").addEventListener("change", (e) => { state.pdoAvs = e.target.checked; pdolStatus(); });
+$("beIdle").addEventListener("change", () => updateDirty());
 $("vcable").addEventListener("change", () => { applyLabDeps(); updateDirty(); renderSim(); });
 $("pdol").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updateDirty(); renderSim(); });
 $("forcePps").addEventListener("change", applyLabDeps);
 function writeExt(x) {
   const old = !!state.cfg && !state.cfg.x;
   const v = x || { flags: 0, cable: VC_DEFAULT, fcable: FC_DEFAULT, pdo: PDOL_DEFAULT.map(simRaw) };
-  $("vcable").checked = !!(v.flags & 1); $("pdol").checked = !!(v.flags & 2);
+  $("vcable").checked = !!(v.flags & 1); $("pdol").checked = !!(v.flags & 2); $("beIdle").checked = !!(v.flags & 4);
   state.vc = v.cable.slice(); state.fc = (v.fcable || FC_DEFAULT).slice();
   state.pdoRows = []; state.pdoAvs = false;
   v.pdo.forEach((raw) => {
@@ -1943,7 +1947,7 @@ function writeExt(x) {
     else if (p.type === P_PPS) state.pdoRows.push(["pps", p.min / 1000, p.max / 1000, p.ma / 1000]);
     else if (p.type === P_SAVS) state.pdoAvs = true;
   });
-  $("vcable").disabled = $("pdol").disabled = old;
+  $("vcable").disabled = $("pdol").disabled = $("beIdle").disabled = old;
   vcHtml(); pdolHtml();
 }
 
@@ -2152,7 +2156,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.12.2";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.12.3";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2365,7 +2369,7 @@ function decodeRecords(records) {
       case 9: text = `${t("prot")[d[0]] ?? d[0]} · ${t("vbus")} ${fmtV(u16(d, 1))} · ${t("current")} ${fmtA(u16(d, 3))} · ${t("target")} ${fmtV(u16(d, 5))}`; cls = "bad"; cat = "bad"; break;
       case 10: {
         text = `${t("side")[d[0]] ?? d[0]} · ${t("rst")[d[1]] ?? d[1]}`;
-        if (d.length >= 5) text += ` · ${t("stateAt")} ${(d[0] ? t("beSt") : t("feSt"))[d[2]] ?? d[2]} · ${t("rxErr")} ${u16(d, 3)}`;
+        if (d.length >= 5) text += ` · ${t("stateAt")} ${(d[0] ? t("beSt") : t("feSt"))[d[2]] ?? d[2]} · ${t("rxErr")} ${u16(d, 3)}` + (d.length >= 7 ? ` · defer ${u16(d, 5)}` : "");
         cls = "warn"; cat = "bad"; break; }
       case 14: {
         const code = d[1], x = d.length >= 3 ? d[2] : 0;
@@ -2474,6 +2478,8 @@ function applyLabDeps() {
   $("ppscIn").hidden = !$("ppsc").checked;
   $("avs2ppsIn").hidden = !$("avs2pps").checked;
   $("vcBody").hidden = !$("vcable").checked;
+  $("beIdle").disabled = !$("vcable").checked; if (!$("vcable").checked) $("beIdle").checked = false;
+  $("beIdleRow").style.opacity = $("vcable").checked ? "" : ".5";
   $("fcBody").hidden = !$("emarker").checked;
   if (!$("forcePps").checked) $("pdol").checked = false;
   $("pdolIn").hidden = !$("forcePps").checked;

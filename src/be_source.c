@@ -77,6 +77,7 @@ static uint8_t caps_count;
 static uint8_t hard_reset_count;
 static bool has_contract;
 static bool caps_sent_once;
+static bool idle_on;                    /* 常驻应答正在监听（CFGX_BE_IDLE） */
 static bool selfqa_armed;               /* 虚拟 E-Marker：Source_Capabilities 已发出，等待 Sink 的 SOP' 查询 */
 static bool selfqa_done;                /* 本次连接已有 SOP' 查询（或已自问自答），不再触发 */
 static uint32_t selfqa_ts;
@@ -141,6 +142,7 @@ static void cable_clear(void)
     selfqa_done = false;
     selfqa_cable_id = 0;
     phy->sop1_en = false;
+    idle_on = false;
     be_vconn_set(false);
 }
 
@@ -250,7 +252,7 @@ static bool send_caps(void)
 
 static void log_reset(uint8_t kind)
 {
-    ev_reset_t e = {1, kind, (uint8_t)state, phy->dbg_rx_reset};
+    ev_reset_t e = {1, kind, (uint8_t)state, phy->dbg_rx_reset, phy->dbg_defer};
     evlog_add(EV_RESET, &e, sizeof(e));
 }
 
@@ -663,6 +665,54 @@ static void handle_msg(const pd_rx_msg_t *m)
     }
 }
 
+/*
+ * 虚拟 E-Marker 常驻应答（CFGX_BE_IDLE）：没有设备（CC 上无 Rd 下拉）、MOS 未开时，
+ * 后端仍监听 CC 并以自订 VDO 应答 SOP' Discover Identity。接收通道在 CC1/CC2 间轮流切换，
+ * 收到报文后停留一段时间；连接设备后由正常流程接管。
+ */
+#define T_IDLE_SWAP_MS      10
+#define T_IDLE_HOLD_MS      300
+
+static void idle_listen(void)
+{
+    static uint32_t swap_ts;
+    static uint8_t idle_cc;
+
+    if (!(cable_virtual() && (cfg_ext()->flags & CFGX_BE_IDLE)))
+    {
+        if (idle_on)
+        {
+            idle_on = false;
+            phy->sop1_en = false;
+        }
+        return;
+    }
+    uint32_t now = millis();
+    if (!idle_on)
+    {
+        idle_on = true;
+        cable_last_rx_id = 0xFF;
+        phy->tx_msg_id_sop1 = 0;
+        phy->sop1_en = true;
+        pd_phy_reset_protocol(phy);
+        pd_phy_set_cc(phy, idle_cc);
+        swap_ts = now;
+    }
+    pd_rx_msg_t m;
+    while (pd_phy_rx_pop(phy, &m))
+    {
+        pd_header_t h = pd_parse_header(m.data[0] | (m.data[1] << 8));
+        if (m.sop && !h.power_role)
+            virtual_cable_reply(&m, &h);
+    }
+    if (state == BE_ST_UNATTACHED && now - swap_ts >= T_IDLE_SWAP_MS && now - phy->last_act_ms >= T_IDLE_HOLD_MS)
+    {
+        swap_ts = now;
+        idle_cc ^= 1;
+        pd_phy_set_cc(phy, idle_cc);
+    }
+}
+
 static bool attached_state(void)
 {
     return state != BE_ST_UNATTACHED && state != BE_ST_ATTACH_WAIT;
@@ -775,6 +825,7 @@ void be_process(void)
             poll_ts = now;
             poll_attach();
         }
+        idle_listen();
         return;
     }
 
