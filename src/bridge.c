@@ -82,6 +82,11 @@ static uint16_t min_u16(uint16_t a, uint16_t b)
     return a < b ? a : b;
 }
 
+static uint16_t max_u16(uint16_t a, uint16_t b)
+{
+    return a > b ? a : b;
+}
+
 static bool vbus_over(uint16_t v, uint16_t target)
 {
     return v > (uint32_t)target * (100 + cfg()->ovp_pct) / 100;
@@ -208,29 +213,43 @@ static int8_t find_pps_covering(const pdo_t *fc, uint8_t n, uint16_t mv)
     return best;
 }
 
-/* 完整覆盖 lo~hi 且电流最大的充电器 PPS；没有时，9V 起的范围可由 SPR AVS 提供（请求按 100mV 四舍五入） */
+/* lo~hi 的 PPS：由充电器 PPS 或原生 AVS（9V 起）提供。来源达不到整个范围时不放弃，而是把电压范围缩到来源能给的部分：
+ * 取与 lo~hi 交集最宽的来源（同宽时 PPS 优先，再取电流大者），电流取 min(来源, ma)（请求按 100mV 四舍五入） */
 static bool pps_from_source(const pdo_t *fc, uint8_t n, uint16_t lo, uint16_t hi, uint16_t ma, back_entry_t *out)
 {
     int8_t best = -1;
+    uint16_t blo = 0, bhi = 0, bma = 0;
     for (uint8_t i = 0; i < n && lo < hi; i++)
     {
-        if (fc[i].type == PPS_PDO && fc[i].min_mv <= lo && fc[i].max_mv >= hi &&
-            (best < 0 || fc[i].max_ma > fc[best].max_ma))
-            best = i;
-    }
-    uint16_t src_ma = best >= 0 ? fc[best].max_ma : 0;
-    if (best < 0 && lo >= 9000 && lo < hi)
-    {
-        int8_t a = find_native_avs(fc, n);
-        if (a >= 0 && fc[a].max_mv >= hi)
+        if (fc[i].type != PPS_PDO)
+            continue;
+        uint16_t olo = max_u16(lo, fc[i].min_mv), ohi = min_u16(hi, fc[i].max_mv);
+        if (olo >= ohi || fc[i].max_ma == 0)
+            continue;
+        if (best < 0 || ohi - olo > bhi - blo || (ohi - olo == bhi - blo && fc[i].max_ma > bma))
         {
-            best = a;
-            src_ma = (hi > 15000 && fc[a].max_ma_20v) ? min_u16(fc[a].max_ma, fc[a].max_ma_20v) : fc[a].max_ma;
+            best = i;
+            blo = olo;
+            bhi = ohi;
+            bma = fc[i].max_ma;
         }
     }
-    if (best < 0 || src_ma == 0)
+    int8_t a = find_native_avs(fc, n);
+    if (a >= 0 && lo < hi)
+    {
+        uint16_t olo = max_u16(lo, 9000), ohi = min_u16(hi, fc[a].max_mv);
+        uint16_t ama = (ohi > 15000 && fc[a].max_ma_20v) ? min_u16(fc[a].max_ma, fc[a].max_ma_20v) : fc[a].max_ma;
+        if (olo < ohi && ama > 0 && (best < 0 || ohi - olo > bhi - blo))
+        {
+            best = a;
+            blo = olo;
+            bhi = ohi;
+            bma = ama;
+        }
+    }
+    if (best < 0)
         return false;
-    back_entry_t e = {PPS_PDO, fc[best].type, best + 1, lo, hi, min_u16(src_ma, ma), 0};
+    back_entry_t e = {PPS_PDO, fc[best].type, best + 1, blo, bhi, min_u16(bma, ma), 0};
     *out = e;
     return true;
 }
@@ -288,7 +307,7 @@ static void build_back_caps(void)
     bool want_avs = c->mode == CFG_MODE_AVS || c->mode == CFG_MODE_AVS_PPS;
     bool want_pps = c->mode == CFG_MODE_PPS || c->mode == CFG_MODE_AVS_PPS;
 
-    /* Lab 自订 PDO 档位（强制 PPS 下）：Fixed / AVS / PPS 都取自列表，仍按模式 a~d 过滤；AVS 须同时有 15V 与 20V Fixed（设置里已校验） */
+    /* Lab 自订 PDO 档位（强制 PPS 下）：Fixed / AVS / PPS 都取自列表，仍按模式 a~d 过滤；AVS 须有 15V Fixed，列表里同时有 20V Fixed 才到 20V，否则 AVS 只到 15V（设置里已校验） */
     bool force_pps = (c->flags2 & CFG2_FORCE_PPS) != 0;
     const cfg_ext_t *x = cfg_ext();
     bool list = force_pps && (x->flags & CFGX_PDO);
@@ -475,7 +494,7 @@ static void build_back_caps(void)
         if (pps_from_source(fc, n, lo, hi, min_u16(c->pps_ma50 * 50, c->max_ma), &custom))
         {
             has_custom = true;
-            int8_t k = find_mv(pps, np, hi);
+            int8_t k = find_mv(pps, np, custom.mv);
             if (k >= 0)
             {
                 for (; k + 1 < np; k++)     /* 同一最高电压的透传 PPS 让位 */

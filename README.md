@@ -13,7 +13,7 @@ host tool: change the output mode and limits, and read back per-session logs. v0
 EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
 identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
 Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR). v0.12.0 replaces the 3 A / 5 A output cable setting with a fully editable virtual e-marker (off by default) and adds an optional custom PDO list (up to 7 levels, with AVS) to the Lab force PPS mode.
+unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR). v0.12.0 replaces the 3 A / 5 A output cable setting with a fully editable virtual e-marker (off by default) and adds an optional custom PDO list (up to 7 levels, with AVS) to the Lab force PPS mode. v0.12.1 polishes the host tool (settings that cannot work together are greyed out with the reason or blocked before Apply, number fields snap to their range on leave, scroll position kept per tab, unsaved-change warning; UFCS moved to the front group and EPR AVS to the E-Marker tab). Firmware: custom AVS only needs a 15 V Fixed (20 V AVS needs both), and custom PPS levels are narrowed to what the charger can give instead of being dropped.
 
 ## Pin assignment
 
@@ -177,9 +177,8 @@ are used. It cannot be combined with 12 V conversion.
 
 Adds one PPS APDO with a user-set range of 3.3–21.0 V (100 mV steps) and a current of 0.5–5 A.
 - **Source**
-  - The charger PPS covering the whole range, highest current first.
-  - Otherwise the charger's SPR AVS, if the range starts at 9 V or higher; requests are then rounded to 100 mV.
-  - Not offered when nothing covers the range.
+  - The charger PPS (or SPR AVS, from 9 V; requests are then rounded to 100 mV) that overlaps the range most; on equal width a PPS wins, then the higher current.
+  - If nothing covers the whole range the range is narrowed to what the source can give (3.3–21 V asked, charger PPS 5–20 V: 5–20 V is offered). Not offered only when nothing overlaps (v0.12.1).
 - **Limits**
   - The maximum is capped at the max voltage setting.
   - Current = min(setting, source current, current limit). The device's per-request current limit is passed to the charger.
@@ -220,12 +219,12 @@ charger's Fixed. Works in all modes.
 
 **Custom PDO list (v0.12.0, needs force PPS).** Off by default (the original charger PDOs pass through with the rules above). When on,
 the Settings page edits a list of up to 7 PDOs: Fixed (5–20 V, 0.1 V steps, 0.5–5 A), PPS (min ≥ 3.3 V, max ≤ 21 V, 0.5–5 A) and an AVS
-tick box (one slot). The 5 V Fixed is mandatory; AVS requires one 15 V and one 20 V Fixed in the list, which the host tool checks and the
+tick box (one slot). The 5 V Fixed is mandatory; AVS requires a 15 V Fixed in the list (AVS reaches 20 V only if a 20 V Fixed is listed too, otherwise it stops at 15 V), which the host tool checks and the
 firmware re-checks. Output modes still filter the list: a keeps Fixed + AVS, b Fixed + PPS, c all, d only Fixed. Hide Fixed, 12 V
 conversion and the custom Fixed / PPS options are ignored while the list is on.
 
 - Each level is offered only if the charger can supply it. Fixed: from a charger PPS covering the voltage (highest current first), else the
-  charger's own Fixed, else a native AVS from 9 V. PPS: from a charger PPS covering the whole range (else native AVS from 9 V).
+  charger's own Fixed, else a native AVS from 9 V. PPS: from the charger PPS or native AVS (from 9 V) overlapping the range most; the range is narrowed to what the charger can give (v0.12.1). A Fixed voltage cannot be narrowed, so it is skipped when unreachable.
   The current is min(your value, charger source, current limit, 5 A cable rule); the maximum voltage setting still caps the list.
 - AVS follows the existing rule: source = native AVS or a PPS reaching 15/20 V; 9–15 V current follows the 15 V Fixed, 15–20 V the 20 V Fixed.
 - The device list is sorted Fixed (ascending), AVS, PPS. The Simulator tab shows the result (the port in `simBuild` follows `build_back_caps`).

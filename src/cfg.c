@@ -115,7 +115,7 @@ bool cfg_ext_cable_5a(const cfg_ext_t *x)
     return ((x->cable[3] >> 5) & 3) == 2;
 }
 
-/* 自订 PDO 的合法范围：Fixed 5~20V（50mV 倍数）、PPS 3.3~21V、电流 0.5~5A；5V Fixed 必须有；AVS 至多 1 个，须同时有 15V 与 20V Fixed */
+/* 自订 PDO 的合法范围：Fixed 5~20V（50mV 倍数）、PPS 3.3~21V、电流 0.5~5A；5V Fixed 必须有；AVS 至多 1 个，须有 15V Fixed（AVS 到 20V 另需 20V Fixed，没有则 AVS 只到 15V） */
 bool cfg_ext_valid(const cfg_ext_t *x)
 {
     if ((x->flags & ~CFGX_MASK) || x->pdo_n > CFGX_MAX_PDOS)
@@ -150,7 +150,7 @@ bool cfg_ext_valid(const cfg_ext_t *x)
                 return false;
         }
     }
-    return v5 == 1 && avs <= 1 && (!avs || (v15 == 1 && v20 == 1));
+    return v5 == 1 && avs <= 1 && (!avs || v15 == 1);
 }
 
 bool cfg_valid(const cfg_t *c)

@@ -210,7 +210,12 @@ input[type=file] { max-width: 100%; }
 .labs { display: grid; }
 .lab { padding: 11px 0; border-bottom: 1px solid var(--line); }
 .lab:last-child { border-bottom: 0; }
-.lab.off, .check.off { opacity: .5; }
+.lab.off > :not(.why), .check.off { opacity: .5; }
+.why { color: var(--warn); font-size: 12px; margin: 4px 0 0 44px; }
+.check + .why { margin: -4px 0 8px 44px; }
+input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid var(--bad); }
+#dirtyText.err { cursor: pointer; text-decoration: underline dotted; }
+.chip:has(input:disabled) { opacity: .45; }
 .labhead { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
 .labhead input { margin-top: 2px; }
 .labhead b { font-weight: 600; }
@@ -383,11 +388,12 @@ input[type=file] { max-width: 100%; }
           <div>
             <div class="inline">
               <label class="chip"><input type="checkbox" data-bit="0">9 V</label>
-              <label class="chip"><input type="checkbox" data-bit="1">12 V</label>
+              <label class="chip"><input type="checkbox" data-bit="1" id="hide12">12 V</label>
               <label class="chip"><input type="checkbox" data-bit="2">15 V</label>
               <label class="chip"><input type="checkbox" data-bit="3">20 V</label>
             </div>
             <div class="small muted" style="margin-top:6px" data-i18n="hideD"></div>
+            <div class="why" id="hideWhy" hidden style="margin-left:0"></div>
           </div>
         </div>
       </div>
@@ -450,6 +456,10 @@ input[type=file] { max-width: 100%; }
           <label class="labhead"><input type="checkbox" id="fe2nd"><div><b data-i18n="fe2nd"></b><span data-i18n="fe2ndS"></span></div><span class="labtags"></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fe2ndL"></ul></details>
         </div>
+        <div class="lab" id="lab-ufcs">
+          <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ufcsL"></ul></details>
+        </div>
       </div>
       <h4 class="labgrp" data-i18n="labRear"></h4>
       <div class="labs">
@@ -464,10 +474,6 @@ input[type=file] { max-width: 100%; }
             <label><input type="radio" name="avs2ppsMin" value="1" id="avs2ppsMin5"><span data-i18n="avs2ppsMin5"></span></label>
           </div></div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="avs2ppsL"></ul></details>
-        </div>
-        <div class="lab" id="lab-eprAvs">
-          <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
-          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="eprAvsL"></ul></details>
         </div>
         <div class="lab" id="lab-forcePps">
           <label class="labhead"><input type="checkbox" id="forcePps"><div><b data-i18n="forcePps"></b><span data-i18n="forcePpsS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
@@ -491,10 +497,6 @@ input[type=file] { max-width: 100%; }
           <div class="labin inline" id="fixcIn"><input type="number" id="fixcV" min="5.1" max="20" step="0.1"><span class="muted">V</span>
             <input type="number" id="fixcA" min="0.5" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="fixcRange"></span></div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="fixcL"></ul></details>
-        </div>
-        <div class="lab" id="lab-ufcs">
-          <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span></span></label>
-          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ufcsL"></ul></details>
         </div>
         <div class="lab" id="lab-ppsc">
           <label class="labhead"><input type="checkbox" id="ppsc"><div><b data-i18n="ppsc"></b><span data-i18n="ppscS"></span></div><span class="labtags"><span class="tag " data-i18n="tagAll"></span></span></label>
@@ -554,6 +556,10 @@ input[type=file] { max-width: 100%; }
         <div class="lab" id="lab-emarker">
           <label class="labhead"><input type="checkbox" id="emarker"><div><b data-i18n="emarker"></b><span data-i18n="emarkerS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagHw"></span><span class="tag acc" data-i18n="tag5a"></span></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="emarkerL"></ul></details>
+        </div>
+        <div class="lab" id="lab-eprAvs">
+          <label class="labhead"><input type="checkbox" id="eprAvs"><div><b data-i18n="eprAvs"></b><span data-i18n="eprAvsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span><span class="tag acc" data-i18n="tagNeedEm"></span><span class="tag " data-i18n="tagAC"></span></span></label>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="eprAvsL"></ul></details>
         </div>
       </div>
       <div id="fcBody">
@@ -668,11 +674,11 @@ const T = {
     pdol: "Custom PDO list", pdolS: "Replaces the output levels with your own list (up to 7). A level is only offered when the charger can supply it; the current is the lower of your value and the charger's.",
     pdolAddF: "Add Fixed", pdolAddP: "Add PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 slots`,
     pdolErr5: "Exactly one 5 V Fixed is required.", pdolErrV: "Fixed: 5–20 V in 0.1 V steps (no duplicate voltage), 0.5–5 A in 0.05 A steps.",
-    pdolErrP: "PPS: min ≥ 3.3 V, max ≤ 21 V, min < max, 0.5–5 A in 0.05 A steps.", pdolErrAvs: "AVS needs exactly one 15 V Fixed and one 20 V Fixed in the list.",
+    pdolErrP: "PPS: min ≥ 3.3 V, max ≤ 21 V, min < max, 0.5–5 A in 0.05 A steps.", pdolErrAvs: "AVS needs a 15 V Fixed in the list (a 20 V Fixed too if AVS should reach 20 V).",
     pdolErrDup: "Duplicate PDO.", pdolErrN: "At most 7 PDOs including AVS.",
     pdolL: ["Only used while Force PPS is on. Output modes a–d still filter the list: a keeps Fixed + AVS, b Fixed + PPS, c all three, d only Fixed. Hide Fixed, 12 V conversion and the custom Fixed / PPS options are ignored.",
-      "Fixed: from a charger PPS covering that voltage (highest current first), otherwise the charger's own Fixed, otherwise AVS from 9 V. PPS: from a charger PPS covering the whole range, otherwise AVS (9 V and up). The current limit and the 5 A cable rule still cap the current.",
-      "AVS takes one slot. Its 9–15 V current follows your 15 V Fixed and its 15–20 V current your 20 V Fixed, limited by what the charger offers. The 5 V Fixed is mandatory."],
+      "Fixed: from a charger PPS covering that voltage (highest current first), otherwise the charger's own Fixed, otherwise AVS from 9 V. PPS: from the charger PPS (or AVS, 9 V and up) that overlaps the range most; if none covers it all, the range is narrowed to what the charger can give (e.g. 3.3–21 V asked, charger PPS 5–20 V: 5–20 V is offered). The current limit and the 5 A cable rule still cap the current.",
+      "AVS takes one slot. Its 9–15 V current follows your 15 V Fixed and its 15–20 V current your 20 V Fixed, limited by what the charger offers. A 15 V Fixed is required; with only a 15 V Fixed (no 20 V Fixed) AVS stops at 15 V, and AVS up to 20 V needs both. The 5 V Fixed is mandatory."],
     cableT: "Output cable (e-marker)", cableNone: "No device attached.",
     cableRa: "Reading the cable identity…", cableNoReply: "The cable did not answer: it has no e-marker, or the e-marker is not powered.", cableRaSeen: "Ra seen on the other CC pin, so the cable has an e-marker.",
     cableNoVconn: "This board cannot supply VCONN, so a passive e-marked cable stays silent.",
@@ -796,6 +802,10 @@ const T = {
       "Fixed levels are requested at the PPS maximum current, so the charger's current limiting is not used (OCP still applies), and UVP is still checked.",
       "The converter sends the PPS keep-alive request every 5 s. Works in all modes."],
     ppsc: "Custom PPS", ppscS: "Add one PPS with your own voltage range and current.", ppscRange: "3.3–21.0 V · 0.5–5 A", ppscs: "PPS",
+    whyNeedPps: "Has no effect in mode A or D (no PPS is offered).", whyNeedAvs: "Has no effect in mode B or D (no AVS is offered).",
+    whyList: "Ignored while the custom PDO list is on.", why12Hidden: "Ignored: 12 V is hidden below.", whyEprMv: "Needs max voltage 20 V (EPR AVS covers 15–20 V).",
+    errFixcRange: "Custom Fixed: 5.1–20.0 V in 0.1 V steps, 0.5–5 A.", errFixcMax: "Custom Fixed voltage is above the max voltage, so it would never be offered.",
+    errPpsc: "Custom PPS: 3.3–21 V, the minimum voltage must be lower than the maximum.", errGo: "click to jump to it",
     ppscBad: "Custom PPS: the minimum voltage must be lower than the maximum.",
     ppscL: ["Source: the charger PPS covering the whole range (highest current first). Without one, the charger's SPR AVS when the range starts at 9 V or higher; requests are then rounded to 100 mV.",
       "Not offered when nothing covers the whole range. The maximum voltage is capped at the max voltage setting.",
@@ -880,11 +890,11 @@ const T = {
     pdol: "自訂 PDO 檔位", pdolS: "用你自己的列表（最多 7 組）取代輸出檔位。充電器供得出才會提供該檔；電流取你的設定與充電器之間較小者。",
     pdolAddF: "新增 Fixed", pdolAddP: "新增 PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 組`,
     pdolErr5: "必須有且只有一個 5V Fixed。", pdolErrV: "Fixed：5–20V（0.1V 步進，電壓不可重複），0.5–5A（0.05A 步進）。",
-    pdolErrP: "PPS：最低 ≥ 3.3V，最高 ≤ 21V，最低 < 最高，0.5–5A（0.05A 步進）。", pdolErrAvs: "AVS 需要列表裡有且只有一個 15V Fixed 和一個 20V Fixed。",
+    pdolErrP: "PPS：最低 ≥ 3.3V，最高 ≤ 21V，最低 < 最高，0.5–5A（0.05A 步進）。", pdolErrAvs: "AVS 需要列表裡有 15V Fixed（AVS 要到 20V 還需要 20V Fixed）。",
     pdolErrDup: "PDO 重複。", pdolErrN: "含 AVS 最多 7 組 PDO。",
     pdolL: ["只在「強制 PPS」開啟時生效。輸出模式 a~d 仍會過濾列表：a 保留 Fixed + AVS，b 保留 Fixed + PPS，c 全部保留，d 只保留 Fixed。隱藏 Fixed、12V 轉換與自訂 Fixed / PPS 選項都被忽略。",
-      "Fixed：優先由覆蓋該電壓的充電器 PPS 提供（電流大者優先），其次是充電器自己的 Fixed，最後是 9V 起的 AVS。PPS：由完整覆蓋該範圍的充電器 PPS 提供，沒有時用 AVS（9V 起）。電流上限與 5A 線材規則仍會限制電流。",
-      "AVS 占一個名額。它的 9~15V 電流跟隨你設定的 15V Fixed，15~20V 電流跟隨 20V Fixed，並受充電器實際能力限制。5V Fixed 是必須的。"],
+      "Fixed：優先由覆蓋該電壓的充電器 PPS 提供（電流大者優先），其次是充電器自己的 Fixed，最後是 9V 起的 AVS。PPS：由與該範圍重疊最多的充電器 PPS（或 AVS，9V 起）提供；沒有任何來源能完整覆蓋時，電壓範圍縮到充電器能給的部分（例如設 3.3–21V、充電器 PPS 5–20V，則提供 5–20V）。電流上限與 5A 線材規則仍會限制電流。",
+      "AVS 占一個名額。它的 9~15V 電流跟隨你設定的 15V Fixed，15~20V 電流跟隨 20V Fixed，並受充電器實際能力限制。AVS 必須有 15V Fixed；只有 15V Fixed、沒有 20V Fixed 時 AVS 只到 15V，要到 20V 則兩者都要有。5V Fixed 是必須的。"],
     cableT: "輸出線材（E-Marker）", cableNone: "沒有設備插入。",
     cableRa: "讀取線材身份中…", cableNoReply: "線材沒有回應：沒有 E-Marker，或 E-Marker 沒有供電。", cableRaSeen: "另一根 CC 腳出現 Ra，說明線材帶 E-Marker。",
     cableNoVconn: "本板不能供 VCONN，無源 E-Marker 線材不會回應。",
@@ -1008,6 +1018,10 @@ const T = {
       "Fixed 擋位以 PPS 最大電流請求，不使用充電器的限流功能（過流保護照常），欠壓保護照常檢查。",
       "轉換器每 5 秒發送 PPS 保活請求。所有透傳方式都適用。"],
     ppsc: "自訂 PPS", ppscS: "增加一個自訂電壓範圍與電流的 PPS 擋位。", ppscRange: "3.3–21.0V · 0.5–5A", ppscs: "PPS",
+    whyNeedPps: "模式 A、D 不提供 PPS，此項無作用。", whyNeedAvs: "模式 B、D 不提供 AVS，此項無作用。",
+    whyList: "自訂 PDO 檔位開啟時忽略此項。", why12Hidden: "已忽略：下方隱藏了 12V。", whyEprMv: "需要最高電壓 20V（EPR AVS 涵蓋 15–20V）。",
+    errFixcRange: "自訂 Fixed：5.1–20.0V（0.1V 步進）、0.5–5A。", errFixcMax: "自訂 Fixed 電壓高於最高電壓設定，永遠不會提供。",
+    errPpsc: "自訂 PPS：3.3–21V，最低電壓必須低於最高電壓。", errGo: "點擊跳到該欄位",
     ppscBad: "自訂 PPS：最低電壓必須低於最高電壓。",
     ppscL: ["來源：完整覆蓋該電壓範圍的充電器 PPS（電流大者優先）；沒有時，範圍從 9V 以上開始才用充電器的 SPR AVS，請求電壓按 100mV 四捨五入。",
       "沒有來源能完整覆蓋時不提供。最高電壓不超過「最高電壓」設定。",
@@ -1194,7 +1208,9 @@ function renderConn() {
   applyCurLimits(); applyComp(); applyInfo();
   if (dev) updateDirty();
 }
+const tabScroll = {};
 function setTab(name) {
+  if (state.tab) tabScroll[state.tab] = window.scrollY;
   state.tab = name;
   document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
   ["status", "settings", "em", "log", "fw", "sim"].forEach((v) => ($("view-" + v).hidden = v !== name));
@@ -1202,6 +1218,7 @@ function setTab(name) {
   if (name === "sim") renderSim();
   if (name === "fw") renderFw();
   try { localStorage.setItem("tab", name); } catch (e) {}
+  window.scrollTo(0, tabScroll[name] || 0);
 }
 
 /* ================= status ================= */
@@ -1448,15 +1465,22 @@ function simBuild(c, raws, o = {}) {
   let wantAvs = c.mode === 0 || c.mode === 2;
   const wantPps = c.mode === 1 || c.mode === 2;
   let held = false;
+  /* 來源達不到整個範圍時，把電壓範圍縮到來源能給的部分：取交集最寬者（同寬 PPS 優先，再取電流大者） */
   const ppsFrom = (lo, hi, ma) => {
-    let best = -1;
-    if (lo < hi) fc.forEach((p, i) => { if (p.type === P_PPS && p.min <= lo && p.max >= hi && (best < 0 || p.ma > fc[best].ma)) best = i; });
-    let srcMa = best >= 0 ? fc[best].ma : 0;
-    if (best < 0 && lo >= 9000 && lo < hi) {
-      const a = nativeAvs();
-      if (a >= 0 && fc[a].max >= hi) { best = a; srcMa = hi > 15000 && fc[a].ma20 ? min(fc[a].ma, fc[a].ma20) : fc[a].ma; }
+    let best = -1, blo = 0, bhi = 0, bma = 0;
+    if (lo < hi) fc.forEach((p, i) => {
+      if (p.type !== P_PPS || !p.ma) return;
+      const olo = Math.max(lo, p.min), ohi = Math.min(hi, p.max);
+      if (olo >= ohi) return;
+      if (best < 0 || ohi - olo > bhi - blo || (ohi - olo === bhi - blo && p.ma > bma)) { best = i; blo = olo; bhi = ohi; bma = p.ma; }
+    });
+    const a = lo < hi ? nativeAvs() : -1;
+    if (a >= 0) {
+      const olo = Math.max(lo, 9000), ohi = Math.min(hi, fc[a].max);
+      const ama = ohi > 15000 && fc[a].ma20 ? min(fc[a].ma, fc[a].ma20) : fc[a].ma;
+      if (olo < ohi && ama > 0 && (best < 0 || ohi - olo > bhi - blo)) { best = a; blo = olo; bhi = ohi; bma = ama; }
     }
-    return best >= 0 && srcMa > 0 ? E(P_PPS, fc[best].type, best + 1, lo, hi, min(srcMa, ma)) : null;
+    return best >= 0 ? E(P_PPS, fc[best].type, best + 1, blo, bhi, min(bma, ma)) : null;
   };
   /* Lab 自訂 PDO 列表（強制 PPS 下）：Fixed 優先取覆蓋該電壓的 PPS，其次充電器 Fixed，最後 9V 起的原生 AVS */
   const force = !!(flags2 & 4);
@@ -1545,7 +1569,7 @@ function simBuild(c, raws, o = {}) {
   if (flags2 & 8 && c.ppsLo != null && !list) {
     const lo = c.ppsLo * 100, hi = min(c.ppsHi * 100, c.maxMv);
     custom = ppsFrom(lo, hi, min(c.ppsMa50 * 50, c.maxMa));
-    if (custom) { const k = findMv(pps, hi); if (k >= 0) pps.splice(k, 1); }
+    if (custom) { const k = findMv(pps, custom.mv); if (k >= 0) pps.splice(k, 1); }
   }
   const room = MAXN - fixed.length - (avs ? 1 : 0) - (custom ? 1 : 0);
   if (pps.length > room) pps = pps.slice(pps.length - room);
@@ -1599,7 +1623,12 @@ function simRowsHtml() {
       `<div class="inline simf">${inputs}</div><button class="btn" data-del="${i}" aria-label="${esc(t("simDel"))}">×</button></div>`;
   }).join("");
 }
+let simQ = 0;
 function renderSim() {
+  if (state.tab !== "sim" || simQ) return;
+  simQ = requestAnimationFrame(() => { simQ = 0; renderSimNow(); });
+}
+function renderSimNow() {
   if (state.tab !== "sim") return;
   if (!$("simRows").childElementCount && simRows.length) simRowsHtml();
   const c = readForm();
@@ -1834,7 +1863,7 @@ function pdolErr() {
     }
   }
   if (n5 !== 1) return "pdolErr5";
-  if (state.pdoAvs && (n15 !== 1 || n20 !== 1)) return "pdolErrAvs";
+  if (state.pdoAvs && n15 !== 1) return "pdolErrAvs";
   return "";
 }
 const pdolRaws = () => [...state.pdoRows.map(simRaw), ...(state.pdoAvs ? [savsRaw(0, 0)] : [])].slice(0, 7);
@@ -1889,14 +1918,39 @@ function writeExt(x) {
   vcHtml(); pdolHtml();
 }
 
+/* 套用前檢查：回傳 { k: 訊息鍵, id: 要跳過去的欄位 } 或 null */
+function formErr() {
+  const list = $("forcePps").checked && $("pdol").checked, num = (id) => Number($(id).value);
+  const tenth = (x, d) => Math.abs(x * d - Math.round(x * d)) < 1e-6;
+  if ($("fixc").checked && !list) {
+    const v = num("fixcV"), a = num("fixcA");
+    if (!(v >= 5.1 && v <= 20 && tenth(v, 10) && a >= 0.5 && a <= 5 && tenth(a, 20))) return { k: "errFixcRange", id: "fixcV" };
+    if (v * 1000 > Number((document.querySelector("input[name=maxMv]:checked") || { value: 20000 }).value)) return { k: "errFixcMax", id: "fixcV" };
+  }
+  if ($("ppsc").checked && !list && !(num("ppscLo") < num("ppscHi"))) return { k: "errPpsc", id: "ppscLo" };
+  if (($("idFe").checked && !/^[0-9a-f]{1,4}$/i.test($("feVid").value)) || ($("idFe").checked && parseInt($("feVid").value, 16) === 0)) return { k: "idBad", id: "feVid" };
+  if (($("idBe").checked && !/^[0-9a-f]{1,4}$/i.test($("beVid").value)) || ($("idBe").checked && parseInt($("beVid").value, 16) === 0)) return { k: "idBad", id: "beVid" };
+  if (list) { const e = pdolErr(); if (e) return { k: e, id: "pdol" }; }
+  return null;
+}
 const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
 const isDirty = () => !!state.cfg && stable(readForm()) !== stable(state.cfg);
 function updateDirty() {
-  const d = isDirty();
-  $("dirtyText").textContent = state.cfg ? (d ? t("dirty") : t("clean")) : dev ? "" : t("offlineEdit");
-  $("dirtyText").style.color = d ? "var(--warn)" : "";
-  $("btnApply").disabled = !dev || !d; $("btnRevert").disabled = !dev || !d;
+  const d = isDirty(), err = formErr(), el = $("dirtyText");
+  el.classList.toggle("err", !!err);
+  if (err) { el.textContent = t(err.k) + " · " + t("errGo"); el.style.color = "var(--bad)"; el.dataset.go = err.id; }
+  else {
+    el.textContent = state.cfg ? (d ? t("dirty") : t("clean")) : dev ? "" : t("offlineEdit");
+    el.style.color = d ? "var(--warn)" : ""; delete el.dataset.go;
+  }
+  $("btnApply").disabled = !dev || !d || !!err; $("btnRevert").disabled = !dev || !d;
 }
+$("dirtyText").addEventListener("click", () => {
+  const id = $("dirtyText").dataset.go; if (!id) return;
+  const view = ["fixcV", "ppscLo", "feVid", "beVid", "pdol"].includes(id) ? "settings" : state.tab;
+  if (state.tab !== view) setTab(view);
+  const el = $(id); el.scrollIntoView({ block: "center", behavior: "smooth" }); if (el.focus) el.focus();
+});
 function renderCfgState() {
   const el = $("cfgState");
   if (!dev || !state.cfg) { el.textContent = ""; el.className = "tag"; return; }
@@ -1919,9 +1973,8 @@ async function loadCfg(force) {
 }
 async function applyCfg(defaults) {
   const f = readForm();
-  if (!defaults && $("ppsc").checked && !(f.ppsLo < f.ppsHi)) { msg(t("ppscBad")); return; }
-  if (!defaults && (($("idFe").checked && !f.feVid) || ($("idBe").checked && !f.beVid))) { msg(t("idBad")); return; }
-  if (!defaults && $("pdol").checked && pdolErr()) { msg(t(pdolErr())); return; }
+  const fe = defaults ? null : formErr();
+  if (fe) { msg(t(fe.k)); return; }
   try {
     if (defaults) await request(0x12);
     else {
@@ -2348,11 +2401,55 @@ function applyLabDeps() {
   $("avs2ppsIn").hidden = !$("avs2pps").checked;
   $("vcBody").hidden = !$("vcable").checked;
   $("fcBody").hidden = !$("emarker").checked;
+  if (!$("forcePps").checked) $("pdol").checked = false;
   $("pdolIn").hidden = !$("forcePps").checked;
   $("pdolEd").hidden = !$("pdol").checked;
   const oldMin = !!state.cfg && state.cfg.feVid == null;   /* 協議 v8 起才有 */
   ["avs2ppsMin9", "avs2ppsMin5"].forEach((id) => ($(id).disabled = oldMin));
+  applyWhy();
 }
+/* 互斥 / 無效組合：硬衝突（韌體會拒絕）直接取消勾選；軟衝突（目前不生效）灰掉並寫出原因，保留設定值 */
+function modeNow() { return Number((document.querySelector("input[name=mode]:checked") || { value: 0 }).value); }
+function setWhy(node, key) {
+  const check = node.classList.contains("check");
+  let w = check ? (node.nextElementSibling?.classList.contains("why") ? node.nextElementSibling : null) : node.querySelector(":scope > .why");
+  if (key && !w) {
+    w = document.createElement("div"); w.className = "why";
+    if (check) node.after(w); else node.insertBefore(w, node.querySelector(":scope > details"));
+  }
+  node.classList.toggle("off", !!key || node.dataset.keepOff === "1");
+  if (w) { w.hidden = !key; w.textContent = key ? t(key) : ""; w.dataset.key = key || ""; }
+}
+function applyWhy() {
+  const m = modeNow(), avs = m === 0 || m === 2, pps = m === 1 || m === 2;
+  const list = $("forcePps").checked && $("pdol").checked;
+  setWhy($("lab-avs2pps"), list ? "whyList" : !pps ? "whyNeedPps" : "");
+  setWhy($("lab-be2nd"), !avs ? "whyNeedAvs" : "");
+  setWhy($("lab-eprAvs"), !$("emarker").checked ? "" : !avs ? "whyNeedAvs" : Number((document.querySelector("input[name=maxMv]:checked") || { value: 20000 }).value) < 20000 ? "whyEprMv" : "");
+  if (!$("emarker").checked) $("lab-eprAvs").classList.add("off");
+  setWhy($("lab-fixc"), list ? "whyList" : "");
+  setWhy($("lab-ppsc"), list ? "whyList" : "");
+  setWhy($("fix12").closest("label"), list ? "whyList" : $("hide12") && $("hide12").checked ? "why12Hidden" : "");
+  document.querySelectorAll(".chip input").forEach((c) => (c.disabled = list));
+  const hw = $("hideWhy"); hw.hidden = !list; hw.textContent = list ? t("whyList") : "";
+}
+/* 數字欄位：離開欄位時夾到範圍並對齊步進；輸入中超出範圍先標紅 */
+const NUMF = ["maxMa", "ocpMa", "ocpMs", "ovp", "uvp", "fixcV", "fixcA", "ppscLo", "ppscHi", "ppscA", "compVal"];
+function normNum(el) {
+  const min = Number(el.min), max = Number(el.max), step = Number(el.step) || 1;
+  let v = Number(el.value);
+  if (el.value === "" || !isFinite(v)) v = min;
+  v = Math.min(max, Math.max(min, Math.round(v / step) * step));
+  const dec = (String(step).split(".")[1] || "").length;
+  el.value = v.toFixed(dec); el.classList.remove("bad");
+}
+NUMF.forEach((id) => {
+  const el = $(id);
+  el.addEventListener("input", () => { const v = Number(el.value); el.classList.toggle("bad", el.value !== "" && (v < Number(el.min) || v > Number(el.max))); });
+  el.addEventListener("change", () => { normNum(el); updateDirty(); renderSim(); });
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+});
+$("view-settings").addEventListener("change", (e) => { if (e.target.matches("input[type=radio],input[type=checkbox]")) applyLabDeps(); });
 /* 資訊透傳：身份透傳依附於資訊透傳；舊韌體沒有這個功能 */
 function applyInfo() {
   const old = !!state.cfg && state.cfg.flags2 == null;
@@ -2371,7 +2468,7 @@ function applyInfo() {
   const oldUfcs = !!state.info && state.info.proto < 7;
   $("ufcs").disabled = oldUfcs; $("lab-ufcs").classList.toggle("off", oldUfcs);
   const oldPps = !!state.cfg && state.cfg.ppsLo == null;
-  ["ppsc", "ppscLo", "ppscHi", "ppscA"].forEach((id) => ($(id).disabled = oldPps)); $("lab-ppsc").classList.toggle("off", oldPps);
+  ["ppsc", "ppscLo", "ppscHi", "ppscA"].forEach((id) => ($(id).disabled = oldPps)); $("lab-ppsc").dataset.keepOff = oldPps ? "1" : ""; $("lab-ppsc").classList.toggle("off", oldPps);
 }
 $("infoPt").addEventListener("change", applyInfo);
 /* 身份透傳與自訂 ID 互斥：勾其中一邊就取消另一邊 */
@@ -2400,6 +2497,7 @@ $("avs2pps").addEventListener("change", () => { applyLabDeps(); updateDirty(); }
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
 $("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });
+window.addEventListener("beforeunload", (e) => { if (dev && isDirty()) { e.preventDefault(); e.returnValue = ""; } });
 $("btnApply").onclick = () => applyCfg(false);
 $("btnRevert").onclick = () => state.cfg && writeForm(state.cfg);
 $("btnDefaults").onclick = () => { if (confirm(t("defaultsConfirm"))) applyCfg(true); };
