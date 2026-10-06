@@ -1,5 +1,5 @@
 /*
- * 透传记录：每次上电为一段（session），事件按时间顺序写入 Flash 环形区（128 页 × 128 字节）
+ * 透传记录：每次上电为一段（session），事件按时间顺序写入 Flash 环形区（126 页 × 128 字节）
  *
  * 页格式：magic u16 | session u16 | seq u32 | data[116] | crc32（前 124 字节）
  * 记录格式：type u8 | len u8 | t_ms u32（上电后毫秒）| payload[len]；type 0 表示页内结束
@@ -176,7 +176,7 @@ void evlog_clear(void);                             /* 清除全部记录（分�
 bool evlog_clearing(void);
 
 uint8_t evlog_sessions(evlog_session_t *out, uint8_t max);     /* 最新在前 */
-const uint8_t *evlog_page(uint8_t idx);             /* 128 字节整页；无效索引返回 NULL */
+const uint8_t *evlog_page(uint8_t idx);             /* 128 字节整页；无效索引返回 NULL（索引 0~125） */
 
 /* UFCS 探测：原始报文（dir 0 = 收，1 = 发；raw 为线上字节，不含训练字节；后面跟 raw[len]） */
 typedef struct __attribute__((packed))

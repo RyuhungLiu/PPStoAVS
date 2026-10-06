@@ -16,16 +16,17 @@
  *                      part 4：后端线材 E-Marker（协议 v10 起，每次连接都读，不看 Ra）：status u8（be_cable_status_t）, flags u8, n u8, vdo u32[n]
  * 0x10 CFG_GET      → cfg_t（32 字节，协议 v8 起；v6 为 24 字节，v5 为 20 字节）, save_pending u8
  * 0x13 CFGX_GET     → cfg_ext_t（52 字节，协议 v11 起：虚拟 E-Marker、自订 PDO）, save_pending u8；0x14 CFGX_SET 写入同一结构
+ * 0x17 CFGP_GET     → 第二组自订 PDO（协议 v12 起，32 字节：n u8, 保留 3 字节, pdo u32[7]）, save_pending u8；0x18 CFGP_SET 写入同一结构
  * 0x11 CFG_SET cfg  → 校验失败返回 BAD_ARG；成功立即生效并排队保存
  * 0x12 CFG_DEFAULT  → 恢复默认设置
  * 0x20 LOG_SESSIONS → current u16, ram_mask u8（bit0 当前页，bit1/2 待写页），n u8, {session u16, first_idx u8, pages u8}[n]
- * 0x21 LOG_READ idx off → idx u8, off u8, len u8, data[len ≤ 56]（idx 0~127 Flash 页，0xFF/0xFE/0xFD RAM 页）
+ * 0x21 LOG_READ idx off → idx u8, off u8, len u8, data[len ≤ 56]（idx 0~125 Flash 页，0xFF/0xFE/0xFD RAM 页）
  * 0x22 LOG_CLEAR    → 清除全部记录
  * 0x30 SYS_INFO    → 在线升级信息（协议 v9 起，格式见 iap.h）
  * 0x31 ENTER_BL "BL" → 复位进入 Bootloader（后端输出会中断）；之后用 iap.h 里的 0x40 系列命令刷写
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  11
+#define HOST_PROTO_VERSION  12
 
 void host_process(void);

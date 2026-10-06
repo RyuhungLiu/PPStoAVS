@@ -497,6 +497,19 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
               </div>
               <div class="small" id="pdolMsg"></div>
             </div>
+            <div id="pdol2Wrap" hidden style="margin-top:14px">
+              <label class="check"><input type="checkbox" id="pdol2"><div><b data-i18n="pdol2"></b><span data-i18n="pdol2S"></span></div></label>
+              <div id="pdol2Ed" hidden style="margin-top:8px">
+                <div id="pdol2Rows"></div>
+                <div class="inline" style="margin-top:10px">
+                  <button class="btn keep" id="pdol2AddF" data-i18n="pdolAddF"></button>
+                  <button class="btn keep" id="pdol2AddP" data-i18n="pdolAddP"></button>
+                  <label class="inline" style="gap:6px"><input type="checkbox" id="pdol2Avs"><span data-i18n="pdolAvs"></span></label>
+                  <span class="small muted" id="pdol2Count"></span>
+                </div>
+                <div class="small" id="pdol2Msg"></div>
+              </div>
+            </div>
           </div>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="forcePpsL"></ul></details>
         </div>
@@ -691,6 +704,8 @@ const T = {
     vcLat: "Latency", vcLats: ["Reserved", "< 10 ns (~1 m)", "10–20 ns (~2 m)", "20–30 ns (~3 m)", "30–40 ns (~4 m)", "40–50 ns (~5 m)", "50–60 ns (~6 m)", "60–70 ns (~7 m)", "> 70 ns", "~1000 ns", "~2000 ns", "~3000 ns", "Reserved", "Reserved", "Reserved", "Reserved"],
     vcEpr: "EPR capable", vcThru: "VBUS through cable", vcTag: "Virtual",
     pdol: "Custom PDO list", pdolS: "Replaces the output levels with your own list (up to 7). A level is only offered when the charger can supply it; the current is the lower of your value and the charger's.",
+    pdol2: "Second PDO list (after AVS is declared)", pdol2S: "A separate list the rear port offers after the device declares AVS in its Sink_Capabilities_Extended (Sink Modes bit 5). Until then the list above is offered. Not available together with AVS second handshake (rear).",
+    whyBe2nd: "Off while AVS second handshake (rear) is on.", whyPdo2: "Not available while the second PDO list is on.", whyP2Old: "Needs firmware v0.13.0 or newer.",
     pdolAddF: "Add Fixed", pdolAddP: "Add PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 slots`,
     pdolErr5: "Exactly one 5 V Fixed is required.", pdolErrV: "Fixed: 5–20 V in 0.1 V steps (no duplicate voltage), 0.5–5 A in 0.05 A steps.",
     pdolErrP: "PPS: min ≥ 3.3 V, max ≤ 21 V, min < max, 0.5–5 A in 0.05 A steps.", pdolErrAvs: "AVS needs a 15 V Fixed in the list (a 20 V Fixed too if AVS should reach 20 V).",
@@ -917,6 +932,8 @@ const T = {
     vcLat: "延遲", vcLats: ["保留", "< 10 ns（約 1 m）", "10–20 ns（約 2 m）", "20–30 ns（約 3 m）", "30–40 ns（約 4 m）", "40–50 ns（約 5 m）", "50–60 ns（約 6 m）", "60–70 ns（約 7 m）", "> 70 ns", "約 1000 ns", "約 2000 ns", "約 3000 ns", "保留", "保留", "保留", "保留"],
     vcEpr: "支援 EPR", vcThru: "VBUS 穿過線材", vcTag: "虛擬",
     pdol: "自訂 PDO 檔位", pdolS: "用你自己的列表（最多 7 組）取代輸出檔位。充電器供得出才會提供該檔；電流取你的設定與充電器之間較小者。",
+    pdol2: "二次播發 PDO（宣告 AVS 後）", pdol2S: "設備在 Sink_Capabilities_Extended 宣告支援 AVS（Sink Modes bit5）之後，後端改播發另一組可編輯的 PDO；宣告之前播發上方這一組。不能與「AVS 二次握手（後端）」同時開啟。",
+    whyBe2nd: "二次播發 PDO 開啟時不可用。", whyPdo2: "「AVS 二次握手（後端）」開啟時不可用。", whyP2Old: "需要韌體 v0.13.0 以上。",
     pdolAddF: "新增 Fixed", pdolAddP: "新增 PPS", pdolAvs: "AVS", pdolCount: (n) => `${n} / 7 組`,
     pdolErr5: "必須有且只有一個 5V Fixed。", pdolErrV: "Fixed：5–20V（0.1V 步進，電壓不可重複），0.5–5A（0.05A 步進）。",
     pdolErrP: "PPS：最低 ≥ 3.3V，最高 ≤ 21V，最低 < 最高，0.5–5A（0.05A 步進）。", pdolErrAvs: "AVS 需要列表裡有 15V Fixed（AVS 要到 20V 還需要 20V Fixed）。",
@@ -1734,6 +1751,12 @@ function extToBytes(x) {
   x.pdo.forEach((v, i) => dv.setUint32(24 + i * 4, v >>> 0, true));
   return Array.from(b);
 }
+function pdo2ToBytes(v) {
+  const b = new Uint8Array(32), dv = new DataView(b.buffer);
+  b[0] = v.length;
+  v.forEach((x, i) => dv.setUint32(4 + i * 4, x >>> 0, true));
+  return Array.from(b);
+}
 function fcToBytes(v) {
   const b = new Uint8Array(20), dv = new DataView(b.buffer);
   v.forEach((x, i) => dv.setUint32(i * 4, x >>> 0, true));
@@ -1778,7 +1801,8 @@ function readForm() {
     feVid: idHex("feVid", "idFe", "feVid", 0x5A1E), fePid: idHex("fePid", "idFe", "fePid", 0x30A6),
     beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5),
     /* 擴充設定（協議 v11 起；舊韌體沒有） */
-    x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0) | ($("beIdle").checked ? 4 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws() } };
+    x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0) | ($("beIdle").checked ? 4 : 0) | ($("pdol2").checked ? 8 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws(),
+      pdo2: $("pdol2").checked || !pdolErr(PE[1]) ? pdolRaws(PE[1]) : (state.cfg && state.cfg.x && state.cfg.x.pdo2 ? state.cfg.x.pdo2.slice() : PDOL_DEFAULT.map(simRaw)) } };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -1806,7 +1830,7 @@ function writeForm(c) {
 const FC_DEFAULT = [((3 << 27) | 0x1209) >>> 0, 0, (0x0001 << 16) >>> 0, ((2 << 18) | (1 << 17) | (1 << 13) | (3 << 9) | (2 << 5)) >>> 0, 0];
 const VC_DEFAULT = [((3 << 27) | 0x1209) >>> 0, 0, (0x0001 << 16) >>> 0, ((2 << 18) | (1 << 13) | (1 << 5)) >>> 0, 0];
 const PDOL_DEFAULT = [["fix", 5, 3], ["fix", 9, 3], ["fix", 12, 3], ["fix", 15, 3], ["fix", 20, 3], ["pps", 3.3, 21, 3]];
-state.vc = VC_DEFAULT.slice(); state.fc = FC_DEFAULT.slice(); state.pdoRows = PDOL_DEFAULT.map((r) => r.slice()); state.pdoAvs = false;
+state.vc = VC_DEFAULT.slice(); state.fc = FC_DEFAULT.slice(); state.pdoRows = PDOL_DEFAULT.map((r) => r.slice()); state.pdoAvs = false; state.pdoRows2 = PDOL_DEFAULT.map((r) => r.slice()); state.pdoAvs2 = false;
 const bitsGet = (v, sh, n) => (n === 32 ? v >>> 0 : ((v >>> sh) & ((1 << n) - 1)) >>> 0);
 const bitsSet = (v, sh, n, x) => { if (n === 32) return x >>> 0; const m = ((1 << n) - 1) << sh; return ((v & ~m) | ((x << sh) & m)) >>> 0; };
 const hexN = (v, n) => (v >>> 0).toString(16).toUpperCase().padStart(n, "0");
@@ -1875,10 +1899,11 @@ $("vcPre5").onclick = () => { state.vc = VC_DEFAULT.slice(); state.vc[3] = bitsS
 $("fcPre5").onclick = () => { state.fc = FC_DEFAULT.slice(); vcHtml(); updateDirty(); };
 $("fcPre3").onclick = () => { state.fc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); };
 
-function pdolErr() {
-  const r = state.pdoRows, tenth = (x) => Math.abs(x * 10 - Math.round(x * 10)) < 1e-6;
+const PE = [{ rows: "pdoRows", avs: "pdoAvs", p: "pdol" }, { rows: "pdoRows2", avs: "pdoAvs2", p: "pdol2" }];
+function pdolErr(g = PE[0]) {
+  const r = state[g.rows], tenth = (x) => Math.abs(x * 10 - Math.round(x * 10)) < 1e-6;
   const maOk = (x) => Math.abs(x * 20 - Math.round(x * 20)) < 1e-6 && x >= 0.5 && x <= 5;
-  if (r.length + (state.pdoAvs ? 1 : 0) > 7) return "pdolErrN";
+  if (r.length + (state[g.avs] ? 1 : 0) > 7) return "pdolErrN";
   let n5 = 0, n15 = 0, n20 = 0;
   const seen = new Set();
   for (const row of r) {
@@ -1895,50 +1920,56 @@ function pdolErr() {
     }
   }
   if (n5 !== 1) return "pdolErr5";
-  if (state.pdoAvs && n15 !== 1) return "pdolErrAvs";
+  if (state[g.avs] && n15 !== 1) return "pdolErrAvs";
   return "";
 }
-const pdolRaws = () => [...state.pdoRows.map(simRaw), ...(state.pdoAvs ? [savsRaw(0, 0)] : [])].slice(0, 7);
-function pdolStatus() {
-  const e = pdolErr();
-  $("pdolCount").textContent = t("pdolCount")(state.pdoRows.length + (state.pdoAvs ? 1 : 0));
-  $("pdolMsg").textContent = e ? t(e) : "";
-  $("pdolMsg").style.color = e ? "var(--bad)" : "";
-  $("pdolAddF").disabled = $("pdolAddP").disabled = state.pdoRows.length + (state.pdoAvs ? 1 : 0) >= 7;
+const pdolRaws = (g = PE[0]) => [...state[g.rows].map(simRaw), ...(state[g.avs] ? [savsRaw(0, 0)] : [])].slice(0, 7);
+function pdolStatus(g) {
+  if (!g) { PE.forEach(pdolStatus); return; }
+  const e = pdolErr(g), n = state[g.rows].length + (state[g.avs] ? 1 : 0);
+  $(g.p + "Count").textContent = t("pdolCount")(n);
+  $(g.p + "Msg").textContent = e ? t(e) : "";
+  $(g.p + "Msg").style.color = e ? "var(--bad)" : "";
+  $(g.p + "AddF").disabled = $(g.p + "AddP").disabled = n >= 7;
 }
-function pdolHtml() {
+function pdolHtml(g) {
+  if (!g) { PE.forEach(pdolHtml); return; }
   const lbl = (k) => (k.length <= 1 ? k : t(k)), F = { fix: ["V", "A"], pps: ["simVmin", "simVmax", "A"] };
-  $("pdolRows").innerHTML = state.pdoRows.map((r, i) => {
+  $(g.p + "Rows").innerHTML = state[g.rows].map((r, i) => {
     const inputs = F[r[0]].map((k, j) => `<label class="inline" style="gap:4px"><input type="number" step="0.05" min="0" data-i="${i}" data-j="${j + 1}" value="${r[j + 1] ?? ""}"><span class="muted">${esc(lbl(k))}</span></label>`).join("");
     return `<div class="simrow"><div class="muted">#${i + 1}</div><select data-i="${i}">${["fix", "pps"].map((k) => `<option value="${k}"${k === r[0] ? " selected" : ""}>${t("simT_" + k)}</option>`).join("")}</select>` +
       `<div class="inline simf">${inputs}</div><button class="btn keep" data-del="${i}" aria-label="${esc(t("simDel"))}">×</button></div>`;
   }).join("");
-  $("pdolAvs").checked = state.pdoAvs;
-  pdolStatus();
+  $(g.p + "Avs").checked = state[g.avs];
+  pdolStatus(g);
 }
-$("pdolRows").addEventListener("input", (e) => {
-  const el = e.target;
-  if (el.dataset.j) { state.pdoRows[+el.dataset.i][+el.dataset.j] = Number(el.value); pdolStatus(); }
+PE.forEach((g) => {
+  $(g.p + "Rows").addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.dataset.j) { state[g.rows][+el.dataset.i][+el.dataset.j] = Number(el.value); pdolStatus(g); }
+  });
+  $(g.p + "Rows").addEventListener("change", (e) => {
+    const el = e.target;
+    if (el.tagName === "SELECT") { state[g.rows][+el.dataset.i] = [el.value, ...(el.value === "fix" ? [9, 3] : [3.3, 11, 3])]; pdolHtml(g); }
+  });
+  $(g.p + "Rows").addEventListener("click", (e) => {
+    const i = e.target.dataset.del;
+    if (i != null) { state[g.rows].splice(+i, 1); pdolHtml(g); updateDirty(); renderSim(); }
+  });
+  $(g.p + "AddF").onclick = () => { state[g.rows].push(["fix", 9, 3]); pdolHtml(g); updateDirty(); renderSim(); };
+  $(g.p + "AddP").onclick = () => { state[g.rows].push(["pps", 3.3, 11, 3]); pdolHtml(g); updateDirty(); renderSim(); };
+  $(g.p + "Avs").addEventListener("change", (e) => { state[g.avs] = e.target.checked; pdolStatus(g); });
 });
-$("pdolRows").addEventListener("change", (e) => {
-  const el = e.target;
-  if (el.tagName === "SELECT") { state.pdoRows[+el.dataset.i] = [el.value, ...(el.value === "fix" ? [9, 3] : [3.3, 11, 3])]; pdolHtml(); }
-});
-$("pdolRows").addEventListener("click", (e) => {
-  const i = e.target.dataset.del;
-  if (i != null) { state.pdoRows.splice(+i, 1); pdolHtml(); updateDirty(); renderSim(); }
-});
-$("pdolAddF").onclick = () => { state.pdoRows.push(["fix", 9, 3]); pdolHtml(); updateDirty(); renderSim(); };
-$("pdolAddP").onclick = () => { state.pdoRows.push(["pps", 3.3, 11, 3]); pdolHtml(); updateDirty(); renderSim(); };
-$("pdolAvs").addEventListener("change", (e) => { state.pdoAvs = e.target.checked; pdolStatus(); });
 $("beIdle").addEventListener("change", () => updateDirty());
 $("vcable").addEventListener("change", () => { applyLabDeps(); updateDirty(); renderSim(); });
 $("pdol").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updateDirty(); renderSim(); });
+$("pdol2").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updateDirty(); });
+$("be2nd").addEventListener("change", applyLabDeps);
 $("forcePps").addEventListener("change", applyLabDeps);
 function writeExt(x) {
   const old = !!state.cfg && !state.cfg.x;
-  const v = x || { flags: 0, cable: VC_DEFAULT, fcable: FC_DEFAULT, pdo: PDOL_DEFAULT.map(simRaw) };
-  $("vcable").checked = !!(v.flags & 1); $("pdol").checked = !!(v.flags & 2); $("beIdle").checked = !!(v.flags & 4);
+  const v = x || { flags: 0, cable: VC_DEFAULT, fcable: FC_DEFAULT, pdo: PDOL_DEFAULT.map(simRaw), pdo2: PDOL_DEFAULT.map(simRaw) };
+  $("vcable").checked = !!(v.flags & 1); $("pdol").checked = !!(v.flags & 2); $("beIdle").checked = !!(v.flags & 4); $("pdol2").checked = !!(v.flags & 8);
   state.vc = v.cable.slice(); state.fc = (v.fcable || FC_DEFAULT).slice();
   state.pdoRows = []; state.pdoAvs = false;
   v.pdo.forEach((raw) => {
@@ -1946,6 +1977,13 @@ function writeExt(x) {
     if (p.type === P_FIX) state.pdoRows.push(["fix", p.max / 1000, p.ma / 1000]);
     else if (p.type === P_PPS) state.pdoRows.push(["pps", p.min / 1000, p.max / 1000, p.ma / 1000]);
     else if (p.type === P_SAVS) state.pdoAvs = true;
+  });
+  state.pdoRows2 = []; state.pdoAvs2 = false;
+  (v.pdo2 || PDOL_DEFAULT.map(simRaw)).forEach((raw) => {
+    const p = pdoParse(raw);
+    if (p.type === P_FIX) state.pdoRows2.push(["fix", p.max / 1000, p.ma / 1000]);
+    else if (p.type === P_PPS) state.pdoRows2.push(["pps", p.min / 1000, p.max / 1000, p.ma / 1000]);
+    else if (p.type === P_SAVS) state.pdoAvs2 = true;
   });
   $("vcable").disabled = $("pdol").disabled = $("beIdle").disabled = old;
   vcHtml(); pdolHtml();
@@ -1964,6 +2002,7 @@ function formErr() {
   if (($("idFe").checked && !/^[0-9a-f]{1,4}$/i.test($("feVid").value)) || ($("idFe").checked && parseInt($("feVid").value, 16) === 0)) return { k: "idBad", id: "feVid" };
   if (($("idBe").checked && !/^[0-9a-f]{1,4}$/i.test($("beVid").value)) || ($("idBe").checked && parseInt($("beVid").value, 16) === 0)) return { k: "idBad", id: "beVid" };
   if (list) { const e = pdolErr(); if (e) return { k: e, id: "pdol" }; }
+  if (list && $("pdol2").checked) { const e = pdolErr(PE[1]); if (e) return { k: e, id: "pdol2" }; }
   return null;
 }
 const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
@@ -1980,7 +2019,7 @@ function updateDirty() {
 }
 $("dirtyText").addEventListener("click", () => {
   const id = $("dirtyText").dataset.go; if (!id) return;
-  const view = ["fixcV", "ppscLo", "feVid", "beVid", "pdol"].includes(id) ? "settings" : state.tab;
+  const view = ["fixcV", "ppscLo", "feVid", "beVid", "pdol", "pdol2"].includes(id) ? "settings" : state.tab;
   if (state.tab !== view) setTab(view);
   const el = $(id); el.scrollIntoView({ block: "center", behavior: "smooth" }); if (el.focus) el.focus();
 });
@@ -2000,6 +2039,12 @@ async function loadCfg(force) {
     state.cfg.x = extFromBytes(px); state.cfgSaving = state.cfgSaving || !!px[52];
     const pf = await request(0x15);
     state.cfg.x.fcable = Array.from({ length: 5 }, (_, i) => u32(pf, i * 4)); state.cfgSaving = state.cfgSaving || !!pf[20];
+    if (state.info.proto >= 12) {
+      const pp = await request(0x17);
+      const n2 = Math.min(pp[0], 7);
+      state.cfg.x.pdo2 = n2 ? Array.from({ length: n2 }, (_, i) => u32(pp, 4 + i * 4)) : PDOL_DEFAULT.map(simRaw);
+      state.cfgSaving = state.cfgSaving || !!pp[32];
+    } else state.cfg.x.pdo2 = PDOL_DEFAULT.map(simRaw);
   } else state.cfg.x = null;
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
@@ -2012,7 +2057,10 @@ async function applyCfg(defaults) {
     if (defaults) await request(0x12);
     else {
       await request(0x11, cfgToBytes(f));
-      if (f.x) { await request(0x14, extToBytes(f.x)); await request(0x16, fcToBytes(f.x.fcable)); }
+      if (f.x) {
+        await request(0x14, extToBytes(f.x)); await request(0x16, fcToBytes(f.x.fcable));
+        if (state.info.proto >= 12 && stable(f.x.pdo2) !== stable(state.cfg.x.pdo2)) await request(0x18, pdo2ToBytes(f.x.pdo2));
+      }
     }
     await loadCfg(true);
     msg(""); flash(t("applied"));
@@ -2156,7 +2204,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.12.3";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.13.0";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2230,7 +2278,7 @@ async function readPage(idx) {
 async function loadLog(session) {
   const pages = [];
   const s = state.sessions.find((x) => x.session === session);
-  if (s) for (let k = 0; k < s.pages; k++) pages.push({ idx: (s.first + k) % 128, ram: false });
+  if (s) for (let k = 0; k < s.pages; k++) pages.push({ idx: (s.first + k) % (state.info && state.info.proto >= 12 ? 126 : 128), ram: false });
   if (session === state.current) {
     if (state.ramMask & 2) pages.push({ idx: 0xFE, ram: true });
     if (state.ramMask & 4) pages.push({ idx: 0xFD, ram: true });
@@ -2484,6 +2532,9 @@ function applyLabDeps() {
   if (!$("forcePps").checked) $("pdol").checked = false;
   $("pdolIn").hidden = !$("forcePps").checked;
   $("pdolEd").hidden = !$("pdol").checked;
+  if (!$("pdol").checked) $("pdol2").checked = false;
+  $("pdol2Wrap").hidden = !$("pdol").checked;
+  $("pdol2Ed").hidden = !$("pdol2").checked;
   const oldMin = !!state.cfg && state.cfg.feVid == null;   /* 協議 v8 起才有 */
   ["avs2ppsMin9", "avs2ppsMin5"].forEach((id) => ($(id).disabled = oldMin));
   applyWhy();
@@ -2504,7 +2555,10 @@ function applyWhy() {
   const m = modeNow(), avs = m === 0 || m === 2, pps = m === 1 || m === 2;
   const list = $("forcePps").checked && $("pdol").checked;
   setWhy($("lab-avs2pps"), list ? "whyList" : !pps ? "whyNeedPps" : "");
-  setWhy($("lab-be2nd"), !avs ? "whyNeedAvs" : "");
+  const p2Old = !!state.info && state.info.proto < 12;
+  $("be2nd").disabled = $("pdol2").checked; $("pdol2").disabled = $("be2nd").checked || p2Old;
+  setWhy($("lab-be2nd"), $("pdol2").checked ? "whyPdo2" : !avs ? "whyNeedAvs" : "");
+  setWhy($("pdol2").closest("label"), p2Old ? "whyP2Old" : $("be2nd").checked ? "whyBe2nd" : "");
   setWhy($("lab-eprAvs"), !$("emarker").checked ? "" : !avs ? "whyNeedAvs" : Number((document.querySelector("input[name=maxMv]:checked") || { value: 20000 }).value) < 20000 ? "whyEprMv" : "");
   if (!$("emarker").checked) $("lab-eprAvs").classList.add("off");
   setWhy($("lab-fixc"), list ? "whyList" : "");
@@ -2599,7 +2653,7 @@ function importCfg(text) {
   const num = (v) => typeof v === "number" && isFinite(v);
   if (!c || ![c.mode, c.hide, c.maxMv, c.maxMa, c.ovp, c.uvp, c.ocpMa, c.ocpMs, c.flags].every(num)) { msg(t("impBad")); return; }
   const base = state.cfg || CFG_DEFAULT, cfg = Object.assign({}, base, c);
-  const x = c.x && Array.isArray(c.x.cable) && c.x.cable.length === 5 && Array.isArray(c.x.pdo) ? { flags: c.x.flags | 0, cable: c.x.cable.map((v) => v >>> 0), fcable: Array.isArray(c.x.fcable) && c.x.fcable.length === 5 ? c.x.fcable.map((v) => v >>> 0) : FC_DEFAULT.slice(), pdo: c.x.pdo.slice(0, 7).map((v) => v >>> 0) } : base.x ?? CFG_DEFAULT.x;
+  const x = c.x && Array.isArray(c.x.cable) && c.x.cable.length === 5 && Array.isArray(c.x.pdo) ? { flags: c.x.flags | 0, cable: c.x.cable.map((v) => v >>> 0), fcable: Array.isArray(c.x.fcable) && c.x.fcable.length === 5 ? c.x.fcable.map((v) => v >>> 0) : FC_DEFAULT.slice(), pdo: c.x.pdo.slice(0, 7).map((v) => v >>> 0), pdo2: Array.isArray(c.x.pdo2) && c.x.pdo2.length ? c.x.pdo2.slice(0, 7).map((v) => v >>> 0) : PDOL_DEFAULT.map(simRaw) } : base.x ?? CFG_DEFAULT.x;
   cfg.x = state.cfg && !state.cfg.x ? null : x;
   /* 舊韌體沒有的欄位維持裝置原樣 */
   ["flags2", "flags3", "compMode", "ppsLo", "ppsHi", "ppsMa50", "feVid", "fePid", "beVid", "bePid"].forEach((k) => { if (state.cfg && state.cfg[k] == null) cfg[k] = null; else if (cfg[k] == null) cfg[k] = CFG_DEFAULT[k] ?? base[k]; });
@@ -2640,7 +2694,7 @@ setTab(["status", "settings", "em", "log", "fw", "sim"].includes(startTab) ? sta
 /* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
 const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
   compMode: 2, compVal: 15, flags2: 0, flags3: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60,
-  x: { flags: 0, cable: VC_DEFAULT.slice(), fcable: FC_DEFAULT.slice(), pdo: PDOL_DEFAULT.map(simRaw) } };
+  x: { flags: 0, cable: VC_DEFAULT.slice(), fcable: FC_DEFAULT.slice(), pdo: PDOL_DEFAULT.map(simRaw), pdo2: PDOL_DEFAULT.map(simRaw) } };
 writeForm(CFG_DEFAULT);
 applyI18n();
 

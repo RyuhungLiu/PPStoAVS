@@ -43,6 +43,13 @@ static bool avs_held;           /* 本可提供 AVS，但尚未确认设备支�
 static bool rear_queried;       /* 本次连接已查询过设备 */
 static bool rear_avs_ok;        /* 设备已声明支持 AVS */
 
+/* 第二组自订 PDO 生效条件：强制 PPS + 自订 PDO 档位 + CFGX_PDO2，且第二组非空；此时 CFG_BE_AVS_2ND 不起作用 */
+static bool pdo2_mode(void)
+{
+    const cfg_ext_t *x = cfg_ext();
+    return (cfg()->flags2 & CFG2_FORCE_PPS) && (x->flags & CFGX_PDO) && (x->flags & CFGX_PDO2) && cfg_pdo2()->n > 0;
+}
+
 /* 后端当前合约 */
 static bool back_has_contract;
 static uint16_t back_mv, back_ma;
@@ -311,10 +318,12 @@ static void build_back_caps(void)
     bool force_pps = (c->flags2 & CFG2_FORCE_PPS) != 0;
     const cfg_ext_t *x = cfg_ext();
     bool list = force_pps && (x->flags & CFGX_PDO);
+    /* 第二组自订 PDO：设备声明支持 AVS 之后改用（见 pdo2_mode） */
+    bool second = rear_avs_ok && pdo2_mode();
     pdo_t lp[CFGX_MAX_PDOS];
-    uint8_t nl = list ? x->pdo_n : 0;
+    uint8_t nl = list ? (second ? cfg_pdo2()->n : x->pdo_n) : 0;
     for (uint8_t i = 0; i < nl; i++)
-        lp[i] = pd_parse_pdo(x->pdo[i]);
+        lp[i] = pd_parse_pdo(second ? cfg_pdo2()->pdo[i] : x->pdo[i]);
     if (list)
     {
         bool avs_item = false;
@@ -411,7 +420,7 @@ static void build_back_caps(void)
             uint16_t avs_max = (avs_tier(src->max_mv) == 2 && f20 >= 0) ? 20000 : 15000;
             bool from_epr = src->type == EPR_AVS_PDO;
             bool drop20 = avs_max < 20000 && f20 >= 0;
-            if (nf - drop20 < PD_MAX_DATA_OBJS && (c->flags & CFG_BE_AVS_2ND) && !rear_avs_ok)
+            if (nf - drop20 < PD_MAX_DATA_OBJS && (c->flags & CFG_BE_AVS_2ND) && !pdo2_mode() && !rear_avs_ok)
             {
                 avs_held = true;
             }
@@ -1047,7 +1056,7 @@ void bridge_on_back_contract(void)
 
 bool bridge_rear_query_wanted(void)
 {
-    return avs_held && !rear_queried;
+    return (avs_held || pdo2_mode()) && !rear_queried;
 }
 
 void bridge_on_rear_sink_modes(int16_t modes)
@@ -1066,7 +1075,7 @@ uint8_t bridge_rear_avs_2nd_state(void)
 {
     if (rear_avs_ok)
         return 3;
-    if (!avs_held)
+    if (!avs_held && !pdo2_mode())
         return 0;
     return rear_queried ? 2 : 1;
 }

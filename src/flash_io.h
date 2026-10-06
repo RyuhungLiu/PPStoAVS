@@ -31,8 +31,10 @@
 #define APP_HDR_ADDR        (FLASH_PHYS_BASE + APP_HDR_OFFSET)
 #define CFG_FLASH_ADDR      (FLASH_PHYS_BASE + 0xBF00u)
 #define CFG_FLASH_PAGES     2u
-#define LOG_FLASH_ADDR      (FLASH_PHYS_BASE + 0xC000u)
-#define LOG_FLASH_PAGES     128u
+#define EXT2_FLASH_ADDR     (FLASH_PHYS_BASE + 0xC000u)     /* 第二组自订 PDO（v0.13.0 起，占原记录区开头 2 页） */
+#define EXT2_FLASH_PAGES    2u
+#define LOG_FLASH_ADDR      (FLASH_PHYS_BASE + 0xC100u)
+#define LOG_FLASH_PAGES     126u
 
 bool flash_page_erase(uint32_t addr);
 bool flash_page_program(uint32_t addr, const uint32_t *data);   /* 32 个字，调用前该页须已擦除 */

@@ -102,7 +102,8 @@ typedef enum
 #define CFGX_CABLE          (1u << 0)
 #define CFGX_PDO            (1u << 1)
 #define CFGX_BE_IDLE        (1u << 2)   /* 后端虚拟 E-Marker 常驻应答：没有设备（无 Rd 下拉）、MOS 未开时也监听并应答 SOP' Discover Identity；需 CFGX_CABLE */
-#define CFGX_MASK           (CFGX_CABLE | CFGX_PDO | CFGX_BE_IDLE)
+#define CFGX_PDO2           (1u << 3)   /* 第二组自订 PDO：设备在 Sink_Capabilities_Extended 声明支持 AVS 后改播发这一组；需 CFGX_PDO，与 CFG_BE_AVS_2ND 互斥 */
+#define CFGX_MASK           (CFGX_CABLE | CFGX_PDO | CFGX_BE_IDLE | CFGX_PDO2)
 #define CFGX_MAX_PDOS       7
 typedef struct __attribute__((packed))
 {
@@ -120,6 +121,17 @@ static inline uint8_t cfg_cable_n(uint32_t id_header)
 {
     return ((id_header >> 27) & 7) == 4 ? 5 : 4;
 }
+
+/* 第二组自订 PDO（v0.13.0）：单独存一页（EXT2_FLASH_ADDR），命令 0x17 / 0x18；规则同 cfg_ext_t.pdo */
+typedef struct
+{
+    uint8_t  n;             /* 0 ~ 7 */
+    uint8_t  reserved[3];
+    uint32_t pdo[CFGX_MAX_PDOS];
+} cfg_pdo2_t;
+#define CFGP_SIZE           32
+const cfg_pdo2_t *cfg_pdo2(void);
+bool cfg_pdo2_set(const cfg_pdo2_t *p);
 
 const cfg_ext_t *cfg_ext(void);
 void cfg_ext_defaults(cfg_ext_t *x);

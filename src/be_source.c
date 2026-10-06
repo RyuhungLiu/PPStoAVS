@@ -19,7 +19,7 @@
 #define T_VBUS_ON_SETTLE_MS     50      /* 打开 MOS 后等待 VBUS 建立，再发首条能力报文（tFirstSourceCap 250ms 内） */
 #define T_SELFQA_MS             300     /* 虚拟 E-Marker：Source_Capabilities 后无 SOP' 查询则自问自答 */
 #define T_SEND_CAPS_MS          150     /* tTypeCSendSourceCap 100~200ms */
-#define N_CAPS_COUNT            50
+#define N_CAPS_COUNT            16      /* 外部只有 5.1K 下拉（无 PD 应答）时发 Source_Capabilities 的次数，之后按非 PD 设备处理 */
 #define T_SENDER_RESPONSE_MS    30
 #define T_PS_HARD_RESET_MS      30      /* tPSHardReset 25~35ms */
 #define T_SRC_RECOVER_MS        800     /* tSrcRecover 0.66~1s */
@@ -917,7 +917,7 @@ void be_process(void)
                 }
                 set_state(BE_ST_WAIT_REQUEST);
             }
-            else if (++caps_count > N_CAPS_COUNT)
+            else if (++caps_count >= N_CAPS_COUNT)
             {
                 pdinfo_dev_attached(false);
                 set_state(BE_ST_NO_PD);   /* 非 PD 设备：保持 5V 供电 */

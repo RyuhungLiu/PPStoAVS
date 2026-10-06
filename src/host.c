@@ -24,6 +24,8 @@ enum
     CMD_CFGX_SET     = 0x14,
     CMD_CFGF_GET     = 0x15,    /* 协议 v11：前端虚拟 E-Marker VDO（20 字节） */
     CMD_CFGF_SET     = 0x16,
+    CMD_CFGP_GET     = 0x17,    /* 协议 v12：第二组自订 PDO（32 字节） */
+    CMD_CFGP_SET     = 0x18,
     CMD_LOG_SESSIONS = 0x20,
     CMD_LOG_READ     = 0x21,
     CMD_LOG_CLEAR    = 0x22,
@@ -198,6 +200,8 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
         cfg_ext_t x;
         cfg_defaults(&c);
         cfg_ext_defaults(&x);
+        cfg_pdo2_t p2 = {0};
+        cfg_pdo2_set(&p2);
         return cfg_ext_set(&x) ? cmd_cfg_set(&c) : ST_BAD_ARG;
     }
 
@@ -210,6 +214,21 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
         put_bytes(w, cfg_ext()->fcable, CFGF_SIZE);
         put8(w, cfg_save_pending());
         return ST_OK;
+
+    case CMD_CFGP_GET:
+        put_bytes(w, cfg_pdo2(), CFGP_SIZE);
+        put8(w, cfg_save_pending());
+        return ST_OK;
+
+    case CMD_CFGP_SET:
+    {
+        cfg_pdo2_t p;
+        memcpy(&p, arg, CFGP_SIZE);
+        if (!cfg_pdo2_set(&p))
+            return ST_BAD_ARG;
+        bridge_on_cfg_changed();
+        return ST_OK;
+    }
 
     case CMD_CFGX_SET:
         return cmd_cfgx_set(arg, false);

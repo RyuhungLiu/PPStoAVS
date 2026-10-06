@@ -30,12 +30,34 @@ _Static_assert(sizeof(cfg_page_t) == FLASH_PAGE_SIZE, "cfg_page_t size");
 
 static cfg_t cur;
 static cfg_ext_t cur_x;
+static cfg_pdo2_t cur_p2;
 static uint32_t cur_seq;
 static uint8_t cur_slot;            /* 最近一次有效数据所在页 */
 
 /* 保存：先擦目标页，下一个空闲窗口再编程 */
 static enum { SAVE_IDLE, SAVE_ERASE, SAVE_PROGRAM } save_state;
 static cfg_page_t save_buf __attribute__((aligned(4)));
+
+/* 第二组自订 PDO：独立两页轮流写，规则同 cfg_page_t */
+#define PDO2_MAGIC          0x32584450u     /* 'PDX2' */
+typedef struct
+{
+    uint32_t magic;
+    uint32_t seq;
+    cfg_pdo2_t p;
+    uint32_t crc;           /* magic ~ p */
+    uint32_t pad[21];
+} pdo2_page_t;
+_Static_assert(sizeof(pdo2_page_t) == FLASH_PAGE_SIZE, "pdo2_page_t size");
+static uint32_t p2_seq;
+static uint8_t p2_slot;
+static enum { P2_IDLE, P2_ERASE, P2_PROGRAM } p2_state;
+static pdo2_page_t p2_buf __attribute__((aligned(4)));
+
+static const pdo2_page_t *p2_page(uint8_t slot)
+{
+    return (const pdo2_page_t *)(EXT2_FLASH_ADDR + slot * FLASH_PAGE_SIZE);
+}
 
 static const cfg_page_t *slot_page(uint8_t slot)
 {
@@ -116,24 +138,19 @@ bool cfg_ext_cable_5a(const cfg_ext_t *x)
 }
 
 /* 自订 PDO 的合法范围：Fixed 5~20V（50mV 倍数）、PPS 3.3~21V、电流 0.5~5A；5V Fixed 必须有；AVS 至多 1 个，须有 15V Fixed（AVS 到 20V 另需 20V Fixed，没有则 AVS 只到 15V） */
-bool cfg_ext_valid(const cfg_ext_t *x)
+static bool pdo_list_valid(const uint32_t *pdo, uint8_t n)
 {
-    if ((x->flags & ~CFGX_MASK) || x->pdo_n > CFGX_MAX_PDOS)
-        return false;
-    if (!(x->flags & CFGX_PDO))
-        return true;
-    uint8_t avs = 0, v5 = 0, v15 = 0, v20 = 0;
-    for (uint8_t i = 0; i < x->pdo_n; i++)
+    uint8_t avs = 0, v5 = 0, v15 = 0;
+    for (uint8_t i = 0; i < n; i++)
     {
-        pdo_t p = pd_parse_pdo(x->pdo[i]);
+        pdo_t p = pd_parse_pdo(pdo[i]);
         if (p.type == FPDO)
         {
             if (p.max_mv < 5000 || p.max_mv > 20000 || p.max_mv % 100 || p.max_ma < 500 || p.max_ma > CFG_MAX_MA_5A ||
-                p.max_ma % 50 || (x->pdo[i] & 0xC0000000u))
+                p.max_ma % 50 || (pdo[i] & 0xC0000000u))
                 return false;
             v5 += p.max_mv == 5000;
             v15 += p.max_mv == 15000;
-            v20 += p.max_mv == 20000;
         }
         else if (p.type == PPS_PDO)
         {
@@ -146,11 +163,24 @@ bool cfg_ext_valid(const cfg_ext_t *x)
             return false;
         for (uint8_t j = 0; j < i; j++)
         {
-            if (x->pdo[j] == x->pdo[i])
+            if (pdo[j] == pdo[i])
                 return false;
         }
     }
     return v5 == 1 && avs <= 1 && (!avs || v15 == 1);
+}
+
+bool cfg_ext_valid(const cfg_ext_t *x)
+{
+    if ((x->flags & ~CFGX_MASK) || x->pdo_n > CFGX_MAX_PDOS)
+        return false;
+    if ((x->flags & CFGX_PDO2) && !(x->flags & CFGX_PDO))
+        return false;   /* 第二组需要先开自订 PDO 档位 */
+    if (!(x->flags & CFGX_PDO))
+        return true;
+    uint32_t l[CFGX_MAX_PDOS];
+    memcpy(l, x->pdo, sizeof(l));
+    return pdo_list_valid(l, x->pdo_n);
 }
 
 bool cfg_valid(const cfg_t *c)
@@ -185,8 +215,22 @@ void cfg_init(void)
 {
     cfg_defaults(&cur);
     cfg_ext_defaults(&cur_x);
+    memset(&cur_p2, 0, sizeof(cur_p2));
     cur_seq = 0;
     cur_slot = 1;
+    p2_seq = 0;
+    p2_slot = 1;
+    for (uint8_t k = 0; k < EXT2_FLASH_PAGES; k++)
+    {
+        const pdo2_page_t *q = p2_page(k);
+        if (q->magic == PDO2_MAGIC && q->crc == crc32_calc(q, offsetof(pdo2_page_t, crc)) && q->p.n <= CFGX_MAX_PDOS &&
+            (!q->p.n || pdo_list_valid(q->p.pdo, q->p.n)) && q->seq >= p2_seq)
+        {
+            cur_p2 = q->p;
+            p2_seq = q->seq;
+            p2_slot = k;
+        }
+    }
     for (uint8_t s = 0; s < CFG_FLASH_PAGES; s++)
     {
         const cfg_page_t *p = slot_page(s);
@@ -220,6 +264,22 @@ const cfg_t *cfg(void)
     return &cur;
 }
 
+const cfg_pdo2_t *cfg_pdo2(void)
+{
+    return &cur_p2;
+}
+
+bool cfg_pdo2_set(const cfg_pdo2_t *p)
+{
+    if (p->n > CFGX_MAX_PDOS || (p->n && !pdo_list_valid(p->pdo, p->n)))
+        return false;
+    memset(&cur_p2, 0, sizeof(cur_p2));
+    cur_p2.n = p->n;
+    memcpy(cur_p2.pdo, p->pdo, p->n * 4u);
+    p2_state = P2_ERASE;
+    return true;
+}
+
 bool cfg_set(const cfg_t *c)
 {
     if (!cfg_valid(c))
@@ -249,7 +309,7 @@ bool cfg_ext_set(const cfg_ext_t *x)
 
 bool cfg_save_pending(void)
 {
-    return save_state != SAVE_IDLE;
+    return save_state != SAVE_IDLE || p2_state != P2_IDLE;
 }
 
 bool cfg_flush_step(void)
@@ -275,6 +335,32 @@ bool cfg_flush_step(void)
             cur_slot = slot;
         }
         save_state = SAVE_IDLE;
+        return true;
+
+    default:
+        break;
+    }
+
+    uint8_t s2 = p2_slot ^ 1;
+    switch (p2_state)
+    {
+    case P2_ERASE:
+        flash_page_erase(EXT2_FLASH_ADDR + s2 * FLASH_PAGE_SIZE);
+        p2_state = P2_PROGRAM;
+        return true;
+
+    case P2_PROGRAM:
+        memset(&p2_buf, 0, sizeof(p2_buf));
+        p2_buf.magic = PDO2_MAGIC;
+        p2_buf.seq = p2_seq + 1;
+        p2_buf.p = cur_p2;
+        p2_buf.crc = crc32_calc(&p2_buf, offsetof(pdo2_page_t, crc));
+        if (flash_page_program(EXT2_FLASH_ADDR + s2 * FLASH_PAGE_SIZE, (const uint32_t *)&p2_buf))
+        {
+            p2_seq = p2_buf.seq;
+            p2_slot = s2;
+        }
+        p2_state = P2_IDLE;
         return true;
 
     default:
