@@ -1,8 +1,11 @@
 #include "fe_ufcs.h"
+#include "analog.h"
 #include "bridge.h"
 #include "board.h"
 #include "cfg.h"
 #include "evlog.h"
+#include "power_sw.h"
+#include "qc.h"
 #include "timebase.h"
 #include "ufcs.h"
 #include "ufcs_codec.h"
@@ -32,6 +35,11 @@ static uint32_t contract_rdo, pending_rdo;
 static origin_t pending_origin;
 static bool pending_valid;              /* 已接受请求，等引擎空闲后发出 */
 static fe_req_status_t req_status = FE_REQ_IDLE;
+#ifdef QC_PROBE
+#define qcf 0                           /* 探测固件放不下正式 QC 前端 */
+#else
+static uint8_t qcf;                     /* QC 前端：qc_connect 的结果（QC_*），0 = UFCS */
+#endif
 
 bool feu_active(void)
 {
@@ -49,6 +57,67 @@ bool feu_start(void)
     req_status = FE_REQ_IDLE;
     return true;
 }
+
+/* QC2.0/3.0 前端（Lab，上电时在 UFCS 之后、USB HID 与 PD 前端之前由 main 调用）：能力按 18W 惯例合成（QC 不报告电流）：
+ * Fixed 5V 3A / 9V 2A / 12V 1.5A（探测到的档位），QC3 另给 PPS 3.6~5.9V 3A、3.6~9V 2A、3.6~12V 1.5A */
+#ifndef QC_PROBE
+bool feu_start_qc(void)
+{
+    /* 探测会把前端升到 9V / 12V / 5.6V：期间关断后端（此时后端只有非 PD 的 5V 合约），探测结束回到 5V 再恢复 */
+    bool sw = power_sw_is_on();
+    power_sw_set(false);
+    uint16_t dv, base;
+    qcf = qc_connect(&dv, &base);
+    if (sw)
+        power_sw_set(true);
+    ev_qc_step_t e = {QCS_CONNECT, qcf, dv, analog_vbus_mv(), base};
+    evlog_add(EV_QC_STEP, &e, sizeof(e));
+    if (!qcf)
+        return false;
+    has_contract = false;
+    pending_valid = false;
+    req_status = FE_REQ_IDLE;
+    st = FU_WAIT_CAPS;
+    return true;
+}
+
+/* Lab 合成单一 PPS（CFG3_QC_PPS1）：一个 3.6V~最高档的 PPS，电流取当前合约电压所在档（qband）；
+ * 合约电压跨档（上行超过 5.9V / 9V，下行回到门限以下 200mV）时重建能力并重新广播，设备按新电流重新请求 */
+static uint8_t qband;
+static const uint16_t qc_mv[3] = {5000, 9000, 12000}, qc_ma[3] = {3000, 2000, 1500}, qc_top[2] = {5900, 9000};
+
+static bool qc_one_pps(void)
+{
+    return (qcf & QC_3) && (cfg()->flags3 & CFG3_QC_PPS1);
+}
+
+static uint8_t qc_caps(uint32_t *raw)
+{
+    static const uint8_t need[3] = {QC_OK, QC_9V, QC_12V};
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < 3; i++)
+        if (qcf & need[i])
+            raw[n++] = pd_build_fixed_pdo(qc_mv[i], qc_ma[i], 0);
+    if (qc_one_pps())
+        raw[n++] = pd_build_pps_apdo(3600, (qcf & QC_12V) ? 12000 : 9000, qc_ma[qband]);
+    else
+        for (uint8_t i = 0; i < 3 && (qcf & QC_3); i++)
+            if (qcf & need[i])
+                raw[n++] = pd_build_pps_apdo(3600, i ? qc_mv[i] : qc_top[0], qc_ma[i]);
+    return n;
+}
+
+/* 合约电压所在档（带 200mV 回差） */
+static uint8_t qc_band_of(uint16_t mv)
+{
+    uint8_t b = qband;
+    while (b < 2 && mv > qc_top[b])
+        b++;
+    while (b > 0 && mv <= qc_top[b - 1] - 200)
+        b--;
+    return b;
+}
+#endif
 
 void feu_stop(void)
 {
@@ -121,9 +190,16 @@ static void request_finished(bool ok)
 static void on_caps(void)
 {
     uint8_t n;
-    const ufcs_mode_t *md = ufcs_modes(&n);
     uint32_t raw[7];
-    num_caps = ufcs_synth_caps(md, n, raw, src_mode);
+#ifndef QC_PROBE
+    if (qcf)
+        num_caps = qc_caps(raw);
+    else
+#endif
+    {
+        const ufcs_mode_t *md = ufcs_modes(&n);
+        num_caps = ufcs_synth_caps(md, n, raw, src_mode);
+    }
     for (uint8_t i = 0; i < num_caps; i++)
         caps[i] = pd_parse_pdo(raw[i]);
     if (!num_caps)
@@ -160,6 +236,48 @@ static bool on_dead(void)
 
 bool feu_process(void)
 {
+#ifndef QC_PROBE
+    if (qcf)
+    {
+        qc_process();
+        if (st == FU_WAIT_CAPS)
+        {
+            on_caps();
+            if (st == FU_WAIT_CAPS)
+                st = FU_READY;
+        }
+        else if (st == FU_REQ)
+        {
+            if (pending_valid)
+            {
+                if (pending.pos < 1 || pending.pos > num_caps)
+                    request_finished(false);
+                else
+                {
+                    qc_set(pending.mv, pending.type == PPS_PDO);
+                    pending_valid = false;
+                }
+            }
+            else if (!qc_busy())
+                request_finished(true);
+        }
+        /* 跨档：等协议桥空闲（设备合约已更新）后再重新广播，保持当前合约 */
+        else if (st == FU_READY && qc_one_pps() && bridge_flash_safe())
+        {
+            /* 按设备请求的电压（不含压降补偿）定档；设备未接时回到 3A 档 */
+            uint32_t rdo;
+            uint16_t mv = 5000;
+            bridge_back_contract(&rdo, &mv);
+            uint8_t b = qc_band_of(mv);
+            if (b != qband)
+            {
+                qband = b;
+                on_caps();
+            }
+        }
+        return true;
+    }
+#endif
     ufcs_process();
     if (ufcs_dead())
         return on_dead();
@@ -202,12 +320,12 @@ uint32_t feu_contract_rdo(void)
 
 bool feu_flash_safe(void)
 {
-    return st == FU_READY && ufcs_flash_safe();
+    return st == FU_READY && (qcf ? !qc_busy() : ufcs_flash_safe());
 }
 
 uint8_t feu_state_code(void)
 {
-    return 16 + (uint8_t)st;
+    return (qcf ? 20 : 16) + (uint8_t)st;
 }
 
 bool feu_is_ready(void)

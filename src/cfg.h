@@ -45,7 +45,9 @@ typedef enum
 #define CFG3_LOG            (1u << 0)   /* 事件记录（默认关闭，需在网页开启；关闭时不写 Flash） */
 #define CFG3_OLD_NO5A       (1u << 1)   /* v0.11.x 的线材策略（固定 3A）；v0.12.0 起改为虚拟 E-Marker（cfg_ext_t），读到旧设置时迁移 */
 #define CFG3_OLD_5A         (1u << 2)   /* v0.11.x 的线材策略（5A） */
-#define CFG3_MASK           CFG3_LOG
+#define CFG3_QC             (1u << 3)   /* Lab：前端 QC2.0/3.0——上电时（UFCS 之后）先用 D+/D− 握手，成功则前端走 QC，否则照常 PD */
+#define CFG3_QC_PPS1        (1u << 4)   /* Lab（需 CFG3_QC）：QC3 合成为一个 PPS 3.6~12V，电流随当前电压档（≤5.9V 3A、≤9V 2A、以上 1.5A）变化并重新广播 */
+#define CFG3_MASK           (CFG3_LOG | CFG3_QC | CFG3_QC_PPS1)
 #define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
 #define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */

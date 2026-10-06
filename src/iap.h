@@ -21,7 +21,7 @@
 #include "flash_io.h"
 
 #define IAP_PROTO           1
-#define BL_VERSION          0x0100      /* 0xMMmm */
+#define BL_VERSION          0x0200      /* 0xMMmm；2.0 = Flash 布局 2（程序区 0xD500） */
 
 #define IAP_HDR_MAGIC       0x31505041u /* 'APP1' */
 #define IAP_FLAG_MAGIC      0x314C4224u /* '$BL1' */

@@ -15,9 +15,9 @@ SIZE    := "$(TOOLCHAIN)/$(PREFIX)size"
 TARGET := PPStoAVS
 BUILD  := build
 
-# 程序链接地址（Bootloader 之上）；APP_ORIGIN=0x0 APP_LENGTH=0xBF00 可编出不带 Bootloader、直接烧录的版本用于排查
+# 程序链接地址（Bootloader 之上）；APP_ORIGIN=0x0 APP_LENGTH=0xEE00 可编出不带 Bootloader、直接烧录的版本用于排查
 APP_ORIGIN ?= 0x00001800
-APP_LENGTH ?= 0xA600
+APP_LENGTH ?= 0xD500
 
 SRC_C := $(wildcard src/*.c) \
          $(wildcard sdk/Core/*.c) \
@@ -57,7 +57,7 @@ $(BUILD)/%.o: %.S
 	@echo AS $<
 	@$(CC) $(ASFLAGS) -c $< -o $@
 
-# 程序区 0x1800 起 0xA600（Bootloader 在其下，标志页、程序头页与设置、记录在其上），见 src/flash_io.h
+# 程序区 0x1800 起 0xD500（布局 2）（Bootloader 在其下，标志页、程序头页与设置、记录在其上），见 src/flash_io.h
 $(BUILD)/link.ld: sdk/Ld/Link.ld
 	@mkdir -p $(dir $@)
 	@sed -e 's/ORIGIN = 0x00000000, LENGTH = 64K/ORIGIN = $(APP_ORIGIN), LENGTH = $(APP_LENGTH)/' 	     -e 's/KEEP(\*(SORT_NONE(\.init)))/& KEEP(*(.appinfo))/' $< > $@

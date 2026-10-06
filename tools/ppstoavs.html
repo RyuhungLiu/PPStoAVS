@@ -468,6 +468,13 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
           <label class="labhead"><input type="checkbox" id="ufcs"><div><b data-i18n="ufcs"></b><span data-i18n="ufcsS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span></span></label>
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ufcsL"></ul></details>
         </div>
+        <div class="lab" id="lab-qc">
+          <label class="labhead"><input type="checkbox" id="qc"><div><b data-i18n="qc"></b><span data-i18n="qcS"></span></div><span class="labtags"><span class="tag warn" data-i18n="tagUnstable"></span></span></label>
+          <div class="labin" id="qcIn" hidden>
+            <label class="check"><input type="checkbox" id="qcPps1"><div><b data-i18n="qcPps1"></b><span data-i18n="qcPps1S"></span></div></label>
+          </div>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="qcL"></ul></details>
+        </div>
       </div>
       <h4 class="labgrp" data-i18n="labRear"></h4>
       <div class="labs">
@@ -659,6 +666,7 @@ const T = {
     fwFile: (n, sz, v, crc) => `${n} · ${sz} bytes · ${v ? fmtFw(v) : "?"} · CRC ${crc.toString(16).toUpperCase().padStart(8, "0")}`,
     fwPick: "Choose the application file (.bin or .hex).",
     fwBig: (max) => `The application is larger than ${max} bytes.`,
+    fwLayout: (isNew) => isNew ? "This firmware (v0.14.0 or newer) uses the new flash layout and needs the new bootloader. Flash PPStoAVS-…-full.hex once with WCH-LinkE (Clear All Code Flash - By Power Off first; export your settings before)." : "This firmware (v0.13.x or older) does not match the new bootloader on the device. Use v0.14.0 or newer, or flash an old -full.hex with WCH-LinkE.",
     fwBad: "This does not look like an application image.",
     fwConfirmEnter: "The rear output stops and the device reboots into the bootloader. Continue?",
     fwStepEnter: "Entering the bootloader…", fwStepWait: "Waiting for the device…", fwStepWrite: (p) => `Writing ${p}%`,
@@ -738,7 +746,7 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 18: "Cable e-marker", 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step", 19: "QC probe" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
     rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
@@ -822,6 +830,14 @@ const T = {
       "Exactly 9 V or 15 V: served by the charger's Fixed 9 V / 15 V.",
       "Any other 9–15 V request is rejected.",
       "Takes precedence over PPS or SPR AVS as the AVS source. Never above 20 V."],
+    qc: "QC2.0 / QC3.0 on the front port", qcs: "QC",
+    qcPps1: "QC3 as one PPS", qcPps1S: "Offer QC3 as a single PPS 3.6–12 V whose current follows the voltage in use: 3 A up to 5.9 V, 2 A up to 9 V, 1.5 A above. When the device's voltage crosses a step (back down: 0.2 V below it), the capabilities are re-sent and the device requests again.",
+    qcS: "At power-up, try the QC handshake on D+/D− (after UFCS — with both on, UFCS always wins); if the charger answers, the front port runs QC, otherwise PD.",
+    qcL: ["Checked at power-up like UFCS: a charger that does not short D+/D− (or a PC) is rejected within 0.5 s and PD runs as usual. A charger that supports both QC and PD on the same port will be used through QC.",
+      "If UFCS is also on, UFCS is always tried first (it comes first in the power-up sequence), so a charger that supports both UFCS and QC always runs UFCS; QC is only tried when the UFCS handshake fails.",
+      "The handshake takes about 1.6 s with QC3 (2.1 s QC2 only): D+ 0.6 V until the charger releases D−, then QC3 steps (and, without QC3, 9 V / 12 V) are tested by measuring VBUS. The result is logged as \"QC probe\" (connect).",
+      "Offered to the device as Fixed 5 V 3 A / 9 V 2 A / 12 V 1.5 A and, with QC3, PPS 3.6–5.9 V 3 A, 3.6–9 V 2 A, 3.6–12 V 1.5 A (18 W convention — QC does not report current; OCP protects). QC3 moves in 200 mV steps. 20 V (Class B) is not used.",
+      "While QC is active the host tool cannot connect (D+/D− are in use); change settings with the charger unplugged."],
     ufcs: "UFCS on the front port", ufcss: "UFCS", tagUnstable: "unstable",
     ufcsS: "Try UFCS (T/TAF 083-2022) when the charger is plugged in; fall back to PD if it does not answer.",
     ufcsL: ["At power-up the front D+/D− lines are checked; only a charger that answers the UFCS handshake is used through UFCS. Otherwise PD works as usual.",
@@ -887,6 +903,7 @@ const T = {
     fwFile: (n, sz, v, crc) => `${n} · ${sz} 位元組 · ${v ? fmtFw(v) : "?"} · CRC ${crc.toString(16).toUpperCase().padStart(8, "0")}`,
     fwPick: "請選擇應用程式檔案（.bin 或 .hex）。",
     fwBig: (max) => `應用程式超過 ${max} 位元組。`,
+    fwLayout: (isNew) => isNew ? "此韌體（v0.14.0 以上）使用新的 Flash 布局，需要新版 Bootloader：請先匯出設定，再用 WCH-LinkE「Clear All Code Flash - By Power Off」後燒錄一次 PPStoAVS-…-full.hex。" : "此韌體（v0.13.x 以前）與裝置上的新版 Bootloader 不相容。請使用 v0.14.0 以上，或用 WCH-LinkE 燒錄舊版 -full.hex。",
     fwBad: "這不像是應用程式映像。",
     fwConfirmEnter: "後端輸出會中斷，裝置將重新啟動進入 Bootloader。要繼續嗎？",
     fwStepEnter: "正在進入 Bootloader…", fwStepWait: "等待裝置重新連線…", fwStepWrite: (p) => `寫入中 ${p}%`,
@@ -966,7 +983,7 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 18: "線材 E-Marker", 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟" },
+          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟", 19: "QC 探測" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
     rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
@@ -1050,6 +1067,14 @@ const T = {
       "剛好 9V、15V：改走充電器的 Fixed 9V / 15V。",
       "其他 9–15V 請求一律拒絕。",
       "優先於 PPS 平移或 SPR AVS 作為 AVS 來源；永遠不超過 20V。"],
+    qc: "前端使用 QC2.0 / QC3.0", qcs: "QC",
+    qcPps1: "QC3 合成為一個 PPS", qcPps1S: "QC3 只給一個 PPS 3.6–12V，電流隨目前電壓變化：5.9V 以下 3A、9V 以下 2A、以上 1.5A。設備電壓跨過門限（往下要低於門限 0.2V）時重新發送能力，設備會重新請求。",
+    qcS: "上電時在 D+/D− 嘗試 QC 握手（在 UFCS 之後；兩者都開時 UFCS 永遠優先）；充電器回應就走 QC，否則照常走 PD。",
+    qcL: ["與 UFCS 一樣在上電時檢查：D+/D− 沒有短接的充電器（或電腦）0.5 秒內就判定不是 QC，照常走 PD。同一個口同時支援 QC 與 PD 的充電器會走 QC。",
+      "與「前端使用 UFCS」同時開啟時，因上電時序 UFCS 永遠優先：同時支援 UFCS 與 QC 的充電器一律走 UFCS，只有 UFCS 握手失敗才嘗試 QC。",
+      "握手約 1.6 秒（有 QC3；只有 QC2 約 2.1 秒）：D+ 0.6V 直到充電器放開 D−，再以 VBUS 實測 QC3 步進（沒有 QC3 才測 9V、12V），結果記在記錄「QC 探測」（連線）。",
+      "給設備的能力：Fixed 5V 3A / 9V 2A / 12V 1.5A，QC3 另有 PPS 3.6–5.9V 3A、3.6–9V 2A、3.6–12V 1.5A（按 18W 慣例，QC 不回報電流，靠 OCP 保護）。QC3 以 200mV 步進。不使用 20V（Class B）。",
+      "QC 啟用時網頁無法連線（D+/D− 被佔用），改設定請拔掉充電器接電腦。"],
     ufcs: "前端使用 UFCS", ufcss: "UFCS", tagUnstable: "不穩定",
     ufcsS: "充電器插入時先嘗試 UFCS（T/TAF 083-2022）握手；沒有回應就照常走 PD。",
     ufcsL: ["上電時檢測前端 D+/D−，只有回應 UFCS 握手的充電器才走 UFCS，其餘照常走 PD。",
@@ -1273,6 +1298,7 @@ function setTab(name) {
 /* ================= status ================= */
 function feState(s) {
   if (s.flags & 1) return [t("stLegacy"), "warn"];
+  if (s.fe >= 16) return [(s.fe >= 20 ? "QC · " : "UFCS · ") + [t("stNone"), t("stWait"), t("stReady"), t("stNeg")][s.fe & 3], (s.fe & 3) === 2 ? "ok" : "acc"];
   return [[t("stWait"), ""], [t("stNeg"), "acc"], [t("stNeg"), "acc"], [t("stReady"), "ok"], [t("stLegacy"), "warn"],
     [t("stNeg"), "acc"], [t("stReset"), "warn"], [t("stEpr"), "acc"], [t("stEpr"), "acc"]][s.fe] ?? [String(s.fe), ""];
 }
@@ -1792,7 +1818,7 @@ function readForm() {
     /* flags2：bit0 關閉資訊透傳，bit1 身份透傳（舊韌體沒有） */
     flags2: state.cfg && state.cfg.flags2 == null ? null : ($("infoPt").checked ? 0 : 1) | ($("idPt").checked ? 2 : 0) | ($("forcePps").checked ? 4 : 0) | ($("ppsc").checked ? 8 : 0) | ($("ufcs").checked ? 16 : 0) | ($("idFe").checked ? 32 : 0) | ($("idBe").checked ? 64 : 0) | ($("avs2ppsMin5").checked ? 128 : 0),
     /* flags3：bit0 開啟記錄（韌體 v0.10.1 起；舊韌體沒有） */
-    flags3: state.cfg && state.cfg.flags3 == null ? null : $("logOn").checked ? 1 : 0,
+    flags3: state.cfg && state.cfg.flags3 == null ? null : ($("logOn").checked ? 1 : 0) | ($("qc").checked ? 8 : 0) | ($("qc").checked && $("qcPps1").checked ? 16 : 0),
     /* 自訂 PPS 未勾選時沿用原值；舊韌體沒有 */
     ppsLo: state.cfg && state.cfg.ppsLo == null ? null : $("ppsc").checked ? Math.round(Number($("ppscLo").value) * 10) || 0 : state.cfg?.ppsLo ?? 33,
     ppsHi: state.cfg && state.cfg.ppsHi == null ? null : $("ppsc").checked ? Math.round(Number($("ppscHi").value) * 10) || 0 : state.cfg?.ppsHi ?? 160,
@@ -1810,7 +1836,7 @@ function writeForm(c) {
   document.querySelectorAll(".chip input").forEach((x) => (x.checked = !!(c.hide & (1 << Number(x.dataset.bit)))));
   $("maxMa").value = c.maxMa; $("ovp").value = c.ovp; $("uvp").value = c.uvp; $("ocpMa").value = c.ocpMa; $("ocpMs").value = c.ocpMs;
   $("fix12").checked = !!(c.flags & 1); $("logPps").checked = !!(c.flags & 2);
-  $("logOn").checked = !!((c.flags3 ?? 0) & 1); $("logOn").disabled = !(state.info && state.info.fw >= 0xA1);
+  $("logOn").checked = !!((c.flags3 ?? 0) & 1); $("qc").checked = !!((c.flags3 ?? 0) & 8); $("qcPps1").checked = !!((c.flags3 ?? 0) & 16); $("logOn").disabled = !(state.info && state.info.fw >= 0xA1);
   writeExt(c.x);
   $("fe2nd").checked = !!(c.flags & 4); $("be2nd").checked = !!(c.flags & 8); $("avs2pps").checked = !!(c.flags & 16); $("emarker").checked = !!(c.flags & 32); $("eprAvs").checked = !!(c.flags & 64);
   $("fixc").checked = !!(c.flags & 128); $("fixcV").value = c.fixDv ? (c.fixDv / 10).toFixed(1) : "7.4"; $("fixcA").value = c.fixMa50 ? (c.fixMa50 / 20).toFixed(2) : "2.00";
@@ -1966,6 +1992,7 @@ $("pdol").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updat
 $("pdol2").addEventListener("change", () => { applyLabDeps(); pdolStatus(); updateDirty(); });
 $("be2nd").addEventListener("change", applyLabDeps);
 $("forcePps").addEventListener("change", applyLabDeps);
+$("qc").addEventListener("change", applyLabDeps);
 function writeExt(x) {
   const old = !!state.cfg && !state.cfg.x;
   const v = x || { flags: 0, cable: VC_DEFAULT, fcable: FC_DEFAULT, pdo: PDOL_DEFAULT.map(simRaw), pdo2: PDOL_DEFAULT.map(simRaw) };
@@ -2101,14 +2128,19 @@ function parseHex(text, base, max) {
   mem.forEach((v, addr) => (out[addr - base] = v));
   return out;
 }
-/* 完整映像（.bin）：程式頭頁在 0xBE80，大小取自頭；單純的應用程式 .bin 直接使用 */
+/* 完整映像（.bin）：程式頭頁在 0xBE80（布局 0）或 0xED80（布局 2），大小取自頭；單純的應用程式 .bin 直接使用 */
 function appFromBin(b, base, max) {
-  if (b.length === 0xBF00 && u32(b, 0xBE80) === 0x31505041) return b.slice(base, base + u32(b, 0xBE84));
+  for (const h of [0xBE80, 0xED80]) if (b.length === h + 0x80 && u32(b, h) === 0x31505041) return b.slice(base, base + u32(b, h + 4));
   const out = new Uint8Array(Math.ceil(b.length / 4) * 4).fill(0xFF); out.set(b); return out;
 }
 /* 應用程式映像開頭附近有 app_info（魔數 'PPSA'、版本 u16，見 src/main.c）；Bootloader 等其他映像沒有 */
 function appVersion(b) {
   for (let o = 0; o + 8 <= Math.min(b.length, 0x400); o += 4) if (u32(b, o) === 0x41535050) return u16(b, o + 4);
+  return 0;
+}
+/* Flash 布局（app_info.reserved）：0 = v0.13.x 及以前（程式區 0xA600），2 = v0.14.0 起（0xD500）；須與 Bootloader 相符 */
+function appLayout(b) {
+  for (let o = 0; o + 8 <= Math.min(b.length, 0x400); o += 4) if (u32(b, o) === 0x41535050) return u16(b, o + 6);
   return 0;
 }
 async function onFwFile() {
@@ -2125,6 +2157,7 @@ function loadFwImage(name, buf) {
     const f = { name };
     const bytes = /\.hex$/i.test(f.name) ? parseHex(new TextDecoder().decode(buf), sys.appBase, sys.appMax) : appFromBin(buf, sys.appBase, sys.appMax);
     if (!bytes || bytes.length < 0x800 || !appVersion(bytes) || (bytes[0] & 0x7F) !== 0x6F) $("fwFileInfo").textContent = t("fwBad");
+    else if (appLayout(bytes) !== (sys.appMax >= 0xD500 ? 2 : 0)) $("fwFileInfo").textContent = t("fwLayout")(appLayout(bytes) === 2);
     else if (bytes.length > sys.appMax) $("fwFileInfo").textContent = t("fwBig")(sys.appMax);
     else { state.fw = { name: f.name, bytes, ver: appVersion(bytes), crc: crc32(bytes) }; $("fwFileInfo").textContent = t("fwFile")(f.name, bytes.length, state.fw.ver, state.fw.crc); }
   }
@@ -2204,7 +2237,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.13.0";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.14.0";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2278,7 +2311,7 @@ async function readPage(idx) {
 async function loadLog(session) {
   const pages = [];
   const s = state.sessions.find((x) => x.session === session);
-  if (s) for (let k = 0; k < s.pages; k++) pages.push({ idx: (s.first + k) % (state.info && state.info.proto >= 12 ? 126 : 128), ram: false });
+  if (s) for (let k = 0; k < s.pages; k++) pages.push({ idx: (s.first + k) % (!state.info ? 128 : state.info.proto >= 13 ? 32 : state.info.proto >= 12 ? 126 : 128), ram: false });
   if (session === state.current) {
     if (state.ramMask & 2) pages.push({ idx: 0xFE, ram: true });
     if (state.ramMask & 4) pages.push({ idx: 0xFD, ram: true });
@@ -2313,7 +2346,7 @@ function pdoChips(caps, src, fcaps) {
 }
 function cfgText(c) {
   const flags = [c.flags & 1 ? t("fix12s") : "", c.flags & 2 ? t("pps") : "", c.flags & 4 ? t("fe2s") : "",
-    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? `${t("a2ps")}${(c.flags2 ?? 0) & 128 ? " 5 V" : ""}` : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "", (c.flags2 ?? 0) & 16 ? t("ufcss") : "",
+    c.flags & 8 ? t("be2s") : "", c.flags & 16 ? `${t("a2ps")}${(c.flags2 ?? 0) & 128 ? " 5 V" : ""}` : "", c.flags & 32 ? t("em") : "", c.flags & 64 ? t("eprs") : "", c.flags & 128 ? `${t("fixcs")} ${(c.fixDv / 10).toFixed(1)} V ${fmtA(c.fixMa50 * 50)}` : "", (c.flags2 ?? 0) & 4 ? t("fpps") : "", (c.flags2 ?? 0) & 16 ? t("ufcss") : "", (c.flags3 ?? 0) & 8 ? t("qcs") + ((c.flags3 ?? 0) & 16 ? " (1 PPS)" : "") : "",
     (c.flags2 ?? 0) & 64 ? `${t("idBes")} ${hex4(c.beVid)}:${hex4(c.bePid)}` : "", (c.flags2 ?? 0) & 32 ? `${t("idFes")} ${hex4(c.feVid)}:${hex4(c.fePid)}` : "",
     (c.flags2 ?? 0) & 8 ? `${t("ppscs")} ${(c.ppsLo / 10).toFixed(1)}–${(c.ppsHi / 10).toFixed(1)} V ${fmtA(c.ppsMa50 * 50)}` : ""].filter(Boolean).join(", ");
   const comp = c.compMode === 1 ? ` · ${t("compVs")} ${c.compVal} mV` : c.compMode === 2 ? ` · ${t("compRs")} ${c.compVal} mΩ` : "";
@@ -2350,6 +2383,20 @@ function ufcsPktText(d) {
     else body = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(" ");
   }
   return `${dir} ${speed} · ${name} #${num} →${addr}${crcOk ? "" : " · CRC ✗"}${body ? " · " + body : ""} · ${hexs}`;
+}
+const QC_MODE = ["5 V (D+ 0.6 / D− 0)", "9 V (D+ 3.3 / D− 0.6)", "12 V (D+ 0.6 / D− 0.6)", "20 V (D+ 3.3 / D− 3.3)", "QC3 continuous (D+ 0.6 / D− 3.3)"];
+function qcStepText(d) {
+  const code = d[0], arg = d[1], x = u16(d, 2), vb = `VBUS ${fmtV(u16(d, 4))}`, at = d.length >= 8 ? ` · t+${u16(d, 6)} ms` : "";
+  switch (code) {
+    case 1: return `DCP check: D− ${arg ? "follows D+ 0.6 V (D+/D− shorted, charger)" : "does not follow D+ 0.6 V"} · D− level ${x} (~${(x * 51.6 / 1000).toFixed(2)} V) · ${vb}${at}`;
+    case 2: return (arg ? `Charger released D− after ${x} ms (HVDCP handshake done)` : "D− never released within 3 s — not a QC charger (still trying modes)") + ` · ${vb}${at}`;
+    case 3: return `QC mode ${QC_MODE[arg] ?? arg} · after ${x} ms · ${vb}${at}`;
+    case 4: return `QC3 ${arg & 0x80 ? "up" : "down"} ×${arg & 0x7F} · pulse ${x >= 1000 ? x / 1000 + " ms" : x + " µs"} · ${vb}${at}`;
+    case 5: return `QC probe finished, holding 5 V · ${vb}${at}`;
+    case 7: return arg ? `QC front connected: 5 V${arg & 2 ? " · 9 V" : ""}${arg & 4 ? " · 12 V" : ""}${arg & 8 ? " · QC3 continuous" : ""} · QC3 test +${x} mV from ${fmtV(u16(d, 6))} (3 pulses, > 300 = yes) · ${vb}` : `QC front: not a QC charger (D− did not follow or was not released) · ${vb}`;
+    case 6: return `Idle levels (not driven): D+ ${arg} (~${(arg * 51.6 / 1000).toFixed(2)} V) · D− ${x} (~${(x * 51.6 / 1000).toFixed(2)} V) · ${vb}${at}`;
+    default: return `step ${code}`;
+  }
 }
 const UFS_WAIT = ["", "ACK", "Output_Capabilities", "Accept", "Power_Ready", "Source_Information"];
 function ufcsStepText(d) {
@@ -2428,6 +2475,7 @@ function decodeRecords(records) {
       case 11: text = cfgText(cfgFromBytes(d, d.length >= 20, d.length >= 24, d.length >= 32)); cls = "acc"; break;
       case 18: text = cableText(d[0], d[1], Array.from({ length: d[2] }, (_, i) => u32(d, 3 + i * 4))); cls = d[0] === 4 ? "acc" : ""; break;
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
+      case 19: text = qcStepText(d); cls = (d[0] === 1 || d[0] === 2 || d[0] === 7) && !d[1] ? "warn" : d[0] === 7 ? "ok" : d[0] === 3 || d[0] === 4 ? "ok" : "acc"; cat = d[0] === 3 || d[0] === 4 ? "req" : "other"; break;
       case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;
       case 17: {
         text = ufcsStepText(d);
@@ -2525,6 +2573,7 @@ function applyLabDeps() {
   $("fixcIn").hidden = !$("fixc").checked;
   $("ppscIn").hidden = !$("ppsc").checked;
   $("avs2ppsIn").hidden = !$("avs2pps").checked;
+  $("qcIn").hidden = !$("qc").checked;
   $("vcBody").hidden = !$("vcable").checked;
   $("beIdle").disabled = !$("vcable").checked; if (!$("vcable").checked) $("beIdle").checked = false;
   $("beIdleRow").style.opacity = $("vcable").checked ? "" : ".5";

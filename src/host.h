@@ -20,13 +20,13 @@
  * 0x11 CFG_SET cfg  → 校验失败返回 BAD_ARG；成功立即生效并排队保存
  * 0x12 CFG_DEFAULT  → 恢复默认设置
  * 0x20 LOG_SESSIONS → current u16, ram_mask u8（bit0 当前页，bit1/2 待写页），n u8, {session u16, first_idx u8, pages u8}[n]
- * 0x21 LOG_READ idx off → idx u8, off u8, len u8, data[len ≤ 56]（idx 0~125 Flash 页，0xFF/0xFE/0xFD RAM 页）
+ * 0x21 LOG_READ idx off → idx u8, off u8, len u8, data[len ≤ 56]（idx 0~31 Flash 页（协议 v13 起；v12 为 0~125，更早 0~127），0xFF/0xFE/0xFD RAM 页）
  * 0x22 LOG_CLEAR    → 清除全部记录
  * 0x30 SYS_INFO    → 在线升级信息（协议 v9 起，格式见 iap.h）
  * 0x31 ENTER_BL "BL" → 复位进入 Bootloader（后端输出会中断）；之后用 iap.h 里的 0x40 系列命令刷写
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  12
+#define HOST_PROTO_VERSION  13
 
 void host_process(void);

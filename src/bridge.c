@@ -694,8 +694,9 @@ static bool entry_covers(const back_entry_t *e)
         return false;
     if (back_type == FPDO)
         return e->mv == back_mv;
+    /* PPS 不比电流：能力表电流变小（如 QC 合成 PPS 跨档）时保持合约，重新广播后设备会按新电流重新请求 */
     if (back_type == PPS_PDO)
-        return back_mv >= e->min_mv && back_mv <= e->mv && back_ma <= e->ma;
+        return back_mv >= e->min_mv && back_mv <= e->mv;
     return back_mv >= 9000 && back_mv <= e->mv;
 }
 

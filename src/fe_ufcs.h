@@ -8,6 +8,7 @@
 #include "fe_sink.h"
 
 bool feu_start(void);                   /* 阻塞：握手 + Ping；成功后激活（此时不应启动 USB HID 和 PD 前端） */
+bool feu_start_qc(void);                /* 阻塞约 1.6~2.1s：QC2.0/3.0 握手与探测；成功后激活（此时不应启动 USB HID 和 PD 前端） */
 bool feu_active(void);
 bool feu_process(void);                 /* false = 会话丢失且重连失败，调用方改用 PD 前端 */
 void feu_stop(void);

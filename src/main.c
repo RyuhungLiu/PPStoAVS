@@ -17,10 +17,13 @@
 #include "bridge.h"
 #include "cfg.h"
 #include "evlog.h"
+#include "flash_io.h"
 #include "fe_sink.h"
 #include "fe_ufcs.h"
 #include "host.h"
 #include "pd_phy.h"
+#include "qc.h"
+#include "qc_probe.h"
 #include "power_sw.h"
 #include "store.h"
 #include "timebase.h"
@@ -33,7 +36,7 @@ __attribute__((section(".appinfo"), used)) const struct
     uint32_t magic;
     uint16_t version;
     uint16_t reserved;
-} app_info = {0x41535050u, FW_VERSION, 0};
+} app_info = {0x41535050u, FW_VERSION, FLASH_LAYOUT};
 
 static void watchdog_init(void)
 {
@@ -64,7 +67,7 @@ int main(void)
     fe_ra_apply();      /* 虚拟 E-Marker：尽早呈现 Ra */
     /* 虚拟 E-Marker：充电器一上电就查询线材（早于首次广播），前端 PHY 要在其余初始化之前开始接收 */
     const bool early_fe = (cfg()->flags & CFG_FE_EMARKER) && !(cfg()->flags2 & CFG2_UFCS)
-#ifdef UFCS_PROBE
+#if defined(UFCS_PROBE) || defined(QC_PROBE)
                           && false
 #endif
         ;
@@ -94,11 +97,22 @@ int main(void)
     be_init();
     if (early_fe)
         fe_cable_poll();
-    /* 前端 D+/D− 与 USB HID 共用：先看 UFCS（设置开启，或探测固件），握手成功则前端走 UFCS，不启动 HID 和 PD 前端 */
+#ifdef QC_PROBE
+    /* QC 探测：充电器（DCP）上执行完后只写记录；接电脑（非 DCP）照常启动，供网页读记录 */
+    if (qc_probe_boot())
+    {
+        while (1)
+            qc_probe_idle();
+    }
+#endif
+    /* 前端 D+/D− 与 USB HID 共用：先看 UFCS、再看 QC（设置开启，或探测固件），握手成功则前端走 UFCS / QC，不启动 HID 和 PD 前端
+     * （与 PD 同时支持的充电器也会走 UFCS / QC；此时后端尚未供电，QC 探测的 9V/12V 不会到设备） */
 #ifdef UFCS_PROBE
     const bool ufcs_up = ufcs_probe_boot();     /* 阻塞：电平扫描 → 握手 → Ping（此时看门狗尚未启动） */
+#elif defined(QC_PROBE)
+    const bool ufcs_up = false;
 #else
-    const bool ufcs_up = (cfg()->flags2 & CFG2_UFCS) && feu_start();
+    const bool ufcs_up = ((cfg()->flags2 & CFG2_UFCS) && feu_start()) || ((cfg()->flags3 & CFG3_QC) && feu_start_qc());
 #endif
     if (!ufcs_up)
         usb_hid_init();
@@ -107,6 +121,7 @@ int main(void)
 
     watchdog_init();
     ufcs_set_yield(watchdog_feed);
+    qc_set_yield(watchdog_feed);
 
 #ifdef UFCS_PROBE
     if (ufcs_up)

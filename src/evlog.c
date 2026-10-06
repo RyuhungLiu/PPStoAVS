@@ -41,6 +41,9 @@ static int16_t clear_idx = -1;
 
 static bool log_on(void)
 {
+#ifdef QC_PROBE
+    return true;        /* 探测固件：不论设置都记录 */
+#endif
     return (cfg()->flags3 & CFG3_LOG) != 0;
 }
 

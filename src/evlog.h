@@ -1,5 +1,5 @@
 /*
- * 透传记录：每次上电为一段（session），事件按时间顺序写入 Flash 环形区（126 页 × 128 字节）
+ * 透传记录：每次上电为一段（session），事件按时间顺序写入 Flash 环形区（32 页 × 128 字节，Flash 布局 2）
  *
  * 页格式：magic u16 | session u16 | seq u32 | data[116] | crc32（前 124 字节）
  * 记录格式：type u8 | len u8 | t_ms u32（上电后毫秒）| payload[len]；type 0 表示页内结束
@@ -37,6 +37,7 @@ typedef enum
     EV_IDENT        = 15,   /* ev_ident_t：读到充电器 / 设备的身份（Discover Identity） */
     EV_UFCS_PKT     = 16,   /* ev_ufcs_pkt_t：UFCS 原始报文（探测固件） */
     EV_UFCS_STEP    = 17,   /* ev_ufcs_step_t：UFCS 探测流程节点 */
+    EV_QC_STEP      = 19,   /* ev_qc_step_t：QC2.0/3.0 探测固件（-DQC_PROBE）流程节点，正式前端只记 QCS_CONNECT */
     EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
 } ev_type_t;
 
@@ -176,7 +177,7 @@ void evlog_clear(void);                             /* 清除全部记录（分�
 bool evlog_clearing(void);
 
 uint8_t evlog_sessions(evlog_session_t *out, uint8_t max);     /* 最新在前 */
-const uint8_t *evlog_page(uint8_t idx);             /* 128 字节整页；无效索引返回 NULL（索引 0~125） */
+const uint8_t *evlog_page(uint8_t idx);             /* 128 字节整页；无效索引返回 NULL（索引 0~31） */
 
 /* UFCS 探测：原始报文（dir 0 = 收，1 = 发；raw 为线上字节，不含训练字节；后面跟 raw[len]） */
 typedef struct __attribute__((packed))
@@ -227,3 +228,33 @@ typedef struct __attribute__((packed))
     uint16_t i_ma;
     uint16_t vbus_mv;
 } ev_ufcs_step_t;
+
+/* QC 探测（-DQC_PROBE） */
+typedef enum
+{
+    QCS_DCP     = 1,    /* arg：1 = D− 跟随 D+ 0.6V（DCP 短接）；x = D− 电平档位（×51.6mV） */
+    QCS_BC_DONE = 2,    /* arg：1 = 充电器已放开 D−；x = 从 D+ 0.6V 起的 ms */
+    QCS_MODE    = 3,    /* arg：qc_mode_t；x = 等待 ms */
+    QCS_PULSE   = 4,    /* arg：bit7 = 升，低 7 位 = 脉冲数；x = 脉宽 µs */
+    QCS_DONE    = 5,
+    QCS_CONNECT = 7,    /* 正式前端（Lab QC）：arg = QC_* 探测结果，0 = 不是 QC 充电器；x = QC3 测试 3 个脉冲后 VBUS 升高 mV，t_ms 字段改放测试前基准 VBUS（mV） */
+    QCS_IDLE    = 6,    /* 不驱动时：arg = D+ 电平档位，x = D− 电平档位（×51.6mV，64 = 高于 3.25V） */
+} qc_step_t;
+
+typedef enum
+{
+    QCM_5V   = 0,       /* D+ 0.6 / D− 0 */
+    QCM_9V   = 1,       /* 3.3 / 0.6 */
+    QCM_12V  = 2,       /* 0.6 / 0.6 */
+    QCM_20V  = 3,       /* 3.3 / 3.3 */
+    QCM_CONT = 4,       /* QC3 连续模式：0.6 / 3.3 */
+} qc_mode_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  code;      /* qc_step_t */
+    uint8_t  arg;
+    uint16_t x;
+    uint16_t vbus_mv;
+    uint16_t t_ms;      /* 从探测开始的 ms */
+} ev_qc_step_t;

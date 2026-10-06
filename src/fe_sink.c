@@ -839,6 +839,7 @@ void fe_init(void)
     set_state(FE_ST_WAIT_CAPS);
 }
 
+
 static void enter_legacy(void)
 {
     set_state(FE_ST_LEGACY);
