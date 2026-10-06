@@ -98,10 +98,10 @@ static void release(void)
     exten1_modify(DP_MASK | DM_MASK | EXTEN_UDU_SHRT, 0);
 }
 
-uint8_t qc_connect(uint16_t *dv, uint16_t *base)
+/* BC1.2 → HVDCP 握手（QC、AFC、FCP 共用）：D+ 0.6V，D− 跟随（DCP 短接）后等充电器放开；
+ * 成功时 D+ 保持 0.6V、D− 留在比较器模式；失败时放开两脚。返回放开所用 ms，0 = 失败 */
+uint16_t qc_handshake(void)
 {
-    *dv = 0;
-    *base = 0;
     RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOB, ENABLE);
     GPIO_InitTypeDef g = {0};
     g.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
@@ -133,7 +133,7 @@ uint8_t qc_connect(uint16_t *dv, uint16_t *base)
             if (!low)
                 low = now;
             else if (now - low >= 10)
-                break;
+                return (uint16_t)(low - s) | 1;
         }
         else if (now - s > 500)
         {
@@ -141,6 +141,17 @@ uint8_t qc_connect(uint16_t *dv, uint16_t *base)
             return 0;
         }
     }
+}
+
+void qc_release(void)
+{
+    release();
+}
+
+uint8_t qc_detect(uint16_t *dv, uint16_t *base)
+{
+    *dv = 0;
+    *base = 0;
 
     /* 先在 5V 测 QC3（不用等高压放电）：QC3 向下兼容 QC2，测到就认定 5/9/12V 都有；没有 QC3 才逐档测 QC2 */
     uint8_t f = QC_OK;

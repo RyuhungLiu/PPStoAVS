@@ -37,6 +37,9 @@ typedef enum
     EV_IDENT        = 15,   /* ev_ident_t：读到充电器 / 设备的身份（Discover Identity） */
     EV_UFCS_PKT     = 16,   /* ev_ufcs_pkt_t：UFCS 原始报文（探测固件） */
     EV_UFCS_STEP    = 17,   /* ev_ufcs_step_t：UFCS 探测流程节点 */
+    EV_HV_STEP      = 20,   /* ev_hv_step_t：AFC/FCP 探测固件（-DHV_PROBE）流程节点 */
+    EV_HV_EDGES     = 21,   /* AFC/FCP 探测：tag u8（FCP：事务 | CRC 方案 << 4；0x0E/0x0F = AFC 9V/5V 第一轮的从机回应）, (起始序号 << 1 | 首段电平) u8, n u8, 电平持续 µs u16[n]（电平逐段交替） */
+    EV_HV_BYTES     = 22,   /* AFC/FCP/SCP 探测：tag u8, 校验错位图 u8, n u8, 从机字节[n]（固件按波形解码） */
     EV_QC_STEP      = 19,   /* ev_qc_step_t：QC2.0/3.0 探测固件（-DQC_PROBE）流程节点，正式前端只记 QCS_CONNECT */
     EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
 } ev_type_t;
@@ -237,6 +240,7 @@ typedef enum
     QCS_MODE    = 3,    /* arg：qc_mode_t；x = 等待 ms */
     QCS_PULSE   = 4,    /* arg：bit7 = 升，低 7 位 = 脉冲数；x = 脉宽 µs */
     QCS_DONE    = 5,
+    QCS_AFC     = 8,    /* 正式前端（Lab AFC）：arg = 充电器回的 V/I 表字节数（0 = 不是 AFC），x = 表的第 1、2 字节，t_ms 字段 = 第 3、4 字节 */
     QCS_CONNECT = 7,    /* 正式前端（Lab QC）：arg = QC_* 探测结果，0 = 不是 QC 充电器；x = QC3 测试 3 个脉冲后 VBUS 升高 mV，t_ms 字段改放测试前基准 VBUS（mV） */
     QCS_IDLE    = 6,    /* 不驱动时：arg = D+ 电平档位，x = D− 电平档位（×51.6mV，64 = 高于 3.25V） */
 } qc_step_t;
@@ -258,3 +262,25 @@ typedef struct __attribute__((packed))
     uint16_t vbus_mv;
     uint16_t t_ms;      /* 从探测开始的 ms */
 } ev_qc_step_t;
+
+/* AFC / FCP 探测（-DHV_PROBE） */
+typedef enum
+{
+    HVS_HANDSHAKE = 1,  /* arg：1 = 充电器已放开 D−；x = ms */
+    HVS_AFC       = 2,  /* arg：低 4 位 0 = 成功、1~4 = 第几个从机 Ping 失败，高 4 位 = 第几轮；x = 第一个从机 Ping 的 µs */
+    HVS_VBUS      = 3,  /* arg：1 AFC 9V 后，2 AFC 回 5V 后，3 SCP 5.5V 输出使能后，5 SCP 复位后，9 VBUS 掉到 4V 以下（充电器断电）；x = VBUS mV */
+    HVS_FCP       = 4,  /* arg：低 4 位 = 事务（hv_probe.c xfers[]：1 读 0x80 … 9 读 0x21，10~13 写 0xA0 / 0xCA），
+                           高 4 位 = CRC 方案（0 不带，见 hv_probe.c crcs[]）；x：低 8 位 = 回应跳变数（2 = 只有从机 Ping），
+                           bit8 = 首个从机 Ping 失败，bit9 = 结尾从机 Ping 失败 */
+    HVS_DONE      = 5,
+    HVS_FCP_CRC   = 6,  /* arg：有回应的 CRC 方案，0xFF = 都没有 */
+} hv_step_t;
+
+typedef struct __attribute__((packed))
+{
+    uint8_t  code;      /* hv_step_t */
+    uint8_t  arg;
+    uint16_t x;
+    uint16_t vbus_mv;
+    uint16_t t_ms;
+} ev_hv_step_t;

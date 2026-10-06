@@ -47,7 +47,8 @@ typedef enum
 #define CFG3_OLD_5A         (1u << 2)   /* v0.11.x 的线材策略（5A） */
 #define CFG3_QC             (1u << 3)   /* Lab：前端 QC2.0/3.0——上电时（UFCS 之后）先用 D+/D− 握手，成功则前端走 QC，否则照常 PD */
 #define CFG3_QC_PPS1        (1u << 4)   /* Lab（需 CFG3_QC）：QC3 合成为一个 PPS 3.6~12V，电流随当前电压档（≤5.9V 3A、≤9V 2A、以上 1.5A）变化并重新广播 */
-#define CFG3_MASK           (CFG3_LOG | CFG3_QC | CFG3_QC_PPS1)
+#define CFG3_AFC            (1u << 5)   /* Lab：前端三星 AFC——上电时与 QC 共用握手，QC 没有 9V/12V/QC3 时试 AFC（取充电器 V/I 表，合成 Fixed 档） */
+#define CFG3_MASK           (CFG3_LOG | CFG3_QC | CFG3_QC_PPS1 | CFG3_AFC)
 #define CFG_PPS_DV_MIN      33          /* 自订 PPS 电压 3.3V ~ 21V（100mV 单位） */
 #define CFG_PPS_DV_MAX      210
 #define CFG_FIX_DV_MIN      51          /* 自订 Fixed 电压 5.1V ~ 20V（100mV 单位） */

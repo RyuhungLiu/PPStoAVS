@@ -5,6 +5,7 @@
 #include "cfg.h"
 #include "evlog.h"
 #include "power_sw.h"
+#include "afc.h"
 #include "qc.h"
 #include "timebase.h"
 #include "ufcs.h"
@@ -35,11 +36,8 @@ static uint32_t contract_rdo, pending_rdo;
 static origin_t pending_origin;
 static bool pending_valid;              /* 已接受请求，等引擎空闲后发出 */
 static fe_req_status_t req_status = FE_REQ_IDLE;
-#ifdef QC_PROBE
-#define qcf 0                           /* 探测固件放不下正式 QC 前端 */
-#else
-static uint8_t qcf;                     /* QC 前端：qc_connect 的结果（QC_*），0 = UFCS */
-#endif
+static uint8_t qcf;                     /* QC 前端：qc_detect 的结果（QC_*），0 = 不是 QC */
+static uint8_t afcn, afcl[7];           /* AFC 前端：充电器的 V/I 表（按电压升序、同电压取大电流），afcn = 0 = 不是 AFC */
 
 bool feu_active(void)
 {
@@ -58,21 +56,85 @@ bool feu_start(void)
     return true;
 }
 
-/* QC2.0/3.0 前端（Lab，上电时在 UFCS 之后、USB HID 与 PD 前端之前由 main 调用）：能力按 18W 惯例合成（QC 不报告电流）：
- * Fixed 5V 3A / 9V 2A / 12V 1.5A（探测到的档位），QC3 另给 PPS 3.6~5.9V 3A、3.6~9V 2A、3.6~12V 1.5A */
-#ifndef QC_PROBE
-bool feu_start_qc(void)
+/* AFC 的 V/I 表整理：校验范围、按电压升序、同电压取大电流；第一个必须是 5V（没有就补 5V 0.75A） */
+static uint8_t afc_table(const uint8_t *raw, uint8_t n)
 {
-    /* 探测会把前端升到 9V / 12V / 5.6V：期间关断后端（此时后端只有非 PD 的 5V 合约），探测结束回到 5V 再恢复 */
+    uint8_t k = 0;
+    for (uint8_t i = 0; i < n; i++)
+    {
+        uint8_t b = raw[i], j = 0;
+        while (j < k && afc_mv(afcl[j]) < afc_mv(b))
+            j++;
+        if (j < k && afc_mv(afcl[j]) == afc_mv(b))
+        {
+            if ((b & 15) > (afcl[j] & 15))
+                afcl[j] = b;
+            continue;
+        }
+        if (k >= sizeof(afcl))
+            continue;
+        for (uint8_t m = k; m > j; m--)
+            afcl[m] = afcl[m - 1];
+        afcl[j] = b;
+        k++;
+    }
+    if (k && afc_mv(afcl[0]) != 5000)
+    {
+        if (k >= sizeof(afcl))
+            k--;
+        for (uint8_t m = k; m > 0; m--)
+            afcl[m] = afcl[m - 1];
+        afcl[0] = 0x00;
+        k++;
+    }
+    return k;
+}
+
+/* QC2.0/3.0 与 AFC 前端（Lab，上电时在 UFCS 之后、USB HID 与 PD 前端之前由 main 调用）：共用 BC1.2→HVDCP 握手；
+ * 先试 QC（有 9V / 12V / QC3 才算），否则试 AFC（取 V/I 表）。
+ * QC 能力按 18W 惯例合成（QC 不报告电流）：Fixed 5V 3A / 9V 2A / 12V 1.5A（探测到的档位），QC3 另给 PPS 3.6~5.9V 3A、3.6~9V 2A、3.6~12V 1.5A；
+ * AFC 能力 = 充电器 V/I 表的各档 Fixed（电流按表） */
+bool feu_start_dcp(void)
+{
+    const cfg_t *c = cfg();
+    bool want_qc = (c->flags3 & CFG3_QC) != 0, want_afc = (c->flags3 & CFG3_AFC) != 0;
+    /* QC 探测会把前端升到 9V / 12V / 5.6V：期间关断后端（此时后端只有非 PD 的 5V 合约），探测结束回到 5V 再恢复 */
     bool sw = power_sw_is_on();
     power_sw_set(false);
-    uint16_t dv, base;
-    qcf = qc_connect(&dv, &base);
+    uint16_t hs = qc_handshake(), dv = 0, base = 0;
+    qcf = 0;
+    afcn = 0;
+    if (want_qc)
+    {
+        if (hs)
+            qcf = qc_detect(&dv, &base);
+        ev_qc_step_t e = {QCS_CONNECT, qcf, dv, analog_vbus_mv(), base};
+        evlog_add(EV_QC_STEP, &e, sizeof(e));
+        if (!(qcf & (QC_9V | QC_12V | QC_3)))
+        {
+            qcf = 0;
+            /* QC 档位试过 D+ 3.3V 等电平，AFC 充电器可能已离开 HVDCP 状态：放开 D± 让充电器复位（D+ < 0.325V），再握手一次 */
+            if (hs && want_afc)
+            {
+                qc_release();
+                delay_ms(100);
+                hs = qc_handshake();
+            }
+        }
+    }
+    if (hs && !qcf && want_afc)
+    {
+        uint8_t raw[8] = {0};
+        uint8_t n = afc_query(raw, sizeof(raw));
+        afcn = afc_table(raw, n);
+        ev_qc_step_t e = {QCS_AFC, n, (uint16_t)(raw[0] | raw[1] << 8), analog_vbus_mv(), (uint16_t)(raw[2] | raw[3] << 8)};
+        evlog_add(EV_QC_STEP, &e, sizeof(e));
+    }
+    if (!qcf && !afcn)
+        qc_release();
     if (sw)
         power_sw_set(true);
-    ev_qc_step_t e = {QCS_CONNECT, qcf, dv, analog_vbus_mv(), base};
-    evlog_add(EV_QC_STEP, &e, sizeof(e));
-    if (!qcf)
+    if (!qcf && !afcn)
         return false;
     has_contract = false;
     pending_valid = false;
@@ -107,6 +169,13 @@ static uint8_t qc_caps(uint32_t *raw)
     return n;
 }
 
+static uint8_t afc_caps(uint32_t *raw)
+{
+    for (uint8_t i = 0; i < afcn; i++)
+        raw[i] = pd_build_fixed_pdo(afc_mv(afcl[i]), afc_ma(afcl[i]), 0);
+    return afcn;
+}
+
 /* 合约电压所在档（带 200mV 回差） */
 static uint8_t qc_band_of(uint16_t mv)
 {
@@ -117,7 +186,6 @@ static uint8_t qc_band_of(uint16_t mv)
         b--;
     return b;
 }
-#endif
 
 void feu_stop(void)
 {
@@ -191,11 +259,11 @@ static void on_caps(void)
 {
     uint8_t n;
     uint32_t raw[7];
-#ifndef QC_PROBE
-    if (qcf)
+    if (afcn)
+        num_caps = afc_caps(raw);
+    else if (qcf)
         num_caps = qc_caps(raw);
     else
-#endif
     {
         const ufcs_mode_t *md = ufcs_modes(&n);
         num_caps = ufcs_synth_caps(md, n, raw, src_mode);
@@ -236,7 +304,36 @@ static bool on_dead(void)
 
 bool feu_process(void)
 {
-#ifndef QC_PROBE
+    if (afcn)
+    {
+        afc_process();
+        if (st == FU_WAIT_CAPS)
+        {
+            on_caps();
+            if (st == FU_WAIT_CAPS)
+                st = FU_READY;
+        }
+        else if (st == FU_REQ)
+        {
+            if (pending_valid)
+            {
+                int8_t k = -1;
+                for (uint8_t i = 0; i < afcn; i++)
+                    if (afc_mv(afcl[i]) == pending.mv)
+                        k = (int8_t)i;
+                if (k < 0 || pending.type != FPDO)
+                    request_finished(false);
+                else
+                {
+                    afc_set(afcl[k]);
+                    pending_valid = false;
+                }
+            }
+            else if (!afc_busy())
+                request_finished(afc_ok());
+        }
+        return true;
+    }
     if (qcf)
     {
         qc_process();
@@ -277,7 +374,6 @@ bool feu_process(void)
         }
         return true;
     }
-#endif
     ufcs_process();
     if (ufcs_dead())
         return on_dead();
@@ -320,12 +416,12 @@ uint32_t feu_contract_rdo(void)
 
 bool feu_flash_safe(void)
 {
-    return st == FU_READY && (qcf ? !qc_busy() : ufcs_flash_safe());
+    return st == FU_READY && (afcn ? !afc_busy() : qcf ? !qc_busy() : ufcs_flash_safe());
 }
 
 uint8_t feu_state_code(void)
 {
-    return (qcf ? 20 : 16) + (uint8_t)st;
+    return (afcn ? 24 : qcf ? 20 : 16) + (uint8_t)st;
 }
 
 bool feu_is_ready(void)

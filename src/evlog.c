@@ -7,7 +7,11 @@
 
 #define LOG_MAGIC               0x4C50u     /* 'PL' */
 #define LOG_MAX_RECORDS         64
+#ifdef HV_PROBE
+#define LOG_MAX_SESSION_PAGES   28          /* 探测固件每个事务都封页落盘 */
+#else
 #define LOG_MAX_SESSION_PAGES   16
+#endif
 #define LOG_ERASE_AHEAD         2           /* 上电时预擦除页数（此时 PD 尚未启动）；不够时空闲再擦 */
 #define LOG_IDLE_SEAL_MS        2000        /* 没有新记录 2s 后封页，尽快落盘 */
 #define REC_HDR                 6u
@@ -41,7 +45,7 @@ static int16_t clear_idx = -1;
 
 static bool log_on(void)
 {
-#ifdef QC_PROBE
+#if defined(QC_PROBE) || defined(HV_PROBE)
     return true;        /* 探测固件：不论设置都记录 */
 #endif
     return (cfg()->flags3 & CFG3_LOG) != 0;
