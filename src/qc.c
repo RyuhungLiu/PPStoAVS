@@ -148,6 +148,11 @@ void qc_release(void)
     release();
 }
 
+void qc_lines_low(void)
+{
+    set_lv(LV_0V, LV_0V);
+}
+
 uint8_t qc_detect(uint16_t *dv, uint16_t *base)
 {
     *dv = 0;

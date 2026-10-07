@@ -1156,7 +1156,10 @@ const u16 = (b, o) => b[o] | (b[o + 1] << 8);
 const u32 = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
 const fmtV = (mv) => (mv / 1000).toFixed(mv % 100 ? 2 : 1) + " V";
 const fmtA = (ma) => (ma / 1000).toFixed(2) + " A";
-const fmtFw = (v) => `v${v >> 8}.${(v >> 4) & 0xF}.${v & 0xF}`;   /* 0xMMmp */
+/* 韌體版本 u16：≥ 0x0100 為「主 << 12 | 次 << 6 | 修訂」（2026-10-07 起的建置），< 0x0100 為發行版 v0.14.5 及以前的 0xMMmp（見 src/board.h） */
+const fwParts = (v) => (v >= 0x100 ? [v >> 12, (v >> 6) & 63, v & 63] : [v >> 8, (v >> 4) & 15, v & 15]);
+const fmtFw = (v) => "v" + fwParts(v).join(".");
+const fmtBl = (v) => `v${v >> 8}.${v & 0xFF}`;   /* Bootloader 版本 0xMMmm */
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 function msg(text) { $("msg").textContent = text || ""; if (text) setTimeout(() => { if ($("msg").textContent === text) $("msg").textContent = ""; }, 6000); }
 
@@ -2187,7 +2190,7 @@ function renderFw() {
   if (dev && mode >= 1) {
     const appVer = mode === 1 ? sys.appVer : sys.appValid ? sys.appVer : 0;
     kv.push([t("fwRowApp"), mode === 2 && !sys.appValid ? t("fwInvalid") : (appVer ? fmtFw(appVer) : "?")]);
-    kv.push([t("fwRowBl"), mode === 2 ? fmtFw(sys.blVer) : "—"]);
+    kv.push([t("fwRowBl"), mode === 2 ? fmtBl(sys.blVer) : "—"]);
     if (sys.appSize) kv.push([t("fwRowSize"), sys.appSize + " B"]);
   }
   $("fwKv").innerHTML = kv.map(([k, v]) => `<div>${esc(k)}</div><div>${esc(v)}</div>`).join("");
@@ -2253,7 +2256,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.14.5";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.14.6";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2266,7 +2269,7 @@ async function ghCheck() {
     ghRel = await r.json();
     const latest = verNum(ghRel.tag_name), cmp = (a, b) => (a > b ? 1 : a < b ? -1 : 0);
     const devV = state.sys && state.sys.mode >= 1 ? (state.sys.mode === 1 ? state.sys.appVer : state.sys.appValid ? state.sys.appVer : 0) : 0;
-    const devN = devV ? ((devV >> 8) << 16) | (((devV >> 4) & 15) << 8) | (devV & 15) : 0;
+    const devN = devV ? (([a, b, c]) => (a << 16) | (b << 8) | c)(fwParts(devV)) : 0;
     ghInfo(t("ghLatest")(ghRel.tag_name, (ghRel.published_at || "").slice(0, 10)) + " " + t("ghRel")(devN ? cmp(latest, devN) : null, cmp(latest, verNum(WEB_VER))));
     $("ghNotes").textContent = (ghRel.body || "").trim() || t("ghNoNotes"); $("ghNotes").hidden = false;
     $("ghPage").href = ghRel.html_url; $("ghPage").hidden = false;
@@ -2402,7 +2405,8 @@ function ufcsPktText(d) {
 }
 /* AFC / FCP 探測（-DHV_PROBE） */
 const HV_CRC = ["no CRC", "CRC-8 0x07", "CRC-8 0x07 init FF", "CRC-8 0x31", "CRC-8 0x31 init FF", "CRC-8 0x1D init FF", "CRC-8 0x9B", "CRC-8 0xD5", "CRC-8/MAXIM (refl 0x8C)", "CRC-8 refl 0xE0"];
-const hvTag = (t) => t === 0x0E ? "AFC 9 V reply" : t === 0x0F ? "AFC 5 V reply" : `${HV_FCP[t & 15] ?? t & 15} · ${HV_CRC[t >> 4] ?? t >> 4}`;
+const HV_SCAN = ["AFC 0x0C test", "scan [v]", "scan [v, 0x80]", "scan [v, 0x00]"];
+const hvTag = (t) => t === 0x0C ? "AFC single byte 0x0C" : t === 0x0E ? "AFC 9 V reply" : t === 0x0F ? "AFC 5 V reply" : `${HV_FCP[t & 15] ?? t & 15} · ${HV_CRC[t >> 4] ?? t >> 4}`;
 const HV_FCP = ["", "read SCP_ADP_TYPE (0x80)", "read SCP_B_ADP_TYPE (0x81)", "read SCP_MAX_POWER (0x90)", "read SCP_MIN_VOUT (0x92)", "read SCP_MAX_VOUT (0x93)", "read SCP_MIN_IOUT (0x94)", "read SCP_MAX_IOUT (0x95)", "read FCP DVCTYPE (0x00)", "read FCP DISCRETE_CAPABILITIES (0x21)", "write SCP_CTRL_BYTE0 (0xA0) = 0x40 (output mode)", "write SCP_VSSET (0xCA) = 5.5 V", "write SCP_CTRL_BYTE0 (0xA0) = 0xC0 (output on)", "write SCP_CTRL_BYTE0 (0xA0) = 0x20 (adapter reset)"];
 function hvStepText(d) {
   const code = d[0], arg = d[1], x = u16(d, 2), vb = `VBUS ${fmtV(u16(d, 4))}`, at = ` · t+${u16(d, 6)} ms`;
@@ -2412,6 +2416,7 @@ function hvStepText(d) {
     case 3: return `${["", "After AFC 9 V", "After AFC back to 5 V", "After SCP 5.5 V + output on", "", "After SCP adapter reset", "", "", "", "VBUS dropped below 4 V (charger cut power)"][arg] ?? arg}: VBUS ${fmtV(x)}${at}`;
     case 4: return `${hvTag(arg)} · ${x & 0x100 ? "no slave ping after master ping" : (x & 255) > 2 ? `reply: ${x & 255} edges` : "slave ping only (no data)"}${x & 0x200 ? " · closing slave ping missing" : ""} · ${vb}${at}`;
     case 5: return `AFC/FCP probe finished · ${vb}${at}`;
+    case 7: return `${HV_SCAN[arg] ?? arg}: reached 0x${(x & 255).toString(16).toUpperCase().padStart(2, "0")} · ${(x >> 8) & 0x7F} value(s) got a reply${x & 0x8000 ? " · aborted (too many lock-ups, or re-handshake failed)" : ""} · ${vb}${at}`;
     case 6: return arg === 0xFF ? `No CRC variant got a reply beyond the slave ping${at}` : `${HV_CRC[arg] ?? arg} got a reply — used for the rest${at}`;
     default: return `step ${code}`;
   }
@@ -2543,7 +2548,7 @@ function decodeRecords(records) {
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 20: text = hvStepText(d); cls = (d[0] === 1 && !d[1]) || (d[0] === 2 && (d[1] & 15)) || (d[0] === 6 && d[1] === 0xFF) ? "warn" : d[0] === 6 || (d[0] === 4 && (u16(d, 2) & 255) > 2) ? "ok" : d[0] === 3 ? (u16(d, 2) > 7500 ? "ok" : "acc") : "acc"; cat = "other"; break;
       case 21: text = hvEdgesText(d); cls = ""; cat = "other"; break;
-      case 22: text = `${hvTag(d[0])} · slave bytes: ${Array.from(d.subarray(3, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> k) & 1 ? "(parity✗)" : "")).join(" ") || "—"}`; cls = "acc"; cat = "other"; break;
+      case 22: text = (d[0] & 0xF0) === 0x50 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · charger stopped answering pings after value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → re-handshake` : d[0] & 0x40 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → reply ${Array.from(d.subarray(4, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> (k + 1)) & 1 ? "(parity✗)" : "")).join(" ") || "—"}` : `${hvTag(d[0])} · slave bytes: ${Array.from(d.subarray(3, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> k) & 1 ? "(parity✗)" : "")).join(" ") || "—"}`; cls = "acc"; cat = "other"; break;
       case 19: text = qcStepText(d); cls = (d[0] === 1 || d[0] === 2 || d[0] === 7 || d[0] === 8) && !d[1] ? "warn" : d[0] === 7 || d[0] === 8 ? "ok" : d[0] === 3 || d[0] === 4 ? "ok" : "acc"; cat = d[0] === 3 || d[0] === 4 ? "req" : "other"; break;
       case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;
       case 17: {

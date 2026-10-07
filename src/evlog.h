@@ -39,8 +39,8 @@ typedef enum
     EV_UFCS_STEP    = 17,   /* ev_ufcs_step_t：UFCS 探测流程节点 */
     EV_HV_STEP      = 20,   /* ev_hv_step_t：AFC/FCP 探测固件（-DHV_PROBE）流程节点 */
     EV_HV_EDGES     = 21,   /* AFC/FCP 探测：tag u8（FCP：事务 | CRC 方案 << 4；0x0E/0x0F = AFC 9V/5V 第一轮的从机回应）, (起始序号 << 1 | 首段电平) u8, n u8, 电平持续 µs u16[n]（电平逐段交替） */
-    EV_HV_BYTES     = 22,   /* AFC/FCP/SCP 探测：tag u8, 校验错位图 u8, n u8, 从机字节[n]（固件按波形解码） */
-    EV_QC_STEP      = 19,   /* ev_qc_step_t：QC2.0/3.0 探测固件（-DQC_PROBE）流程节点，正式前端只记 QCS_CONNECT */
+    EV_HV_BYTES     = 22,   /* AFC/FCP/SCP 探测：tag u8, 校验错位图 u8, n u8, 从机字节[n]（固件按波形解码）；扫描命中时 tag = 0x40 | 模式，第 1 个字节 = 扫描值；锁死（之后充电器不再回 Ping）时 tag = 0x50 | 模式，唯一字节 = 锁死值 */
+    EV_QC_STEP      = 19,   /* ev_qc_step_t：QC / AFC 前端的连线结果（QCS_CONNECT / QCS_AFC）；QCS_DCP ~ QCS_IDLE 为 v0.14.x 的 QC 探测固件所记（已删除，网页仍可解码旧记录） */
     EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
 } ev_type_t;
 
@@ -232,7 +232,7 @@ typedef struct __attribute__((packed))
     uint16_t vbus_mv;
 } ev_ufcs_step_t;
 
-/* QC 探测（-DQC_PROBE） */
+/* QC / AFC 前端（QCS_DCP ~ QCS_IDLE：v0.14.x 的 QC 探测固件，已删除） */
 typedef enum
 {
     QCS_DCP     = 1,    /* arg：1 = D− 跟随 D+ 0.6V（DCP 短接）；x = D− 电平档位（×51.6mV） */
@@ -274,6 +274,7 @@ typedef enum
                            bit8 = 首个从机 Ping 失败，bit9 = 结尾从机 Ping 失败 */
     HVS_DONE      = 5,
     HVS_FCP_CRC   = 6,  /* arg：有回应的 CRC 方案，0xFF = 都没有 */
+    HVS_SCAN      = 7,  /* 扫描进度：arg = 模式（1 单字节，2 [v,0x80]，3 [v,0x00]），x：低 8 位 = 已扫到的值，bit8~14 = 命中数，bit15 = 中止（锁死超过 40 次、重新握手失败或刚握手就锁死） */
 } hv_step_t;
 
 typedef struct __attribute__((packed))

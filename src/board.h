@@ -48,7 +48,13 @@
 
 /* ---------------- 产品能力与保护 ---------------- */
 /* 最高电压、电流上限、OVP/UVP 容差、OCP 由上位机设置（cfg.c，默认 20V / 3A / ±5% / 3.5A 50ms） */
-#define FW_VERSION 0x00E5  /* 0xMMmp：v0.14.5 */
+/*
+ * 固件版本 u16（app_info、程序头、SYS_INFO、INFO、启动记录）：
+ *   现行 = 主版本 << 12 | 次版本 << 6 | 修订（主 0~15、次 0~63、修订 0~63），值 ≥ 0x0100（2026-10-07 起的建置）；
+ *   发行版 v0.14.5 及以前为 0xMMmp（次、修订各 4 位，值 < 0x0100，v0.16 起放不下）。两种格式按大小区分，新格式的值都大于旧格式
+ */
+#define FW_VER(maj, min, pat)   (((maj) << 12) | ((min) << 6) | (pat))
+#define FW_VERSION              FW_VER(0, 14, 6)
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */

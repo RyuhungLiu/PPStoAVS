@@ -6,7 +6,11 @@
 #include <string.h>
 
 #define LOG_MAGIC               0x4C50u     /* 'PL' */
+#ifdef HV_PROBE
+#define LOG_MAX_RECORDS         200         /* 探测固件：扫描命中较多 */
+#else
 #define LOG_MAX_RECORDS         64
+#endif
 #ifdef HV_PROBE
 #define LOG_MAX_SESSION_PAGES   28          /* 探测固件每个事务都封页落盘 */
 #else
@@ -45,7 +49,7 @@ static int16_t clear_idx = -1;
 
 static bool log_on(void)
 {
-#if defined(QC_PROBE) || defined(HV_PROBE)
+#ifdef HV_PROBE
     return true;        /* 探测固件：不论设置都记录 */
 #endif
     return (cfg()->flags3 & CFG3_LOG) != 0;

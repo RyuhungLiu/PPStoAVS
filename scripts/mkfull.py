@@ -20,7 +20,13 @@ HDR_MAGIC = 0x31505041  # 'APP1'
 
 
 def fw_version(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "board.h")):
-    m = re.search(r"#define\s+FW_VERSION\s+(0x[0-9A-Fa-f]+)", open(path, encoding="utf-8").read())
+    """FW_VERSION = FW_VER(主, 次, 修订)（见 src/board.h），旧写法为十六进制常数"""
+    src = open(path, encoding="utf-8").read()
+    m = re.search(r"#define\s+FW_VERSION\s+FW_VER\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", src)
+    if m:
+        a, b, c = (int(x) for x in m.groups())
+        return (a << 12) | (b << 6) | c
+    m = re.search(r"#define\s+FW_VERSION\s+(0x[0-9A-Fa-f]+)", src)
     return int(m.group(1), 16)
 
 

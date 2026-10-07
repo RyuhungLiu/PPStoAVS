@@ -6,10 +6,10 @@
  *   （发送照三星开源内核 drivers/afc/gpio_afc.c；从机回应格式由 v0.14 探测实测：Sping → 约 4 UI 低 → 字节… → Sping）
  *  AFC（已摸清，此版不跑，afc_set 保留）：送 V/I 字节，接受则回显；不支持则回自己的档位表（session 32：0x0B 0x49 0x79）
  *  1. qc_handshake：D+ 0.6V，D− 跟随（短接）→ 等充电器放开 D−
- *  2. SCP（寄存器协议，命令 SBRRD 0x0C / SBRWR 0x0B；寄存器见华为开源内核 direct_charger.h；CRC 未知）：
- *     10 种 CRC 方案（不带 / 常见 CRC-8）各读一次 SCP_ADP_TYPE(0x80)，有回应的记下解出的字节；
- *     用第一个有回应的方案读 0x81、0x90、0x92~0x95、FCP 0x00 / 0x21；
- *     再试低压直充：CTRL_BYTE0(0xA0) = 0x40 → VSSET(0xCA) = 5.5V → 0xA0 = 0xC0，量 VBUS → 0xA0 = 0x20 复位
+ *  2. 扫描（不带 CRC，每种模式前重新握手；某帧之后充电器不再回 Ping 则记下该值为“锁死值”、重新握手后继续）：单字节 0x00~0xFF、[v, 0x80]、[v, 0x00]，只记“从机 Ping 之外还有回应”的值与解出的字节，
+ *     每 64 个值记进度并落盘。v0.14.5 实测华为 SCP 充电器对 SBRRD 0x0C + 地址 0x80（10 种 CRC 方案）只回 Ping、没有数据：
+ *     0x0C / 0x0B 是华为内核写进交换芯片指令寄存器的值，线上的指令编码与帧结构都还不知道，所以改为扫描
+ *  3. 最后掷 AFC 单字节 0x0C（AFC 充电器回 V/I 表；华为 SCP 充电器收到后不再回 Ping，所以放最后）
  *  3. 保持 D+ 0.6V，返回 true：主循环只写记录
  * 注意：AFC 充电器会把 SBRRD 的第一个字节 0x0C 当成 AFC 请求而回档位表，看起来像“有回应”。
  * D− 发送用 UDM 缓冲 DAC（0 / 63 ≈ 3.25V），接收用 UDM 比较器（阈值 20/64 × 3.3V ≈ 1.03V）。后端开关保持关断。
@@ -130,92 +130,77 @@ __attribute__((unused)) static bool afc_set(uint8_t data, uint8_t cap)
     return ok > 0;
 }
 
-/* FCP 的 CRC 未知：逐个试常见 CRC-8（0 = 不带 CRC）；refl = 按位反转（LSB 先）算法 */
-static const struct { uint8_t poly, init, refl; } crcs[] = {
-    {0, 0, 0},       {0x07, 0x00, 0}, {0x07, 0xFF, 0}, {0x31, 0x00, 0}, {0x31, 0xFF, 0},
-    {0x1D, 0xFF, 0}, {0x9B, 0x00, 0}, {0xD5, 0x00, 0}, {0x8C, 0x00, 1}, {0xE0, 0x00, 1},
-};
-#define N_CRC (sizeof(crcs) / sizeof(crcs[0]))
-
-static uint8_t crc8(uint8_t v, const uint8_t *p, uint8_t n)
+/* 掷入一帧（不带 CRC），返回回应跳变数（只有从机 Ping 为 2）；s0 < 0 = 主机 Ping 后没有从机 Ping */
+static uint8_t raw_xfer(const uint8_t *tx, uint8_t n, int32_t *s0)
 {
-    uint8_t c = crcs[v].init, poly = crcs[v].poly;
-    while (n--)
-    {
-        c ^= *p++;
-        for (uint8_t i = 0; i < 8; i++)
-            if (crcs[v].refl)
-                c = (c & 1) ? (uint8_t)((c >> 1) ^ poly) : (uint8_t)(c >> 1);
-            else
-                c = (c & 0x80) ? (uint8_t)((c << 1) ^ poly) : (uint8_t)(c << 1);
-    }
-    return c;
+    int32_t s1;
+    uint8_t got = hp_xfer(tx, n, 12, s0, &s1);
+    return *s0 < 0 ? 0 : got;
 }
 
-static void log_bytes(uint8_t tag)
+/* 命中：一条 EV_HV_BYTES，tag = 0x40 | 模式，内容 = 扫描值 + 从机字节 */
+static void log_hit(uint8_t mode, uint8_t value)
 {
-    uint8_t buf[3 + 8];
+    uint8_t buf[3 + 1 + 8];
     uint8_t bad;
-    uint8_t n = hp_decode(&buf[3], 8, &bad);
-    buf[0] = tag;
-    buf[1] = bad;
-    buf[2] = n;
-    evlog_add(EV_HV_BYTES, buf, 3 + n);
+    uint8_t n = hp_decode(&buf[4], 8, &bad);
+    buf[0] = (uint8_t)(0x40 | mode);
+    buf[1] = (uint8_t)(bad << 1);
+    buf[2] = (uint8_t)(n + 1);
+    buf[3] = value;
+    evlog_add(EV_HV_BYTES, buf, 4 + n);
 }
 
-/* SCP / FCP 事务表（命令 SBRRD 0x0C / SBRWR 0x0B，寄存器见华为开源内核 direct_charger.h、hw_scp.h） */
-static const struct { uint8_t cmd, addr; int16_t data; } xfers[] = {
-    {0, 0, 0},
-    {0x0C, 0x80, -1},       /* 1  SCP_ADP_TYPE */
-    {0x0C, 0x81, -1},       /* 2  SCP_B_ADP_TYPE */
-    {0x0C, 0x90, -1},       /* 3  SCP_MAX_POWER */
-    {0x0C, 0x92, -1},       /* 4  SCP_MIN_VOUT */
-    {0x0C, 0x93, -1},       /* 5  SCP_MAX_VOUT */
-    {0x0C, 0x94, -1},       /* 6  SCP_MIN_IOUT */
-    {0x0C, 0x95, -1},       /* 7  SCP_MAX_IOUT */
-    {0x0C, 0x00, -1},       /* 8  FCP DVCTYPE */
-    {0x0C, 0x21, -1},       /* 9  FCP DISCRETE_CAPABILITIES */
-    {0x0B, 0xA0, 0x40},     /* 10 SCP_CTRL_BYTE0 = 输出模式 */
-    {0x0B, 0xCA, 250},      /* 11 SCP_VSSET = 3000 + 250×10 = 5.5V */
-    {0x0B, 0xA0, 0xC0},     /* 12 SCP_CTRL_BYTE0 = 输出模式 + 输出使能 */
-    {0x0B, 0xA0, 0x20},     /* 13 SCP_CTRL_BYTE0 = 适配器复位 */
-};
-
-/* 一次事务：Mping → Sping → 命令/地址/(数据)/(CRC) → Mping → 记录从机回应 → Mping → Sping；
- * 返回记录到的跳变数（只有从机 Ping 时为 2）。wave = 记录完整波形（否则只记解出的字节） */
-static uint8_t xfer(uint8_t t, uint8_t v, bool wave)
+/* 重新握手：D± 拉到 0V（D+ < 0.325V 让充电器退出 HVDCP、回到 BC1.2 短接），再走一次 HVDCP 握手 */
+static bool rehandshake(void)
 {
-    uint8_t b[4] = {xfers[t].cmd, xfers[t].addr, (uint8_t)xfers[t].data, 0};
-    uint8_t n = xfers[t].data >= 0 ? 3 : 2;
-    if (v)
-    {
-        b[n] = crc8(v, b, n);
-        n++;
-    }
-    hp_mping();
-    int32_t s0 = hp_sping();
-    hp_n_edges = 0;
-    if (s0 >= 0)
-    {
-        for (uint8_t i = 0; i < n; i++)
-            hp_send_byte(b[i]);
-        hp_mping();
-        hp_capture(15);
-        hp_out(false);
-        delay_us(200);
-        hp_mping();
-    }
-    int32_t s1 = s0 >= 0 ? hp_sping() : 0;
+    qc_lines_low();
+    wait_ms(100);
+    uint16_t hs = qc_handshake();
     hp_out(false);
-    uint8_t got = hp_n_edges, tag = (uint8_t)(t | (v << 4));
-    log_step(HVS_FCP, tag, (uint16_t)(got | (s0 < 0 ? 0x100 : 0) | (s1 < 0 ? 0x200 : 0)));
-    if (got > 2)
-        log_bytes(tag);
-    if (wave && s0 >= 0)
-        log_edges(tag);
-    checkpoint();
-    wait_ms(40);
-    return got;
+    wait_ms(20);
+    return hs != 0;
+}
+
+/* 扫描：mode 1 = 单字节 [v]，2 = [v, 0x80]，3 = [v, 0x00]；只记有回应（多于从机 Ping）的值，每 64 个值记进度并落盘。
+ * v0.14.5 实测：某些帧之后充电器不再回 Ping（session 1：单字节 0x0C 之后就再也没有 Sping）→ 记下“上一帧的值”为锁死值，
+ * 重新握手后重试当前值；锁死超过 40 次或重新握手失败则中止。返回命中数 */
+static uint8_t scan(uint8_t mode)
+{
+    uint8_t hits = 0, locks = 0;
+    bool abort = false;
+    for (uint16_t v = 0; v < 256 && !abort; v++)
+    {
+        uint8_t tx[2] = {(uint8_t)v, mode == 2 ? 0x80 : 0x00};
+        uint8_t n = mode == 1 ? 1 : 2;
+        int32_t s0;
+        uint8_t got = raw_xfer(tx, n, &s0);
+        if (s0 < 0)
+        {
+            uint8_t lk[4] = {(uint8_t)(0x50 | mode), 0, 1, (uint8_t)(v - 1)};
+            evlog_add(EV_HV_BYTES, lk, sizeof(lk));     /* 锁死：上一帧（v − 1；v = 0 时为模式切换前的帧） */
+            if (++locks > 40 || !rehandshake())
+                abort = true;
+            else
+            {
+                got = raw_xfer(tx, n, &s0);
+                if (s0 < 0)
+                    abort = true;               /* 刚握手完就发这个值也锁死：本值记为锁死值后中止 */
+            }
+        }
+        if (!abort && got > 2 && hits < 40)
+        {
+            hits++;
+            log_hit(mode, (uint8_t)v);
+        }
+        if ((v & 63) == 63 || abort)
+        {
+            log_step(HVS_SCAN, mode, (uint16_t)(v | (hits & 0x7F) << 8 | (abort ? 0x8000 : 0)));
+            checkpoint();
+        }
+        wait_ms(15);
+    }
+    return hits;
 }
 
 bool hv_probe_boot(void)
@@ -232,29 +217,37 @@ bool hv_probe_boot(void)
     hp_out(false);
     wait_ms(20);
 
-    /* SCP：10 种 CRC 方案都读一次 SCP_ADP_TYPE(0x80)，有回应的都记下解出的字节；第一个有回应的方案用于其余读写 */
-    int8_t good = -1;
-    for (uint8_t c = 0; c < N_CRC; c++)
-        if (xfer(1, c, c == 0) > 2 && good < 0)
-            good = (int8_t)c;
-    log_step(HVS_FCP_CRC, (uint8_t)good, 0);
-    if (good >= 0)
+    /* 1. 扫描单字节、[v, 0x80]、[v, 0x00]（不带 CRC）；每种模式前重新握手，从干净的状态开始 */
+    for (uint8_t m = 1; m <= 3; m++)
     {
-        for (uint8_t t = 2; t <= 9; t++)
-            xfer(t, (uint8_t)good, true);
-        /* 低压直充：输出模式 → 5.5V → 输出使能，量 VBUS；再复位适配器 */
-        xfer(10, (uint8_t)good, true);
-        xfer(11, (uint8_t)good, true);
-        xfer(12, (uint8_t)good, true);
+        if (m > 1 && !rehandshake())
+        {
+            log_step(HVS_HANDSHAKE, 0, 0);
+            break;
+        }
+        scan(m);
+        wait_ms(100);
+    }
+
+    /* 2. 最后才试 AFC 单字节 0x0C（session 1：华为 SCP 充电器收到它之后不再回 Ping，放在扫描前会毁掉整个扫描） */
+    if (rehandshake())
+    {
+        uint8_t q = 0x0C;
+        int32_t s0;
+        uint8_t got = raw_xfer(&q, 1, &s0);
+        log_step(HVS_FCP, 0x0C, (uint16_t)(got | (s0 < 0 ? 0x100 : 0)));
+        if (got > 2)
+            log_hit(0, q);
+        log_edges(0x0C);
+        q = 0x08;               /* AFC 5V（不是 AFC 充电器则无作用） */
+        raw_xfer(&q, 1, &s0);
         wait_ms(300);
-        log_step(HVS_VBUS, 3, vbus_avg());
-        xfer(13, (uint8_t)good, true);
-        wait_ms(500);
-        log_step(HVS_VBUS, 5, vbus_avg());
+        log_step(HVS_VBUS, 2, vbus_avg());
     }
 
     hp_out(false);
     log_step(HVS_DONE, 0, 0);
+    checkpoint();
     return true;
 }
 

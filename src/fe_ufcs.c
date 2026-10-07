@@ -113,10 +113,10 @@ bool feu_start_dcp(void)
         if (!(qcf & (QC_9V | QC_12V | QC_3)))
         {
             qcf = 0;
-            /* QC 档位试过 D+ 3.3V 等电平，AFC 充电器可能已离开 HVDCP 状态：放开 D± 让充电器复位（D+ < 0.325V），再握手一次 */
+            /* QC 档位试过 D+ 3.3V 等电平，AFC 充电器可能已离开 HVDCP 状态：D± 拉到 0V 让充电器复位（D+ < 0.325V），再握手一次 */
             if (hs && want_afc)
             {
-                qc_release();
+                qc_lines_low();
                 delay_ms(100);
                 hs = qc_handshake();
             }

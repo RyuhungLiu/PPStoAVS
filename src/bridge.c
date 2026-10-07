@@ -668,7 +668,9 @@ static fe_target_t front_target(const back_entry_t *e, uint16_t mv, uint16_t op_
         }
     }
     else if (e->fe_type == PPS_PDO)
-        t.ma = (e->type == PPS_PDO) ? op_ma : src->max_ma;     /* PPS 透传按设备限流值，其余用 PPS 最大电流 */
+        /* PPS 透传按设备限流值，其余用 PPS 最大电流；设备合约电流可能大于充电器新广播的电流（entry_covers 不比电流，
+         * 等设备按重新广播的能力重新请求），所以不超过充电器当前的 PPS 电流 */
+        t.ma = (e->type == PPS_PDO) ? min_u16(op_ma, src->max_ma) : src->max_ma;
     else
         t.ma = (mv > 15000 && src->max_ma_20v) ? src->max_ma_20v : src->max_ma;
     return t;
