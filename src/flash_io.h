@@ -44,3 +44,4 @@ bool flash_page_erase(uint32_t addr);
 bool flash_page_program(uint32_t addr, const uint32_t *data);   /* 32 个字，调用前该页须已擦除 */
 
 uint32_t crc32_calc(const void *data, uint32_t len);
+uint32_t crc32_update(uint32_t crc, const void *data, uint32_t len);   /* 分段计算：crc 从 0xFFFFFFFF 开始，结果取反 */

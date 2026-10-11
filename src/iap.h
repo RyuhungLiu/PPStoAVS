@@ -3,7 +3,8 @@
  *
  * 复位后总是先运行 BL：
  *   - 标志页写有 IAP_FLAG_MAGIC（APP 收到上位机“进入 BL”后写入）→ 擦除标志并留在 BL 模式
- *   - 否则程序头有效且程序 CRC 正确 → 跳转到 APP
+ *   - 否则程序头有效 → 跳转到 APP（BL 2.2 起不再算整个程序的 CRC：8MHz 复位时钟下约 85ms，会错过充电器上电后
+ *     立即发的 SOP' 线材查询。程序头只在 CRC 核对通过后才写入，升级中断不会留下有效程序头；APP 开机后在后台再核对一次）
  *   - 否则（新芯片、升级中断电、程序损坏）留在 BL 模式，等上位机写入
  * BL 模式下 D+/D- 仍是与 APP 相同的 USB HID（同 VID/PID，网页可以自动重连），后端不输出，PD 不工作。
  * USB 接口（新板 SEL）：APP 在后端时进 BL 直接用后端；否则先用前端，3s 没被配置再切到后端（BL 2.1 起）。
@@ -22,7 +23,7 @@
 #include "flash_io.h"
 
 #define IAP_PROTO           1
-#define BL_VERSION          0x0201      /* 0xMMmm；2.0 = Flash 布局 2（程序区 0xD500）；2.1 = USB 可切到后端（新板 SEL） */
+#define BL_VERSION          0x0202      /* 0xMMmm；2.0 = Flash 布局 2（程序区 0xD500）；2.1 = USB 可切到后端（新板 SEL）；2.2 = 开机只查程序头（快约 85ms），程序 CRC 由 APP 在后台核对 */
 
 #define IAP_HDR_MAGIC       0x31505041u /* 'APP1' */
 #define IAP_FLAG_MAGIC      0x314C4224u /* '$BL1' */

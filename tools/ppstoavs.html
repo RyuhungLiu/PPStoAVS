@@ -695,6 +695,7 @@ const T = {
     stWait: "Waiting", stNeg: "Negotiating", stReady: "Contract", stLegacy: "Non-PD", stNone: "Not attached",
     stDetect: "Detecting", stUpdate: "Updating caps", stReset: "Resetting", stNoPd: "Non-PD device (5 V)", stDischarge: "Discharging",
     outTip: "Rear output: protocol and contract power; the small number is the measured power", outLive: "now",
+    fe5aOn: "Front e-marker is 5 A: current limit set to 5 A", fe5aOff: "Front e-marker is no longer 5 A: current limit set to 3 A",
     swOn: "Switch on", swOff: "Switch off", current: "Current", noContract: "No contract",
     colType: "Type", colVolt: "Voltage", colCur: "Current", colSrc: "From charger", converted: "converted",
     none: "—", notAvail: "Not connected",
@@ -771,7 +772,7 @@ const T = {
     stEpr: "Entering EPR",
     beSt: ["unattached", "attach", "vSafe5V", "startup", "sending caps", "waiting Request", "transition", "ready",
            "SinkTx wait", "Hard Reset", "recover", "non-PD", "discharge", "2nd handshake", "2nd handshake"],
-    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode", note6: "Front · answered the charger's identity query: ", note7: "Voltage compensation applied: +",
+    stateAt: "state", rxErr: "RX errors", note1: "Front · missed Accept, recovered by PS_RDY", note8: "Application CRC mismatch (flash may be damaged); flash the firmware again", note2: "Front · answered the charger's cable query as a 5 A E-Marker", note3: "Front · entered EPR mode", note5: "Front · left EPR mode", note6: "Front · answered the charger's identity query: ", note7: "Voltage compensation applied: +",
     identRep: ["", "ACK (device identity)", "NAK (no device)", "BUSY (device identity not read yet)"],
     note4: "Front · charger refused EPR: ", eprFail: ["unknown", "cable not EPR capable", "source not VCONN source", "EPR bit not set in RDO", "unable at this time", "EPR bit not set in 5V PDO"],
     merged: "adjusted ×", waitN: "charger Wait ×", txWait: "waited SinkTxOK ", txTimeout: "SinkTxNG, sent after timeout", devS: "device", chgS: "charger", fw: "FW", resetBy: "reset", target: "target", mode: "mode", vbus: "VBUS",
@@ -943,6 +944,7 @@ const T = {
     stWait: "等待中", stNeg: "協商中", stReady: "已協商", stLegacy: "非 PD", stNone: "未插入",
     stDetect: "偵測中", stUpdate: "更新能力中", stReset: "重置中", stNoPd: "非 PD 設備（5V）", stDischarge: "放電中",
     outTip: "後端輸出：協議與合約功率；小字為實測功率", outLive: "實測",
+    fe5aOn: "前端 E-Marker 為 5A：電流上限已改為 5A", fe5aOff: "前端 E-Marker 不是 5A：電流上限已改回 3A",
     swOn: "開關導通", swOff: "開關關斷", current: "電流", noContract: "沒有合約",
     colType: "類型", colVolt: "電壓", colCur: "電流", colSrc: "來自充電器", converted: "轉換",
     none: "—", notAvail: "未連線",
@@ -1019,7 +1021,7 @@ const T = {
     stEpr: "進入 EPR",
     beSt: ["未插入", "偵測中", "等 5V", "啟動", "發送能力", "等請求", "轉換中", "就緒",
            "SinkTx 等待", "Hard Reset", "恢復中", "非 PD", "放電中", "二次握手", "二次握手"],
-    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式", note6: "前端 · 回覆充電器的身份查詢：", note7: "電壓補償已生效：+",
+    stateAt: "狀態", rxErr: "RX 錯誤", note1: "前端 · 漏收 Accept，已由 PS_RDY 補回", note8: "程式 CRC 不符（Flash 可能損壞），請重新刷寫韌體", note2: "前端 · 已以 5A 虛擬 E-Marker 回覆充電器的線材查詢", note3: "前端 · 已進入 EPR 模式", note5: "前端 · 已退出 EPR 模式", note6: "前端 · 回覆充電器的身份查詢：", note7: "電壓補償已生效：+",
     identRep: ["", "ACK（設備身份）", "NAK（沒有設備）", "BUSY（設備身份尚未讀到）"],
     note4: "前端 · 充電器拒絕進入 EPR：", eprFail: ["原因不明", "線材不支援 EPR", "充電器無法供 VCONN", "RDO 未設 EPR 位", "暫時無法進入", "5V PDO 未設 EPR 位"],
     merged: "微調 ×", waitN: "充電器 Wait ×", txWait: "等 SinkTxOK ", txTimeout: "SinkTxNG 逾時仍送出", devS: "設備", chgS: "充電器", fw: "韌體", resetBy: "復位", target: "目標", mode: "方式", vbus: "VBUS",
@@ -1965,8 +1967,18 @@ function emSync(w) {
   });
   document.querySelectorAll(box + " [data-raw]").forEach((el) => { if (el !== document.activeElement) el.value = hexN(state[w][+el.dataset.raw], 8); });
 }
+/* 前端虛擬 E-Marker 是否宣告 5A（開啟且 Cable VDO 電流 = 5A；韌體同條件拉低 PA2 作 Ra） */
+const fe5aOn = () => $("emarker").checked && ((state.fc[3] >>> 5) & 3) === 2;
+/* 前端 E-Marker 在 5A 與非 5A 之間切換時，電流上限跟著改為 5A / 3A（只在使用者操作時，載入設定不改） */
+function fe5aFollow(before) {
+  const on = fe5aOn(), mi = $("maxMa");
+  if (on === before) return;
+  if (on) mi.value = 5000; else if (Number(mi.value) > 3000) mi.value = 3000;
+  applyCurLimits(); updateDirty(); renderSim();
+  msg(t(on ? "fe5aOn" : "fe5aOff"));
+}
 Object.keys(EMBOX).forEach((w) => $(EMBOX[w]).addEventListener("input", (e) => {
-  const el = e.target;
+  const el = e.target, before = fe5aOn();
   if (el.dataset.f) {
     const [vi, sh, n, kind] = VCF[+el.dataset.f];
     let x;
@@ -1978,12 +1990,13 @@ Object.keys(EMBOX).forEach((w) => $(EMBOX[w]).addEventListener("input", (e) => {
     state[w][+el.dataset.raw] = parseInt(el.value || "0", 16) >>> 0;
   } else return;
   emSync(w);
+  if (w === "fc") fe5aFollow(before);
 }));
 /* 預設：後端 3A / 5A；前端 5A（含 EPR）/ 3A */
 $("vcPre3").onclick = () => { state.vc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); renderSim(); };
 $("vcPre5").onclick = () => { state.vc = VC_DEFAULT.slice(); state.vc[3] = bitsSet(state.vc[3], 5, 2, 2); vcHtml(); updateDirty(); renderSim(); };
-$("fcPre5").onclick = () => { state.fc = FC_DEFAULT.slice(); vcHtml(); updateDirty(); };
-$("fcPre3").onclick = () => { state.fc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); };
+$("fcPre5").onclick = () => { const b = fe5aOn(); state.fc = FC_DEFAULT.slice(); vcHtml(); updateDirty(); fe5aFollow(b); };
+$("fcPre3").onclick = () => { const b = fe5aOn(); state.fc = VC_DEFAULT.slice(); vcHtml(); updateDirty(); fe5aFollow(b); };
 
 const PE = [{ rows: "pdoRows", avs: "pdoAvs", p: "pdol" }, { rows: "pdoRows2", avs: "pdoAvs2", p: "pdol2" }];
 function pdolErr(g = PE[0]) {
@@ -2297,7 +2310,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.15.0";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.16.0";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2799,7 +2812,11 @@ $("ppsc").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("avs2pps").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
-$("emarker").addEventListener("change", (e) => { if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false; applyCurLimits(); updateDirty(); });
+$("emarker").addEventListener("change", (e) => {
+  const b = !e.target.checked && ((state.fc[3] >>> 5) & 3) === 2;      /* 切換前的狀態 */
+  if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false;
+  applyCurLimits(); updateDirty(); fe5aFollow(b);
+});
 /* 導出 / 導入設定：把表單（與裝置端已存的設定、充電器 PDO、模擬器列表）存成 JSON，供回報問題與重現；導入只填入表單，按「應用」才寫入 */
 const hexList = (a) => a.map((v) => (v >>> 0).toString(16).padStart(8, "0"));
 function exportCfg() {

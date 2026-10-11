@@ -228,11 +228,9 @@ void __wrap_SystemInit(void)
         start_rear = ((const volatile uint32_t *)BL_FLAG_ADDR)[1] == IAP_FLAG_REAR;
         flash_page_erase(BL_FLAG_ADDR);         /* 只进一次：下次复位回到程序 */
     }
-#ifdef BL_SKIP_CRC      /* 排查用：只看程序头，不算整体 CRC */
+    /* 只看程序头（BL 2.2）：程序头在 CRC 核对通过后才写入；整个程序的 CRC 在复位时钟（HSI 8MHz）下要算约 85ms，
+     * 充电器在 VBUS 上电后约 100ms 内就发 SOP' 线材查询，APP 必须尽快接管前端。APP 开机后在后台再核对 CRC */
     else if (iap_hdr_ok(iap_hdr()))
-#else
-    else if (iap_app_valid())
-#endif
     {
         __disable_irq();
         ((void (*)(void))APP_BASE)();           /* 0x0000_1800 别名，与 APP 的链接地址一致；不返回 */

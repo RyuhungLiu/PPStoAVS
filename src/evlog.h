@@ -120,6 +120,7 @@ typedef enum
     NOTE_FE_EPR_FAILED    = 4,  /* 充电器拒绝进入 EPR，data = 原因码 */
     NOTE_FE_EPR_EXIT      = 5,  /* 前端退出 EPR 模式 */
     NOTE_COMP             = 7,  /* 压降补偿：周期更新已生效，data = 补偿量（10mV 单位，与上次记录相差 ≥100mV 才记） */
+    NOTE_APP_CRC          = 8,  /* APP 后台核对程序 CRC 不符（BL 2.2 起开机只查程序头）：Flash 内容可能损坏，请重新刷写 */
     NOTE_FE_IDENT         = 6,  /* 身份透传：回复充电器的 Discover Identity，data = 1 ACK、2 NAK、3 BUSY（相同回复只记一次） */
 } note_code_t;
 
@@ -190,7 +191,7 @@ typedef struct __attribute__((packed))
     uint8_t  pages;
 } evlog_session_t;
 
-void evlog_init(void);                              /* 上电：扫描环形区、预擦除（PD 初始化前调用） */
+void evlog_init(bool pre_erase);                    /* 上电：扫描环形区，pre_erase 时预擦除（PD 初始化前调用；前端已在接收线材查询时不擦，免得 Flash 停顿漏回 GoodCRC） */
 uint16_t evlog_session(void);
 uint16_t evlog_dropped(void);
 uint8_t evlog_used_pages(void);

@@ -79,7 +79,7 @@ static void cur_reset(void)
     last_rec_off = -1;
 }
 
-void evlog_init(void)
+void evlog_init(bool pre_erase)
 {
     int16_t max_idx = -1;
     uint32_t max_seq = 0;
@@ -106,7 +106,7 @@ void evlog_init(void)
         next_seq = max_seq + 1;
         session = max_session + 1;
     }
-    if (log_on())       /* 记录关闭时不预擦除（不动旧记录、不消耗 Flash 寿命） */
+    if (pre_erase && log_on())      /* 记录关闭时不预擦除（不动旧记录、不消耗 Flash 寿命）；不预擦除时由空闲擦除补上 */
     {
         for (uint8_t k = 0; k < LOG_ERASE_AHEAD; k++)
         {

@@ -24,6 +24,7 @@
 #include "pd_phy.h"
 #include "qc.h"
 #include "hv_probe.h"
+#include "iap.h"
 #include "power_sw.h"
 #include "store.h"
 #include "timebase.h"
@@ -37,6 +38,35 @@ __attribute__((section(".appinfo"), used)) const struct
     uint16_t version;
     uint16_t reserved;
 } app_info = {0x41535050u, FW_VERSION, FLASH_LAYOUT};
+
+/* BL 2.2 起开机只查程序头，程序 CRC 在这里于后台分段核对（每次 1KB，约 0.3ms），不符则记录 */
+static void app_crc_poll(void)
+{
+    static uint32_t off, crc = 0xFFFFFFFFu;
+    static bool done;
+    if (done || millis() < 1000)
+        return;
+    const iap_hdr_t *h = iap_hdr();
+    if (!iap_hdr_ok(h))
+    {
+        done = true;            /* 调试器直接烧录、没有程序头 */
+        return;
+    }
+    uint32_t n = h->size - off;
+    if (n > 1024)
+        n = 1024;
+    crc = crc32_update(crc, (const uint8_t *)APP_ADDR + off, n);
+    off += n;
+    if (off >= h->size)
+    {
+        done = true;
+        if (~crc != h->crc)
+        {
+            ev_note_t e = {0, NOTE_APP_CRC, 0};
+            evlog_add(EV_NOTE, &e, sizeof(e));
+        }
+    }
+}
 
 static void watchdog_init(void)
 {
@@ -77,7 +107,7 @@ int main(void)
         fe_init();
     }
 
-    evlog_init();
+    evlog_init(!early_fe);     /* 虚拟 E-Marker：充电器正在查询线材，不做 Flash 擦除（会停顿约 9ms） */
     if (early_fe)
         fe_cable_poll();
     ev_boot_t boot = {FW_VERSION, reset_flags, *cfg()};
@@ -163,6 +193,7 @@ int main(void)
             }
         }
         store_process();
+        app_crc_poll();
         watchdog_feed();
     }
 }
