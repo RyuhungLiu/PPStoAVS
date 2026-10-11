@@ -29,6 +29,7 @@
 #include "store.h"
 #include "timebase.h"
 #include "ufcs.h"
+#include "ufcs_phy.h"
 #include "usb_hid.h"
 
 /* 应用信息：链接时紧跟向量表（Makefile 生成链接脚本时插入 .appinfo），上位机据魔数 'PPSA' 认出应用程序映像并读版本 */
@@ -144,8 +145,16 @@ int main(void)
 #else
     const bool ufcs_up = ((cfg()->flags2 & CFG2_UFCS) && feu_start()) || ((cfg()->flags3 & (CFG3_QC | CFG3_AFC)) && feu_start_dcp());
 #endif
+    /* 新板 UFCS 走 PB5/PB4，PB0/PB1 空出：USB 直接切到后端，UFCS 时也能接上位机（QC / AFC 仍占用 PB0/PB1 的 DAC） */
+    const bool hid_on = !ufcs_up || ufcs_phy_alt();
     if (!ufcs_up)
         usb_hid_init();
+    else if (hid_on)
+    {
+        usb_hid_route(true);
+        ev_usb_t e = {USBE_REAR, 1};
+        evlog_add(EV_USB, &e, sizeof(e));
+    }
     if (early_fe)
         fe_cable_poll();
 
@@ -181,7 +190,7 @@ int main(void)
         fe_process();
         bridge_process();
         be_process();
-        if (!ufcs_up)
+        if (hid_on)
         {
             host_process();
             uint8_t r = usb_hid_poll_route();   /* 新板：前端不是电脑 → USB 切到后端 */

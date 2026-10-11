@@ -1,7 +1,8 @@
 /*
- * UFCS 物理层（充电设备 / Sink 一侧）：前端 D+ = PB0（UART1 RX），D− = PB1（UART1 TX，重映射 011）
- *
- * 与 USB HID 共用 PB0/PB1，互斥：本模块只在 USBFS 未启动时使用。
+ * UFCS 物理层（充电设备 / Sink 一侧）：
+ *  - 旧板：前端 D+ = PB0（UART1 RX），D− = PB1（UART1 TX，重映射 011），与 USB HID 共用 PB0/PB1，互斥
+ *  - 新板（有 USB 切换器）：D+ = PB5（UART1 RX，重映射 010），D− = PB4（TIM1 + DMA 产生波形）；USB 可同时在后端
+ *  DCP 判别 / 电平扫描用 PB0/PB1 的模拟功能（USB 尚未启动、SEL 在前端）
  *  - DCP 判别：D− 输出 0.6V，D+ 用比较器看是否跟随（DCP 短接 D+/D−）
  *  - 握手：D− 高 2ms / 低 8ms / 高 2ms / 低 8ms，期间 D+ 被充电器拉高即成功，然后切到 UART
  *  - 接收：EXTI 量训练字节 0xAA 的边沿间隔，得到本包实际波特率，再用 UART 收其余字节
@@ -50,6 +51,7 @@ bool ufcs_phy_handshake(uint8_t *tries);
 /* 退出 UFCS，D+/D− 回到高阻，可以启动 USB HID */
 void ufcs_phy_release(void);
 bool ufcs_phy_active(void);
+bool ufcs_phy_alt(void);                /* UFCS 正走新板的 PB5/PB4（PB0/PB1 空出，USB 可切到后端） */
 
 void ufcs_phy_set_baud(uint8_t baud);
 uint8_t ufcs_phy_baud(void);

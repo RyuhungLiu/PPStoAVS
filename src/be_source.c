@@ -285,6 +285,7 @@ static void go_unattached(void)
 static void on_detach(void)
 {
     evlog_add(EV_BE_DETACH, NULL, 0);
+    usb_hid_rear_reset();           /* 后端的 USB 主机（DR_Swap 后的手机等）已离开 */
     cable_clear();
     pdinfo_dev_reset();
     pdinfo_dev_attached(false);
@@ -308,6 +309,11 @@ static void start_hard_reset(bool send)
         pd_phy_send_hard_reset(phy);
     hard_reset_count++;
     has_contract = false;
+    if (phy->data_role == 0)
+    {
+        usb_hid_rear_reset();       /* 设备原本是 USB 主机：硬复位后回到 UFP，USB 要重新来过 */
+        drs_tried = false;          /* 之前接受过 DR_Swap，恢复后再请一次（被拒绝过的不再重试，免得反复硬复位） */
+    }
     phy->data_role = 1;             /* 硬复位恢复默认角色（Source = DFP） */
     pdinfo_dev_reset();
     set_state(BE_ST_HARD_RESET_WAIT);

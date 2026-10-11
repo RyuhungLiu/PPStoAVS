@@ -178,6 +178,13 @@ bool usb_hid_on_rear(void)
     return on_rear;
 }
 
+/* 拔出时 USB 收不到任何事件（只有 SUSPEND），dev_config 会一直留着：后端 DR_Swap 以「未被配置」为条件，必须清掉 */
+void usb_hid_rear_reset(void)
+{
+    if (on_rear)
+        usb_hid_route(true);
+}
+
 bool usb_hid_has_sel(void)
 {
     if (has_sel < 0)

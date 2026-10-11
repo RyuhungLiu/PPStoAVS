@@ -764,6 +764,7 @@ const T = {
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     usbE: { 1: "Front port not used by a computer for 3 s → USB switched to the rear port", 2: "Front port not used by a computer for 3 s; this board has no USB switch, staying on the front",
             3: "Computer on the rear port connected (host tool available there)", 4: "Asked the device to become USB host (DR_Swap)", 5: "Device asked to swap data roles (DR_Swap)" },
+    usbUfcs: "Front runs UFCS on PB5/PB4 → USB switched to the rear port (host tool available there)",
     drs: ["accepted: device is now USB host", "rejected", "not supported", "busy (Wait)", "no reply"],
     drsR: ["accepted: converter is now UFP (device is USB host)", "accepted: converter is now DFP", "rejected (not in Ready)"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
@@ -1013,6 +1014,7 @@ const T = {
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     usbE: { 1: "前端 3 秒沒被電腦使用 → USB 切到後端", 2: "前端 3 秒沒被電腦使用；此板沒有 USB 切換器，留在前端",
             3: "後端的電腦已連上 USB（可在後端使用上位機）", 4: "請設備改當 USB 主機（DR_Swap）", 5: "設備要求交換資料角色（DR_Swap）" },
+    usbUfcs: "前端走 UFCS（PB5/PB4）→ USB 切到後端（可在後端使用上位機）",
     drs: ["已接受：設備成為 USB 主機", "拒絕", "不支援", "忙碌（Wait）", "沒有回應"],
     drsR: ["已接受：本機改為 UFP（設備為 USB 主機）", "已接受：本機改回 DFP", "拒絕（不在 Ready 狀態）"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
@@ -2310,7 +2312,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.16.0";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.16.1";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2604,7 +2606,7 @@ function decodeRecords(records) {
       case 21: text = hvEdgesText(d); cls = ""; cat = "other"; break;
       case 23: {
         const w = d[0], a = d[1];
-        text = (t("usbE")[w] ?? `USB ${w}`) + (w === 4 ? ` · ${t("drs")[a] ?? a}` : w === 5 ? ` · ${t("drsR")[a] ?? a}` : "");
+        text = (w === 1 && a === 1 ? t("usbUfcs") : t("usbE")[w] ?? `USB ${w}`) + (w === 4 ? ` · ${t("drs")[a] ?? a}` : w === 5 ? ` · ${t("drsR")[a] ?? a}` : "");
         cls = w === 3 || (w === 4 && a === 0) || (w === 5 && a === 0) ? "ok" : w === 4 || w === 2 ? "warn" : "acc";
         break; }
       case 22: text = (d[0] & 0xF0) === 0x50 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · charger stopped answering pings after value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → re-handshake` : d[0] & 0x40 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → reply ${Array.from(d.subarray(4, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> (k + 1)) & 1 ? "(parity✗)" : "")).join(" ") || "—"}` : `${hvTag(d[0])} · slave bytes: ${Array.from(d.subarray(3, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> k) & 1 ? "(parity✗)" : "")).join(" ") || "—"}`; cls = "acc"; cat = "other"; break;

@@ -23,4 +23,5 @@ bool usb_hid_tx_busy(void);                 /* 上一条报告还没被主机取
 bool usb_hid_has_sel(void);                 /* 板子有 USB 切换器（PA12 上有 100K 上拉；第一次调用时检测） */
 void usb_hid_route(bool rear);              /* 断开上拉，SEL 切到后端 / 前端，再重新初始化（等主机重新列举） */
 bool usb_hid_on_rear(void);
+void usb_hid_rear_reset(void);              /* 后端设备拔出 / 硬复位：USB 在后端时断开上拉、清除配置并重新初始化，设备再接上（DR_Swap 后）重新列举 */
 uint8_t usb_hid_poll_route(void);           /* 主循环调用：前端 USB_FRONT_TIMEOUT_MS 内从未被主机配置 → 切到后端（只切一次）；返回 USB_ROUTE_* */

@@ -62,7 +62,7 @@
  *   发行版 v0.14.5 及以前为 0xMMmp（次、修订各 4 位，值 < 0x0100，v0.16 起放不下）。两种格式按大小区分，新格式的值都大于旧格式
  */
 #define FW_VER(maj, min, pat)   (((maj) << 12) | ((min) << 6) | (pat))
-#define FW_VERSION              FW_VER(0, 16, 0)
+#define FW_VERSION              FW_VER(0, 16, 1)
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */

@@ -164,7 +164,7 @@ typedef struct __attribute__((packed))
 /* USB 接口与数据角色 */
 enum
 {
-    USBE_REAR       = 1,    /* 前端 3s 没被主机配置，USB 切到后端 */
+    USBE_REAR       = 1,    /* USB 切到后端：arg 0 = 前端 3s 没被主机配置，1 = 前端走 UFCS（新板 PB5/PB4） */
     USBE_NO_SEL     = 2,    /* 前端 3s 没被主机配置，但板子没有 USB 切换器（旧板），不切换 */
     USBE_REAR_CFG   = 3,    /* 后端的主机配置了 USB（上位机可以连线） */
     USBE_DRS_SENT   = 4,    /* 本端发 DR_Swap：arg = usbe_drs_t */

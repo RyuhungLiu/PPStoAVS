@@ -1,9 +1,18 @@
 #include "ufcs_phy.h"
 #include "board.h"
 #include "timebase.h"
+#include "usb_hid.h"
 
-#define PIN_DP              GPIO_Pin_0          /* PB0：充电设备 RX（D+） */
-#define PIN_DM              GPIO_Pin_1          /* PB1：充电设备 TX（D−） */
+/* 引脚（握手时按板子选定）：
+ *  - 旧板：D+ = PB0（UART1 重映射 011 的 RX）、D− = PB1（UART1 TX），与 USB 共用
+ *  - 新板（有 USB 切换器）：D+ 经 100Ω 接 PB5（UART1 重映射 010 的 RX；该重映射的 TX 在 PB6，K9U7 没引出），
+ *    D− 经 100Ω 接 PB4（普通 GPIO：TIM1 更新事件触发 DMA 通道 6 逐位写 GPIOB->BSHR，产生 8N2 波形，不受中断延迟影响）。
+ *    PB0/PB1 留给 USB，USB 切到后端，UFCS 时也能接上位机
+ *  DCP 判别与电平扫描用 PB0/PB1 的 DAC/比较器（SEL 默认前端），两种板子相同 */
+static bool alt;
+#define PIN_DP              (alt ? GPIO_Pin_5 : GPIO_Pin_0)
+#define PIN_DM              (alt ? GPIO_Pin_4 : GPIO_Pin_1)
+#define EXTI_DP             (alt ? (1u << 5) : 1u)
 
 #define EXTEN_WR_LOCK       (1u << 15)
 
@@ -57,6 +66,11 @@ static struct
 } tx;
 
 static ufcs_phy_stats_t stats;
+
+/* 新板软件发送：每位一个 BSHR 字（起始位 + 8 数据位 + 2 停止位），训练字节 + 最长一包 */
+#define TXW_PER_BYTE        11
+static uint32_t txw[(UFCS_MAX_PKT + 1) * TXW_PER_BYTE];
+static uint16_t tx_bit_us;
 static void (*yield_fn)(void);
 
 void ufcs_phy_set_yield(void (*fn)(void))
@@ -83,6 +97,7 @@ static uint16_t reset_t0;
 static uint16_t reset_len_us;   /* 硬复位低电平持续时间（µs，封顶 65535），读后清零 */
 
 void EXTI7_0_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void DMA1_Channel6_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void USART1_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 
 /* ---------------- EXTEN：D+/D− 模拟功能 ---------------- */
@@ -127,6 +142,16 @@ static void pin_dm(GPIOMode_TypeDef mode)
     GPIO_Init(GPIOB, &g);
 }
 
+/* DCP 判别、电平扫描用的 PB0/PB1（USB 引脚）回到浮空输入 */
+static void usb_pins_float(void)
+{
+    GPIO_InitTypeDef g = {0};
+    g.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;
+    g.GPIO_Speed = GPIO_Speed_30MHz;
+    g.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_Init(GPIOB, &g);
+}
+
 static inline bool dp_high(void)
 {
     return (GPIOB->INDR & PIN_DP) != 0;
@@ -137,8 +162,7 @@ static inline bool dp_high(void)
 bool ufcs_phy_dcp_detect(uint8_t *flags)
 {
     pins_init_clock();
-    pin_dp(GPIO_Mode_IN_FLOATING);
-    pin_dm(GPIO_Mode_IN_FLOATING);
+    usb_pins_float();
     analog_off();
     delay_us(200);
 
@@ -191,8 +215,7 @@ static uint8_t comp_level(bool dm)
 void ufcs_phy_scan(uint8_t lv[4])
 {
     pins_init_clock();
-    pin_dp(GPIO_Mode_IN_FLOATING);
-    pin_dm(GPIO_Mode_IN_FLOATING);
+    usb_pins_float();
     analog_off();
     delay_ms(1);
 
@@ -237,17 +260,36 @@ static void enter_uart(void)
     USART1->CTLR2 = 0;
     USART1->CTLR3 = 0;
     USART1->BRR = nominal_brr[tx_baud];
-    USART1->CTLR1 = UART_CTLR1_UE | UART_CTLR1_TE;      /* TX 空闲为高，之后再把引脚交给它 */
+    if (alt)
+    {
+        /* 新板：UART1 只收（RX = PB5）；D− = PB4 GPIO 空闲高，发送由 TIM1 + DMA 驱动 */
+        USART1->CTLR1 = UART_CTLR1_UE;
+        GPIO_PinRemapConfig(GPIO_PartialRemap2_USART1, ENABLE);     /* UART1_RM = 010：RX = PB5（TX = PB6 未引出） */
+        pin_dp(GPIO_Mode_IN_FLOATING);
+        GPIOB->BSHR = PIN_DM;
+        pin_dm(GPIO_Mode_Out_PP);
+        RCC_PB2PeriphClockCmd(RCC_PB2Periph_TIM1, ENABLE);
+        RCC_HBPeriphClockCmd(RCC_HBPeriph_DMA1, ENABLE);
+        TIM1->CTLR1 = 0;
+        TIM1->DMAINTENR = 0;
+        DMA1_Channel6->CFGR = 0;
+        DMA1->INTFCR = DMA_CTCIF6;
+        NVIC_SetPriority(DMA1_Channel6_IRQn, 0x40);
+        NVIC_EnableIRQ(DMA1_Channel6_IRQn);
+    }
+    else
+    {
+        USART1->CTLR1 = UART_CTLR1_UE | UART_CTLR1_TE;      /* TX 空闲为高，之后再把引脚交给它 */
+        GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, ENABLE);     /* UART1_RM = 011：TX = PB1，RX = PB0 */
+        pin_dp(GPIO_Mode_IN_FLOATING);
+        pin_dm(GPIO_Mode_AF_PP);
+    }
 
-    GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, ENABLE);     /* UART1_RM = 011：TX = PB1，RX = PB0 */
-    pin_dp(GPIO_Mode_IN_FLOATING);
-    pin_dm(GPIO_Mode_AF_PP);
-
-    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, GPIO_PinSource0);
-    EXTI->INTENR &= ~1u;
-    EXTI->RTENR &= ~1u;
-    EXTI->FTENR &= ~1u;
-    EXTI->INTFR = 1;
+    GPIO_EXTILineConfig(GPIO_PortSourceGPIOB, alt ? GPIO_PinSource5 : GPIO_PinSource0);
+    EXTI->INTENR &= ~EXTI_DP;
+    EXTI->RTENR &= ~EXTI_DP;
+    EXTI->FTENR &= ~EXTI_DP;
+    EXTI->INTFR = EXTI_DP;
     NVIC_SetPriority(EXTI7_0_IRQn, 0x10);
     NVIC_SetPriority(USART1_IRQn, 0x40);
     NVIC_EnableIRQ(EXTI7_0_IRQn);
@@ -260,10 +302,10 @@ static void enter_uart(void)
     rx.st = RX_OFF;
     /* rx_arm 在下面定义，这里直接内联 */
     USART1->CTLR1 &= ~(UART_CTLR1_RE | UART_CTLR1_RXNEIE);
-    EXTI->INTFR = 1;
-    EXTI->RTENR &= ~1u;
-    EXTI->FTENR |= 1u;
-    EXTI->INTENR |= 1u;
+    EXTI->INTFR = EXTI_DP;
+    EXTI->RTENR &= ~EXTI_DP;
+    EXTI->FTENR |= EXTI_DP;
+    EXTI->INTENR |= EXTI_DP;
     rx.st = RX_IDLE;
 }
 
@@ -271,6 +313,8 @@ bool ufcs_phy_handshake(uint8_t *tries)
 {
     pins_init_clock();
     analog_off();
+    usb_pins_float();
+    alt = usb_hid_has_sel();            /* 新板走 PB5/PB4（PB0/PB1 保持浮空，不影响前端 D±） */
     pin_dp(GPIO_Mode_IN_FLOATING);
     GPIOB->BSHR = PIN_DM;
     pin_dm(GPIO_Mode_Out_PP);
@@ -325,10 +369,17 @@ void ufcs_phy_release(void)
     {
         NVIC_DisableIRQ(EXTI7_0_IRQn);
         NVIC_DisableIRQ(USART1_IRQn);
-        EXTI->INTENR &= ~1u;
+        EXTI->INTENR &= ~EXTI_DP;
         USART1->CTLR1 = 0;
-        GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, DISABLE);
+        GPIO_PinRemapConfig(alt ? GPIO_PartialRemap2_USART1 : GPIO_PartialRemap3_USART1, DISABLE);
         TIM3->CTLR1 = 0;
+        if (alt)
+        {
+            NVIC_DisableIRQ(DMA1_Channel6_IRQn);
+            TIM1->CTLR1 = 0;
+            TIM1->DMAINTENR = 0;
+            DMA1_Channel6->CFGR = 0;
+        }
         active = false;
     }
     pin_dp(GPIO_Mode_IN_FLOATING);
@@ -341,15 +392,20 @@ bool ufcs_phy_active(void)
     return active;
 }
 
+bool ufcs_phy_alt(void)
+{
+    return active && alt;
+}
+
 /* ---------------- 接收 ---------------- */
 
 static void rx_arm(void)
 {
     USART1->CTLR1 &= ~(UART_CTLR1_RE | UART_CTLR1_RXNEIE);
-    EXTI->INTFR = 1;
-    EXTI->RTENR &= ~1u;
-    EXTI->FTENR |= 1u;
-    EXTI->INTENR |= 1u;
+    EXTI->INTFR = EXTI_DP;
+    EXTI->RTENR &= ~EXTI_DP;
+    EXTI->FTENR |= EXTI_DP;
+    EXTI->INTENR |= EXTI_DP;
     rx.st = RX_IDLE;
 }
 
@@ -385,7 +441,7 @@ static bool train_finish(void)
 
 void EXTI7_0_IRQHandler(void)
 {
-    EXTI->INTFR = 1;
+    EXTI->INTFR = EXTI_DP;
     uint16_t now = TIM3->CNT;
     bool high = dp_high();
 
@@ -396,8 +452,8 @@ void EXTI7_0_IRQHandler(void)
         rx.t[0] = now;
         rx.edge = 1;
         rx.st = RX_TRAIN;
-        EXTI->RTENR |= 1u;
-        EXTI->FTENR |= 1u;
+        EXTI->RTENR |= EXTI_DP;
+        EXTI->FTENR |= EXTI_DP;
         return;
     }
     if (rx.st == RX_TRAIN)
@@ -428,7 +484,7 @@ void EXTI7_0_IRQHandler(void)
         rx.want = 0;
         rx.last_t = now;
         rx.st = RX_BYTES;
-        EXTI->INTENR &= ~1u;
+        EXTI->INTENR &= ~EXTI_DP;
         USART1->CTLR1 |= UART_CTLR1_RE | UART_CTLR1_RXNEIE;
         return;
     }
@@ -541,6 +597,14 @@ void ufcs_phy_process(void)
     {
         NVIC_DisableIRQ(USART1_IRQn);
         NVIC_DisableIRQ(EXTI7_0_IRQn);
+        if (alt)
+        {
+            NVIC_DisableIRQ(DMA1_Channel6_IRQn);
+            TIM1->CTLR1 = 0;
+            DMA1_Channel6->CFGR = 0;
+            GPIOB->BSHR = PIN_DM;
+            NVIC_EnableIRQ(DMA1_Channel6_IRQn);
+        }
         USART1->CTLR1 &= ~(UART_CTLR1_TXEIE | UART_CTLR1_TCIE);
         USART1->CTLR2 &= ~STOP_MASK;
         tx.busy = false;
@@ -596,7 +660,7 @@ void ufcs_phy_process(void)
                 stats.hard_reset_rx++;
                 reset_seen = true;
                 rx.st = RX_RESET_WAIT;
-                EXTI->INTENR &= ~1u;
+                EXTI->INTENR &= ~EXTI_DP;
             }
         }
         NVIC_EnableIRQ(EXTI7_0_IRQn);
@@ -636,6 +700,53 @@ uint8_t ufcs_phy_baud(void)
     return tx_baud;
 }
 
+/* 新板发送：把 tx.buf 展开成每位一个 BSHR 字，TIM1 每个位宽产生一次更新事件，DMA 通道 6 依次写入 GPIOB->BSHR。
+ * 位宽 = UART 的 BRR（48MHz 计数），与旧板硬件 UART 相同；边沿由硬件定时，不受中断延迟影响 */
+static void soft_tx_start(void)
+{
+    const uint32_t hi = PIN_DM, lo = (uint32_t)PIN_DM << 16;
+    uint16_t k = 0;
+    for (uint8_t i = 0; i < tx.n; i++)
+    {
+        uint8_t b = tx.buf[i];
+        txw[k++] = lo;                                  /* 起始位 */
+        for (uint8_t j = 0; j < 8; j++)
+            txw[k++] = (b >> j) & 1 ? hi : lo;          /* LSB 先发 */
+        txw[k++] = hi;                                  /* 2 个停止位 */
+        txw[k++] = hi;
+    }
+    uint16_t brr = nominal_brr[tx_baud];
+    tx_bit_us = (uint16_t)(brr / (SystemCoreClock / 1000000u)) + 1;
+    DMA1_Channel6->CFGR = 0;
+    DMA1->INTFCR = DMA_CTCIF6;
+    DMA1_Channel6->PADDR = (uint32_t)&GPIOB->BSHR;
+    DMA1_Channel6->MADDR = (uint32_t)txw;
+    DMA1_Channel6->CNTR = k;
+    DMA1_Channel6->CFGR = DMA_CFGR1_DIR | DMA_CFGR1_MINC | DMA_CFGR1_PSIZE_1 | DMA_CFGR1_MSIZE_1 | DMA_CFGR1_PL |
+                          DMA_CFGR1_TCIE | DMA_CFGR1_EN;
+    TIM1->CTLR1 = 0;
+    TIM1->PSC = 0;
+    TIM1->ATRLR = brr - 1;
+    TIM1->CNT = 0;
+    TIM1->INTFR = 0;
+    TIM1->DMAINTENR = TIM_UDE;
+    TIM1->CTLR1 = TIM_CEN;                              /* 第一个更新事件（一个位宽后）写起始位 */
+}
+
+/* 最后一个停止位已写出：再过一个位宽才是帧尾 */
+void DMA1_Channel6_IRQHandler(void)
+{
+    DMA1->INTFCR = DMA_CTCIF6;
+    TIM1->CTLR1 = 0;
+    TIM1->DMAINTENR = 0;
+    DMA1_Channel6->CFGR = 0;
+    if (!tx.busy)
+        return;
+    tx.end_us = micros() + tx_bit_us;
+    tx.busy = false;
+    rx_arm();
+}
+
 bool ufcs_phy_send(const uint8_t *pkt, uint8_t len)
 {
     if (!active || tx.busy || len == 0 || len > UFCS_MAX_PKT)
@@ -648,7 +759,7 @@ bool ufcs_phy_send(const uint8_t *pkt, uint8_t len)
         NVIC_EnableIRQ(EXTI7_0_IRQn);
         return false;
     }
-    EXTI->INTENR &= ~1u;
+    EXTI->INTENR &= ~EXTI_DP;
     tx.buf[0] = 0xAA;
     memcpy(&tx.buf[1], pkt, len);
     tx.n = len + 1;
@@ -657,6 +768,13 @@ bool ufcs_phy_send(const uint8_t *pkt, uint8_t len)
     tx.start_ms = millis();
     rx.st = RX_OFF;
     USART1->CTLR1 &= ~(UART_CTLR1_RE | UART_CTLR1_RXNEIE);
+    if (alt)
+    {
+        soft_tx_start();
+        NVIC_EnableIRQ(USART1_IRQn);
+        NVIC_EnableIRQ(EXTI7_0_IRQn);
+        return true;
+    }
     USART1->BRR = nominal_brr[tx_baud];
     USART1->CTLR2 = (USART1->CTLR2 & ~STOP_MASK) | STOP_2;     /* 8N2：帧间至少 1 位高电平（规范 6.4.7.1） */
     NVIC_EnableIRQ(USART1_IRQn);
@@ -684,13 +802,22 @@ void ufcs_phy_hard_reset(void)
         ;
     NVIC_DisableIRQ(EXTI7_0_IRQn);
     NVIC_DisableIRQ(USART1_IRQn);
-    GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, DISABLE);
-    GPIOB->BCR = PIN_DM;
-    pin_dm(GPIO_Mode_Out_PP);
-    delay_us(2500);
-    GPIOB->BSHR = PIN_DM;
-    GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, ENABLE);
-    pin_dm(GPIO_Mode_AF_PP);
+    if (alt)
+    {
+        GPIOB->BCR = PIN_DM;            /* 新板 PB4 本来就是 GPIO */
+        delay_us(2500);
+        GPIOB->BSHR = PIN_DM;
+    }
+    else
+    {
+        GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, DISABLE);
+        GPIOB->BCR = PIN_DM;
+        pin_dm(GPIO_Mode_Out_PP);
+        delay_us(2500);
+        GPIOB->BSHR = PIN_DM;
+        GPIO_PinRemapConfig(GPIO_PartialRemap3_USART1, ENABLE);
+        pin_dm(GPIO_Mode_AF_PP);
+    }
     rx.head = rx.tail = 0;
     rx_arm();
     NVIC_EnableIRQ(USART1_IRQn);
