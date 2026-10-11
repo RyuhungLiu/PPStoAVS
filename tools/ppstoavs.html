@@ -42,6 +42,13 @@ button, input, select { font: inherit; color: inherit; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px rgba(238, 242, 232, .4); flex: none; }
 .dot.on { background: #7be0a3; box-shadow: 0 0 0 3px rgba(123, 224, 163, .25); }
 .spacer { flex: 1; }
+/* 後端輸出：協議:合約功率，右側小字為實測功率；關斷時整顆變暗 */
+.out { display: inline-flex; align-items: baseline; gap: 8px; padding: 4px 11px; border-radius: 999px; border: 1px solid rgba(214, 173, 74, .55);
+  font: 600 14px/1.15 var(--num); letter-spacing: .02em; color: var(--silk); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.out .proto { color: var(--gold); }
+.out .live { font-weight: 400; font-size: 12px; color: rgba(238, 242, 232, .6); }
+.out[data-on="0"] { border-color: rgba(238, 242, 232, .22); color: rgba(238, 242, 232, .55); }
+.out[data-on="0"] .proto { color: inherit; }
 .top select { background: rgba(238, 242, 232, .08); border-color: rgba(238, 242, 232, .25); color: var(--silk); }
 .top select option { color: #17231e; }
 .top .btn { background: transparent; border-color: rgba(238, 242, 232, .3); color: var(--silk); }
@@ -278,6 +285,7 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
   <div class="bar">
     <div class="brand">PPStoAVS</div>
     <div class="conn"><span class="dot" id="connDot"></span><span id="connText"></span><span id="devInfo"></span></div>
+    <span class="out" id="outPill" hidden><span><span class="proto" id="outProto"></span>:<span id="outW"></span></span><span class="live" id="outLive"></span></span>
     <span class="spacer"></span>
     <span id="msg"></span>
     <select id="lang" aria-label="Language"><option value="zh">繁體中文</option><option value="zhs">简体中文</option><option value="en">English</option></select>
@@ -686,6 +694,7 @@ const T = {
     chargerCaps: "Charger capabilities", rearCaps: "Offered to device",
     stWait: "Waiting", stNeg: "Negotiating", stReady: "Contract", stLegacy: "Non-PD", stNone: "Not attached",
     stDetect: "Detecting", stUpdate: "Updating caps", stReset: "Resetting", stNoPd: "Non-PD device (5 V)", stDischarge: "Discharging",
+    outTip: "Rear output: protocol and contract power; the small number is the measured power", outLive: "now",
     swOn: "Switch on", swOff: "Switch off", current: "Current", noContract: "No contract",
     colType: "Type", colVolt: "Voltage", colCur: "Current", colSrc: "From charger", converted: "converted",
     none: "—", notAvail: "Not connected",
@@ -750,8 +759,12 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 18: "Cable e-marker", 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step", 19: "QC / AFC", 20: "AFC/FCP/SCP probe", 21: "D− waveform", 22: "D− reply bytes" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step", 19: "QC / AFC", 20: "AFC/FCP/SCP probe", 21: "D− waveform", 22: "D− reply bytes", 23: "USB" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
+    usbE: { 1: "Front port not used by a computer for 3 s → USB switched to the rear port", 2: "Front port not used by a computer for 3 s; this board has no USB switch, staying on the front",
+            3: "Computer on the rear port connected (host tool available there)", 4: "Asked the device to become USB host (DR_Swap)", 5: "Device asked to swap data roles (DR_Swap)" },
+    drs: ["accepted: device is now USB host", "rejected", "not supported", "busy (Wait)", "no reply"],
+    drsR: ["accepted: converter is now UFP (device is USB host)", "accepted: converter is now DFP", "rejected (not in Ready)"],
     prot: { 1: "Over-voltage", 2: "Under-voltage", 3: "Over-current" },
     rst: ["Hard Reset sent", "Hard Reset received", "Soft Reset received", "Soft Reset sent"], side: ["Front", "Rear"],
     feSt: ["waiting caps", "waiting Accept", "waiting PS_RDY", "ready", "non-PD", "Wait retry", "Soft Reset", "entering EPR", "entering EPR"],
@@ -929,6 +942,7 @@ const T = {
     chargerCaps: "充電器能力", rearCaps: "輸出給設備",
     stWait: "等待中", stNeg: "協商中", stReady: "已協商", stLegacy: "非 PD", stNone: "未插入",
     stDetect: "偵測中", stUpdate: "更新能力中", stReset: "重置中", stNoPd: "非 PD 設備（5V）", stDischarge: "放電中",
+    outTip: "後端輸出：協議與合約功率；小字為實測功率", outLive: "實測",
     swOn: "開關導通", swOff: "開關關斷", current: "電流", noContract: "沒有合約",
     colType: "類型", colVolt: "電壓", colCur: "電流", colSrc: "來自充電器", converted: "轉換",
     none: "—", notAvail: "未連線",
@@ -993,8 +1007,12 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 18: "線材 E-Marker", 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟", 19: "QC / AFC", 20: "AFC/FCP/SCP 探測", 21: "D− 波形", 22: "D− 回應位元組" },
+          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟", 19: "QC / AFC", 20: "AFC/FCP/SCP 探測", 21: "D− 波形", 22: "D− 回應位元組", 23: "USB" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
+    usbE: { 1: "前端 3 秒沒被電腦使用 → USB 切到後端", 2: "前端 3 秒沒被電腦使用；此板沒有 USB 切換器，留在前端",
+            3: "後端的電腦已連上 USB（可在後端使用上位機）", 4: "請設備改當 USB 主機（DR_Swap）", 5: "設備要求交換資料角色（DR_Swap）" },
+    drs: ["已接受：設備成為 USB 主機", "拒絕", "不支援", "忙碌（Wait）", "沒有回應"],
+    drsR: ["已接受：本機改為 UFP（設備為 USB 主機）", "已接受：本機改回 DFP", "拒絕（不在 Ready 狀態）"],
     prot: { 1: "過壓", 2: "欠壓", 3: "過流" },
     rst: ["發出 Hard Reset", "收到 Hard Reset", "收到 Soft Reset", "發出 Soft Reset"], side: ["前端", "後端"],
     feSt: ["等能力", "等 Accept", "等 PS_RDY", "就緒", "非 PD", "Wait 重試", "Soft Reset 中", "進入 EPR 中", "進入 EPR 中"],
@@ -1291,6 +1309,7 @@ function renderConn() {
   $("btnConnect").textContent = dev ? t("disconnect") : t("connect");
   $("connDot").className = "dot" + (dev ? " on" : "");
   $("connText").textContent = dev ? t("connected") : t("notConnected");
+  renderOut();
   const i = state.info;
   $("devInfo").textContent = isBl() ? `· ${t("fwModeBl")}` : dev && i ? `· ${t("fw")} ${fmtFw(i.fw)} · ${t("sessionN")(i.session)}` : "";
   document.querySelectorAll(".tab").forEach((b) => (b.disabled = isBl() && !["fw", "sim"].includes(b.dataset.tab)));
@@ -1383,7 +1402,29 @@ function capsTable(caps, activePos, src, fcaps = state.frontCaps) {
   });
   return h + "</table>";
 }
+/* 頁首後端輸出：PD（Fixed）/ PPS / AVS / USB（非 PD 設備，5V）/ N/A（開關關斷或沒有設備） */
+const fmtW = (mw) => { const w = Math.round(mw / 100) / 10; return (w >= 10 ? Math.round(w) : w) + "W"; };
+function renderOut() {
+  const s = state.status, el = $("outPill");
+  el.hidden = !dev || isBl() || !s;
+  if (el.hidden) return;
+  const on = !!(s.flags & 4) && !!(s.flags & 2);
+  const br = (s.flags & 8) ? decodeRdo(s.beRdo, state.rearCaps) : null;
+  let proto = "N/A", mw = 0;
+  if (on && br) {
+    proto = br.type === "Fixed" ? "PD" : br.type === "PPS" ? "PPS" : br.type.includes("AVS") ? "AVS" : br.type;
+    mw = (br.type === "Fixed" ? br.mv : (s.beMv || br.mv)) * br.ma / 1000;
+  } else if (on && s.be === 11) {
+    proto = "USB"; mw = s.vbus * s.ibus / 1000;      /* 非 PD 設備：沒有合約，用實測 */
+  }
+  el.dataset.on = on ? "1" : "0";
+  el.title = t("outTip");
+  $("outProto").textContent = proto;
+  $("outW").textContent = fmtW(mw);
+  $("outLive").textContent = on && proto !== "USB" ? `${t("outLive")} ${fmtW(s.vbus * s.ibus / 1000)}` : "";
+}
 function renderStatus() {
+  renderOut();
   const s = state.status;
   if (!s || !dev) {
     ["feBig", "vbusBig", "beBig"].forEach((id) => setBig(id, "—"));
@@ -2256,7 +2297,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.14.6";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.15.0";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2548,6 +2589,11 @@ function decodeRecords(records) {
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 20: text = hvStepText(d); cls = (d[0] === 1 && !d[1]) || (d[0] === 2 && (d[1] & 15)) || (d[0] === 6 && d[1] === 0xFF) ? "warn" : d[0] === 6 || (d[0] === 4 && (u16(d, 2) & 255) > 2) ? "ok" : d[0] === 3 ? (u16(d, 2) > 7500 ? "ok" : "acc") : "acc"; cat = "other"; break;
       case 21: text = hvEdgesText(d); cls = ""; cat = "other"; break;
+      case 23: {
+        const w = d[0], a = d[1];
+        text = (t("usbE")[w] ?? `USB ${w}`) + (w === 4 ? ` · ${t("drs")[a] ?? a}` : w === 5 ? ` · ${t("drsR")[a] ?? a}` : "");
+        cls = w === 3 || (w === 4 && a === 0) || (w === 5 && a === 0) ? "ok" : w === 4 || w === 2 ? "warn" : "acc";
+        break; }
       case 22: text = (d[0] & 0xF0) === 0x50 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · charger stopped answering pings after value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → re-handshake` : d[0] & 0x40 ? `${HV_SCAN[d[0] & 3] ?? d[0]} · value 0x${d[3].toString(16).toUpperCase().padStart(2, "0")} → reply ${Array.from(d.subarray(4, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> (k + 1)) & 1 ? "(parity✗)" : "")).join(" ") || "—"}` : `${hvTag(d[0])} · slave bytes: ${Array.from(d.subarray(3, 3 + d[2]), (x, k) => "0x" + x.toString(16).toUpperCase().padStart(2, "0") + ((d[1] >> k) & 1 ? "(parity✗)" : "")).join(" ") || "—"}`; cls = "acc"; cat = "other"; break;
       case 19: text = qcStepText(d); cls = (d[0] === 1 || d[0] === 2 || d[0] === 7 || d[0] === 8) && !d[1] ? "warn" : d[0] === 7 || d[0] === 8 ? "ok" : d[0] === 3 || d[0] === 4 ? "ok" : "acc"; cat = d[0] === 3 || d[0] === 4 ? "req" : "other"; break;
       case 16: text = ufcsPktText(d); cls = text.includes("CRC ✗") ? "warn" : ""; cat = "caps"; break;

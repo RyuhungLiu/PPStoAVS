@@ -7,7 +7,7 @@
  *  3. 启动 HVCP 电荷泵
  *  4. 初始化后端 USBPD0（Source，开始检测设备）
  *  5. 读取设置、扫描记录区并预擦除（PD 尚未启动，Flash 停顿无影响）
- *  6. 前端 D+/D- USB HID（上位机）；探测固件（-DUFCS_PROBE）先尝试 UFCS，成功则前端由 UFCS 独占
+ *  6. 前端 D+/D- USB HID（上位机）；UFCS / QC / AFC 握手成功则前端由它独占。新板前端 3s 内没被电脑配置 → USB 切到后端焊盘
  *  7. 保留调试窗口后关闭 SDI，初始化前端 USBPD1（Sink，PA3/CC4R）
  *  8. 主循环：前端 → 协议桥 → 后端 → 上位机 → Flash 写入调度，喂狗
  */
@@ -152,7 +152,16 @@ int main(void)
         bridge_process();
         be_process();
         if (!ufcs_up)
+        {
             host_process();
+            uint8_t r = usb_hid_poll_route();   /* 新板：前端不是电脑 → USB 切到后端 */
+            if (r)
+            {
+                static const uint8_t ev[] = {0, USBE_REAR, USBE_NO_SEL, USBE_REAR_CFG};
+                ev_usb_t e = {ev[r], 0};
+                evlog_add(EV_USB, &e, sizeof(e));
+            }
+        }
         store_process();
         watchdog_feed();
     }

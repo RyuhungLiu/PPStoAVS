@@ -1,5 +1,8 @@
 #include "iap.h"
 #include "board.h"
+#ifndef BOOTLOADER
+#include "usb_hid.h"
+#endif
 
 const iap_hdr_t *iap_hdr(void)
 {
@@ -41,6 +44,8 @@ void iap_enter_bootloader(void)
     uint32_t page[FLASH_PAGE_SIZE / 4];
     memset(page, 0xFF, sizeof(page));
     page[0] = IAP_FLAG_MAGIC;
+    if (usb_hid_on_rear())
+        page[1] = IAP_FLAG_REAR;
     flash_page_erase(BL_FLAG_ADDR);
     flash_page_program(BL_FLAG_ADDR, page);
     NVIC_SystemReset();

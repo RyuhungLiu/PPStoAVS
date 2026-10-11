@@ -5,7 +5,8 @@
  *   - 标志页写有 IAP_FLAG_MAGIC（APP 收到上位机“进入 BL”后写入）→ 擦除标志并留在 BL 模式
  *   - 否则程序头有效且程序 CRC 正确 → 跳转到 APP
  *   - 否则（新芯片、升级中断电、程序损坏）留在 BL 模式，等上位机写入
- * BL 模式下前端 D+/D- 仍是与 APP 相同的 USB HID（同 VID/PID，网页可以自动重连），后端不输出，PD 不工作。
+ * BL 模式下 D+/D- 仍是与 APP 相同的 USB HID（同 VID/PID，网页可以自动重连），后端不输出，PD 不工作。
+ * USB 接口（新板 SEL）：APP 在后端时进 BL 直接用后端；否则先用前端，3s 没被配置再切到后端（BL 2.1 起）。
  *
  * BL 上位机协议（报告格式同 host.h：请求 cmd|tag|payload，应答 cmd|0x80|tag|status|payload）：
  *   0x30 SYS_INFO   APP 与 BL 都有 → mode u8（1 APP，2 BL）, bl_ver u16, iap_proto u8, app_valid u8, app_ver u16,
@@ -21,10 +22,11 @@
 #include "flash_io.h"
 
 #define IAP_PROTO           1
-#define BL_VERSION          0x0200      /* 0xMMmm；2.0 = Flash 布局 2（程序区 0xD500） */
+#define BL_VERSION          0x0201      /* 0xMMmm；2.0 = Flash 布局 2（程序区 0xD500）；2.1 = USB 可切到后端（新板 SEL） */
 
 #define IAP_HDR_MAGIC       0x31505041u /* 'APP1' */
 #define IAP_FLAG_MAGIC      0x314C4224u /* '$BL1' */
+#define IAP_FLAG_REAR       0x52414552u /* 标志页第 2 字：'REAR' = APP 当时 USB 在后端，BL 直接用后端（BL 2.1 起） */
 
 #define CMD_SYS_INFO        0x30
 #define CMD_ENTER_BL        0x31

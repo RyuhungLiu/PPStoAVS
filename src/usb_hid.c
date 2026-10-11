@@ -79,6 +79,11 @@ static uint8_t dev_addr;
 static volatile uint8_t dev_config;
 static uint8_t hid_idle;
 
+static bool on_rear;
+static bool ever_config;        /* 当前接口上曾被主机配置过 */
+static bool route_done;         /* 前端超时已处理（切了或没有 SEL） */
+static int8_t has_sel = -1;
+static uint32_t init_ms;
 static volatile bool in_busy;
 static volatile bool rx_ready;
 static uint8_t rx_buf[USB_HID_REPORT_LEN];
@@ -124,6 +129,9 @@ void usb_hid_init(void)
         serial[i] = hex[(uid[i / 8] >> (28 - (i % 8) * 4)) & 0xF];
     serial[24] = 0;
 
+    (void)usb_hid_has_sel();    /* 第一次初始化时检测（之后 SEL 由 usb_hid_route 控制，不再碰） */
+    init_ms = millis();
+    ever_config = false;
     RCC_HBPeriphClockCmd(RCC_HBPeriph_USBFS, ENABLE);
     USBFSD->BASE_CTRL = USBFS_UC_RESET_SIE | USBFS_UC_CLR_ALL;
     delay_us(10);
@@ -135,6 +143,78 @@ void usb_hid_init(void)
 
     NVIC_SetPriority(USBFS_IRQn, 0x80);     /* 低于 USBPD（0x00），PD 的 GoodCRC 优先 */
     NVIC_EnableIRQ(USBFS_IRQn);
+}
+
+void usb_hid_route(bool rear)
+{
+    (void)usb_hid_has_sel();    /* 检测要在驱动 SEL 之前 */
+    NVIC_DisableIRQ(USBFS_IRQn);
+    USBFSD->BASE_CTRL &= ~USBFS_UC_DEV_PU_EN;  /* 先断开上拉，切换后由 usb_hid_init 重新接上 */
+    USBFSD->UDEV_CTRL = 0;
+
+    RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOA, ENABLE);
+    if (rear)
+        GPIO_ResetBits(USB_SEL_PORT, USB_SEL_PIN);
+    else
+        GPIO_SetBits(USB_SEL_PORT, USB_SEL_PIN);
+    GPIO_InitTypeDef g = {0};
+    g.GPIO_Pin = USB_SEL_PIN;
+    g.GPIO_Speed = GPIO_Speed_30MHz;
+    g.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_Init(USB_SEL_PORT, &g);
+    delay_us(200);
+
+    on_rear = rear;
+    dev_config = 0;
+    dev_addr = 0;
+    rx_ready = false;
+    in_busy = false;
+    tx_left = 0;
+    usb_hid_init();
+}
+
+bool usb_hid_on_rear(void)
+{
+    return on_rear;
+}
+
+bool usb_hid_has_sel(void)
+{
+    if (has_sel < 0)
+    {
+        /* 先输出低电平把引脚放电（PA12 没有内部下拉），再改浮空：新板 R31 100K 上拉（约 1µs 时间常数）20µs 内拉高；
+         * 旧板引脚悬空，保持低。检测在 USB 初始化之前，SEL 短暂为 0 没有影响 */
+        RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOA, ENABLE);
+        GPIO_ResetBits(USB_SEL_PORT, USB_SEL_PIN);
+        GPIO_InitTypeDef g = {0};
+        g.GPIO_Pin = USB_SEL_PIN;
+        g.GPIO_Speed = GPIO_Speed_30MHz;
+        g.GPIO_Mode = GPIO_Mode_Out_PP;
+        GPIO_Init(USB_SEL_PORT, &g);
+        delay_us(50);
+        g.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+        GPIO_Init(USB_SEL_PORT, &g);
+        delay_us(20);
+        has_sel = GPIO_ReadInputDataBit(USB_SEL_PORT, USB_SEL_PIN) ? 1 : 0;
+    }
+    return has_sel > 0;
+}
+
+uint8_t usb_hid_poll_route(void)
+{
+    if (dev_config && !ever_config)
+    {
+        ever_config = true;
+        if (on_rear)
+            return USB_ROUTE_REAR_CFG;
+    }
+    if (on_rear || ever_config || route_done || millis() - init_ms < USB_FRONT_TIMEOUT_MS)
+        return USB_ROUTE_NONE;
+    route_done = true;
+    if (!usb_hid_has_sel())
+        return USB_ROUTE_NO_SEL;
+    usb_hid_route(true);
+    return USB_ROUTE_REAR;
 }
 
 bool usb_hid_configured(void)

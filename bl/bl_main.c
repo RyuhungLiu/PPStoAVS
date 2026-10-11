@@ -2,7 +2,8 @@
  * PPStoAVS Bootloader（在线升级，协议见 src/iap.h）
  *
  * 复位后先运行：有效程序且没有进入 BL 的标志 → 直接跳转；否则留在 BL 模式，用与 APP 相同的 USB HID
- * （前端 D+/D-，VID:PID 1209:0001，产品名 "PPStoAVS Bootloader"）等上位机刷写。
+ * （D+/D-，VID:PID 1209:0001，产品名 "PPStoAVS Bootloader"）等上位机刷写。
+ * 新板 USB 切换：APP 进 BL 时 USB 在后端（标志页第 2 字 'REAR'）→ 直接用后端；否则同 APP，前端 3s 没被配置再切到后端。
  * 功率开关始终关断（后端无输出），PD 不工作。
  */
 #include "board.h"
@@ -61,6 +62,7 @@ static uint32_t app_size, app_crc, recv;
 static uint16_t app_ver;
 static uint32_t page_buf[FLASH_PAGE_SIZE / 4];
 static bool boot_pending;
+static bool start_rear;                             /* 在 SystemInit 里设置（.bss 已在之前清零） */
 
 /* 把缓冲里 fill 个字节写成一页（不足补 0xFF）。page_no 从 0 开始 */
 static bool flush_page(uint32_t page_no, uint32_t fill)
@@ -223,6 +225,7 @@ void __wrap_SystemInit(void)
 
     if (iap_flag_set())
     {
+        start_rear = ((const volatile uint32_t *)BL_FLAG_ADDR)[1] == IAP_FLAG_REAR;
         flash_page_erase(BL_FLAG_ADDR);         /* 只进一次：下次复位回到程序 */
     }
 #ifdef BL_SKIP_CRC      /* 排查用：只看程序头，不算整体 CRC */
@@ -241,7 +244,13 @@ int main(void)
 {
     SystemCoreClockUpdate();
     timebase_init();
-    usb_hid_init();
+    if (start_rear)
+        usb_hid_route(true);
+    else
+        usb_hid_init();
     while (1)
+    {
         bl_process();
+        usb_hid_poll_route();
+    }
 }

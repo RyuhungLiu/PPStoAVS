@@ -43,6 +43,14 @@
 #define FE_CC_PIN               GPIO_Pin_3          /* 同时是 SWIO（DIO 测试点） */
 #define FE_RA_PIN               GPIO_Pin_2          /* PA2/CC3：经 1kΩ 接公头 B5（VCONN），拉低 = Ra（硬件改版后） */
 
+/* ---------------- USB 切换（新板：TPCH442EG，SEL = PA12，R31 100K 上拉） ----------------
+ * SEL = 1（复位默认）：MCU 的 UDP/UDM 接前端座 D±；SEL = 0：接后端焊盘（焊数据线接电脑）。
+ * 旧板（v0.1）PA12 未接：开机时检测（先输出低、再改浮空，100K 上拉在 20µs 内把引脚拉高 = 新板），旧板不切换。
+ * 前端 UFCS / QC / AFC 都经 SEL = 1 走前端，期间不切换 */
+#define USB_SEL_PORT            GPIOA
+#define USB_SEL_PIN             GPIO_Pin_12
+#define USB_FRONT_TIMEOUT_MS    3000    /* 前端这么久没被主机配置（前端不是电脑）→ 切到后端，只切一次 */
+
 /* 上电后保留给调试器的窗口，之后关闭 SDI，把 PA3 交给 USBPD1 */
 #define BOOT_DEBUG_WINDOW_MS    300
 
@@ -54,7 +62,7 @@
  *   发行版 v0.14.5 及以前为 0xMMmp（次、修订各 4 位，值 < 0x0100，v0.16 起放不下）。两种格式按大小区分，新格式的值都大于旧格式
  */
 #define FW_VER(maj, min, pat)   (((maj) << 12) | ((min) << 6) | (pat))
-#define FW_VERSION              FW_VER(0, 14, 6)
+#define FW_VERSION              FW_VER(0, 15, 0)
 #define VBUS_STABLE_SAMPLES     3       /* 连续 3 次采样在窗口内即判稳定 */
 #define VBUS_SAMPLE_INTERVAL_MS 2
 #define PPS_KEEPALIVE_MS        5000    /* 规范 tPPSRequest ≤ 10s */

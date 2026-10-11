@@ -8,6 +8,7 @@
 #include "pd_phy.h"
 #include "power_sw.h"
 #include "timebase.h"
+#include "usb_hid.h"
 
 #define T_CC_POLL_MS            5
 #define T_CC_DEBOUNCE_MS        150     /* tCCDebounce 100~200ms */
@@ -30,6 +31,7 @@
 #define T_CABLE_RETRY_MS        100     /* 线材 Discover Identity 重试间隔（BUSY 或无应答） */
 #define N_CABLE_TRIES           4       /* 线材无应答 / BUSY 的最多尝试次数（无 VCONN 时线材不会回应，不必久等） */
 #define PI_Q_CABLE              0x80    /* 本地查询项：向线材（SOP'）Discover Identity，与 pdinfo 的 PI_Q_* 不重叠 */
+#define PI_Q_DRSWAP             0x81    /* 本地查询项：DR_Swap，让设备当 USB 主机（USB 已切到后端、还没被主机配置时） */
 
 /* 参考手册 §15.2.15 端口寄存器 */
 #define PORT_CE                 (1u << 7)
@@ -85,6 +87,8 @@ static uint8_t selfqa_cable_id;         /* 自问自答中"线材"一侧的 Mess
 static uint8_t last_rx_id;
 static uint8_t query;               /* 进行中的查询 PI_Q_*，0 = 无 */
 static uint16_t query_gap;          /* READY 后多久可以发下一项查询 */
+static bool drs_tried;              /* 本次连接已发过 DR_Swap（或设备发过） */
+static uint8_t drs_res;             /* 进行中的 DR_Swap 结果 DRS_* */
 
 /* 后端线材 E-Marker：每次连接都向线材发 SOP' Discover Identity（不看 Ra：单 CC 焊盘没有另一根 CC）；E-Marker 需要 VCONN 供电才会应答 */
 static uint8_t cable_status;        /* be_cable_status_t */
@@ -266,6 +270,8 @@ static void go_unattached(void)
     bridge_on_back_detach();
     set_rp(CC_PU_80);
     pd_phy_reset_protocol(phy);
+    phy->data_role = 1;
+    drs_tried = false;
     has_contract = false;
     hard_reset_count = 0;
     attach_cc = -1;
@@ -285,6 +291,8 @@ static void on_detach(void)
     bridge_on_back_reset();
     set_rp(CC_PU_80);
     pd_phy_reset_protocol(phy);
+    phy->data_role = 1;
+    drs_tried = false;
     has_contract = false;
     attach_cc = -1;
     if (power_sw_is_on())
@@ -300,6 +308,7 @@ static void start_hard_reset(bool send)
         pd_phy_send_hard_reset(phy);
     hard_reset_count++;
     has_contract = false;
+    phy->data_role = 1;             /* 硬复位恢复默认角色（Source = DFP） */
     pdinfo_dev_reset();
     set_state(BE_ST_HARD_RESET_WAIT);
 }
@@ -311,6 +320,8 @@ static uint8_t next_query(void)
         return PI_Q_CABLE;
     if (bridge_rear_query_wanted())
         return PI_Q_EXTCAPS;
+    if (!drs_tried && phy->data_role && usb_hid_on_rear() && !usb_hid_configured())
+        return PI_Q_DRSWAP;
     return pdinfo_dev_next_query();
 }
 
@@ -322,6 +333,10 @@ static bool send_query(uint8_t q)
     {
     case PI_Q_CABLE:
         return pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &vdm, PD_REV_30);
+    case PI_Q_DRSWAP:
+        drs_tried = true;
+        drs_res = DRS_NO_REPLY;
+        return pd_phy_send(phy, MSG_TYPE_DR_Swap, 0, NULL);
     case PI_Q_IDENT:
         return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
     case PI_Q_EXTCAPS:
@@ -334,8 +349,22 @@ static bool send_query(uint8_t q)
 }
 
 /* 查询结束（数据已交给 pdinfo / 协议桥，或设备拒绝、超时） */
+static void log_usb(uint8_t what, uint8_t arg)
+{
+    ev_usb_t e = {what, arg};
+    evlog_add(EV_USB, &e, sizeof(e));
+}
+
 static void query_end(void)
 {
+    if (query == PI_Q_DRSWAP)
+    {
+        log_usb(USBE_DRS_SENT, drs_res);
+        query = 0;
+        query_gap = T_QUERY_GAP_MS;
+        set_state(BE_ST_READY);
+        return;
+    }
     if (query == PI_Q_CABLE)
     {
         /* 线材无应答 / BUSY / NAK：BUSY 与无应答重试，次数用完记为无应答 */
@@ -650,11 +679,37 @@ static void handle_msg(const pd_rx_msg_t *m)
     }
     case MSG_TYPE_Reject:
     case MSG_TYPE_Not_Supported:
+    case MSG_TYPE_Wait:
         if (state == BE_ST_QUERY_WAIT)
+        {
+            drs_res = h.msg_type == MSG_TYPE_Reject ? DRS_REJECT : h.msg_type == MSG_TYPE_Wait ? DRS_WAIT : DRS_NOT_SUPP;
             query_end();
+        }
+        break;
+    case MSG_TYPE_Accept:
+        if (state == BE_ST_QUERY_WAIT && query == PI_Q_DRSWAP)
+        {
+            phy->data_role = 0;     /* 设备成为 DFP（USB 主机） */
+            drs_res = DRS_ACCEPT;
+            query_end();
+        }
+        break;
+    case MSG_TYPE_DR_Swap:
+        /* 设备要求交换数据角色：Ready 时接受（本端的 USB 只能当设备，当 UFP 更合适；交换回 DFP 也接受） */
+        drs_tried = true;
+        if (state == BE_ST_READY)
+        {
+            send_ctrl(MSG_TYPE_Accept);
+            phy->data_role ^= 1;
+            log_usb(USBE_DRS_RCVD, phy->data_role);
+        }
+        else
+        {
+            send_ctrl(MSG_TYPE_Reject);
+            log_usb(USBE_DRS_RCVD, 2);
+        }
         break;
     case MSG_TYPE_GoodCRC:
-    case MSG_TYPE_Accept:
     case MSG_TYPE_PS_RDY:
     case MSG_TYPE_Ping:
     case MSG_TYPE_GotoMin:
@@ -965,9 +1020,9 @@ void be_process(void)
         }
         else if (elapsed >= query_gap && (query = next_query()) != 0)
         {
-            if (phy->revision < PD_REV_30)
+            if (phy->revision < PD_REV_30 && query != PI_Q_DRSWAP)
             {
-                query_end();    /* PD2.0 没有这些报文，也不支持 APDO */
+                query_end();    /* PD2.0 没有这些报文，也不支持 APDO（DR_Swap 例外） */
             }
             else
             {

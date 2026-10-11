@@ -42,6 +42,7 @@ typedef enum
     EV_HV_BYTES     = 22,   /* AFC/FCP/SCP 探测：tag u8, 校验错位图 u8, n u8, 从机字节[n]（固件按波形解码）；扫描命中时 tag = 0x40 | 模式，第 1 个字节 = 扫描值；锁死（之后充电器不再回 Ping）时 tag = 0x50 | 模式，唯一字节 = 锁死值 */
     EV_QC_STEP      = 19,   /* ev_qc_step_t：QC / AFC 前端的连线结果（QCS_CONNECT / QCS_AFC）；QCS_DCP ~ QCS_IDLE 为 v0.14.x 的 QC 探测固件所记（已删除，网页仍可解码旧记录） */
     EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
+    EV_USB          = 23,   /* ev_usb_t：USB 接口切换（新板 SEL）与后端数据角色交换（DR_Swap） */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -158,6 +159,29 @@ typedef struct __attribute__((packed))
     uint8_t  n;             /* VDO 数 */
     uint32_t vdo[5];        /* ID Header、Cert Stat、Product、Cable VDO1、Cable VDO2；记录时只写 n 个 */
 } ev_cable_t;
+
+/* USB 接口与数据角色 */
+enum
+{
+    USBE_REAR       = 1,    /* 前端 3s 没被主机配置，USB 切到后端 */
+    USBE_NO_SEL     = 2,    /* 前端 3s 没被主机配置，但板子没有 USB 切换器（旧板），不切换 */
+    USBE_REAR_CFG   = 3,    /* 后端的主机配置了 USB（上位机可以连线） */
+    USBE_DRS_SENT   = 4,    /* 本端发 DR_Swap：arg = usbe_drs_t */
+    USBE_DRS_RCVD   = 5,    /* 设备发来 DR_Swap：arg = 0 已接受（本端改为 UFP）、1 已接受（本端改为 DFP）、2 拒绝（不在 Ready） */
+};
+enum
+{
+    DRS_ACCEPT      = 0,    /* 已接受：设备成为 DFP（USB 主机），本端 UFP */
+    DRS_REJECT      = 1,
+    DRS_NOT_SUPP    = 2,
+    DRS_WAIT        = 3,
+    DRS_NO_REPLY    = 4,
+};
+typedef struct __attribute__((packed))
+{
+    uint8_t what;           /* USBE_* */
+    uint8_t arg;
+} ev_usb_t;
 
 typedef struct __attribute__((packed))
 {
