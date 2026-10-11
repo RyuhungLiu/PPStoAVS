@@ -1239,7 +1239,7 @@ function onReport(e) {
 function request(cmd, payload = [], ms = 1500) {
   const run = () => new Promise((resolve, reject) => {
     if (!dev || !dev.opened) return reject(new Error(t("notConnected")));
-    const tag = (tagCtr = (tagCtr + 1) & 0xFF);
+    const tag = (tagCtr = (tagCtr % 255) + 1);      /* 1..255：tag 0 留給 Android 通知服務的輪詢 */
     const buf = new Uint8Array(64); buf[0] = cmd; buf[1] = tag; buf.set(payload.slice(0, 62), 2);
     waiter = { cmd, tag, resolve, timer: setTimeout(() => { waiter = null; reject(new Error("timeout")); }, ms) };
     dev.sendReport(0, buf).catch((err) => { waiter = null; reject(err); });
@@ -2312,7 +2312,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.16.1";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.16.2";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
