@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 前端 Sink 策略引擎（USBPD1，PA3/CC4R）
  */
@@ -8,7 +9,7 @@
 typedef struct
 {
     uint8_t    pos;         /* 1-based，对应充电器 Source_Capabilities 中的位置 */
-    pdo_type_t type;        /* FPDO、PPS_PDO 或 SPR_AVS_PDO */
+    pdo_type_t type;        /* PDO_FIXED、PDO_PPS 或 PDO_SPR_AVS */
     uint16_t   mv;
     uint16_t   ma;
 } fe_target_t;

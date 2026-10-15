@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "store.h"
 #include "be_source.h"
 #include "bridge.h"

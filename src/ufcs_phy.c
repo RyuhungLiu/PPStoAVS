@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "ufcs_phy.h"
 #include "board.h"
 #include "timebase.h"

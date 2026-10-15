@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * UFCS（T/TAF 083-2022）报文编解码：只做字节 ↔ 结构体转换，不含时序，可在主机上单元测试
  *

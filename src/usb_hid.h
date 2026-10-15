@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * D+/D-（PB0/PB1，USBFS；新板经 SEL 切到前端座或后端焊盘）自定义 HID：64 字节 IN/OUT 报告，供上位机（WebHID）使用
  * VID:PID = 1209:0001（pid.codes 测试 ID），Usage Page 0xFF00

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "fe_sink.h"
 #include "analog.h"
 #include "board.h"
@@ -199,7 +200,7 @@ static void send_ctrl(uint8_t type)
 /* PD3.0 回 Not_Supported，PD2.0 没有该消息，回 Reject */
 static void send_not_supported(void)
 {
-    send_ctrl(phy->revision >= PD_REV_30 ? MSG_TYPE_Not_Supported : MSG_TYPE_Reject);
+    send_ctrl(phy->revision >= PD_REV_30 ? PD_CTRL_NOT_SUPPORTED : PD_CTRL_REJECT);
 }
 
 static bool epr_wanted(void)
@@ -213,20 +214,20 @@ static void send_rdo(uint32_t rdo, uint8_t pos)
     if (epr_mode && pos >= 1 && pos <= num_caps)
     {
         uint32_t objs[2] = {rdo, caps[pos - 1].raw};
-        pd_phy_send(phy, MSG_TYPE_EPR_Request, 2, objs);
+        pd_phy_send(phy, PD_DATA_EPR_REQUEST, 2, objs);
     }
     else
     {
-        pd_phy_send(phy, MSG_TYPE_Request, 1, &rdo);
+        pd_phy_send(phy, PD_DATA_REQUEST, 1, &rdo);
     }
 }
 
 static void send_request(const fe_target_t *t, req_origin_t origin)
 {
     uint32_t rdo;
-    if (t->type == PPS_PDO)
+    if (t->type == PDO_PPS)
         rdo = pd_build_pps_rdo(t->pos, t->mv, t->ma);
-    else if (t->type == SPR_AVS_PDO || t->type == EPR_AVS_PDO)
+    else if (t->type == PDO_SPR_AVS || t->type == PDO_EPR_AVS)
         rdo = pd_build_avs_rdo(t->pos, t->mv, t->ma);   /* AVS 不需要保活 */
     else
         rdo = pd_build_fixed_rdo(t->pos, t->ma, t->ma);
@@ -304,7 +305,7 @@ static void send_soft_reset(void)
     if (req_status == FE_REQ_BUSY)
         req_status = FE_REQ_ABORTED;
     bridge_req_waiting = false;
-    send_ctrl(MSG_TYPE_Soft_Reset);
+    send_ctrl(PD_CTRL_SOFT_RESET);
     set_state(FE_ST_SOFT_RESET);
 }
 
@@ -376,15 +377,15 @@ static bool send_query(uint8_t q)
     switch (q)
     {
     case PI_Q_IDENT:
-        return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
+        return pd_phy_send(phy, PD_DATA_VDM, 1, &vdm);
     case PI_Q_EXTCAPS:
-        return pd_phy_send(phy, MSG_TYPE_Get_Source_Cap_Extended, 0, NULL);
+        return pd_phy_send(phy, PD_CTRL_GET_SRC_CAP_EXT, 0, NULL);
     case PI_Q_SIDO:
-        return pd_phy_send(phy, MSG_TYPE_Get_Source_Info, 0, NULL);
+        return pd_phy_send(phy, PD_CTRL_GET_SRC_INFO, 0, NULL);
     case PI_Q_STATUS:
-        return pd_phy_send(phy, MSG_TYPE_Get_Status, 0, NULL);
+        return pd_phy_send(phy, PD_CTRL_GET_STATUS, 0, NULL);
     default:
-        return pd_phy_send_ext(phy, MSG_TYPE_Get_Manufacturer_Info, port_ref, sizeof(port_ref));
+        return pd_phy_send_ext(phy, PD_EXT_GET_MFR_INFO, port_ref, sizeof(port_ref));
     }
 }
 
@@ -408,7 +409,7 @@ static void answer_sink_caps_ext(void)
     uint8_t d[SKEDB_LEN];
     if (pdinfo_fe_skedb(d))
     {
-        pd_phy_send_ext(phy, MSG_TYPE_Sink_Capabilities_Extended, d, sizeof(d));
+        pd_phy_send_ext(phy, PD_EXT_SNK_CAP_EXT, d, sizeof(d));
         if (cfg()->flags & CFG_FE_AVS_2ND)
         {
             ev_avs_2nd_t e = {0, AVS2_FE_SKEDB_SENT, d[SKEDB_SINK_MODES]};
@@ -459,13 +460,13 @@ static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
             reply = VDM_ACK;
             o[0] = VDM_REPLY(vdm, VDM_ACK);
             memcpy(&o[1], id.vdo, id.n * 4);
-            pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1 + id.n, o);
+            pd_phy_send(phy, PD_DATA_VDM, 1 + id.n, o);
         }
         else
         {
             reply = pdinfo_fe_ident_pending() ? VDM_BUSY : VDM_NAK;
             o[0] = VDM_REPLY(vdm, reply);
-            pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, o);
+            pd_phy_send(phy, PD_DATA_VDM, 1, o);
         }
         if (reply != logged_reply)
         {
@@ -484,7 +485,7 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
     const uint8_t *d = &m->data[4];
     uint8_t avail = m->len > 4 ? m->len - 4 : 0;
 
-    if (h->msg_type == MSG_TYPE_EPR_Source_Capabilities)
+    if (h->msg_type == PD_EXT_EPR_SRC_CAP)
     {
         if (ext & EXT_REQUEST_CHUNK)
             return;
@@ -508,7 +509,7 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
         epr_len += n;
         if (epr_len < epr_total)
         {
-            pd_phy_send_chunk_request(phy, MSG_TYPE_EPR_Source_Capabilities, chunk + 1);
+            pd_phy_send_chunk_request(phy, PD_EXT_EPR_SRC_CAP, chunk + 1);
             return;
         }
         epr_mode = true;
@@ -517,7 +518,7 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
         handle_caps(epr_buf, objs, h->revision);
         return;
     }
-    if (h->msg_type == MSG_TYPE_Extended_Control && avail >= 1 && d[0] == ECDB_EPR_KEEPALIVE_ACK)
+    if (h->msg_type == PD_EXT_CONTROL && avail >= 1 && d[0] == ECDB_EPR_KEEPALIVE_ACK)
         return;
     if (ext & EXT_REQUEST_CHUNK)
         return;
@@ -525,41 +526,41 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
     uint8_t size = EXT_DATA_SIZE(ext) < avail ? EXT_DATA_SIZE(ext) : avail;
     switch (h->msg_type)
     {
-    case MSG_TYPE_Source_Capabilities_Extended:
+    case PD_EXT_SRC_CAP_EXT:
         if (query_is(PI_Q_EXTCAPS))
         {
             pdinfo_chg_scedb(d, size);
             query_end();
         }
         return;
-    case MSG_TYPE_Status:
+    case PD_EXT_STATUS:
         if (query_is(PI_Q_STATUS))
         {
             pdinfo_chg_status(d, size);
             query_end();
         }
         return;
-    case MSG_TYPE_Manufacturer_Info:
+    case PD_EXT_MFR_INFO:
         if (query_is(PI_Q_MIDB))
         {
             pdinfo_chg_midb(d, size);
             query_end();
         }
         return;
-    case MSG_TYPE_Get_Battery_Cap:
+    case PD_EXT_GET_BATTERY_CAP:
         if (pdinfo_on())
         {
             uint8_t bcdb[9];
             pdinfo_fe_bcap(size ? d[0] : 0, bcdb);
-            pd_phy_send_ext(phy, MSG_TYPE_Battery_Capabilities, bcdb, sizeof(bcdb));
+            pd_phy_send_ext(phy, PD_EXT_BATTERY_CAP, bcdb, sizeof(bcdb));
             return;
         }
         break;
-    case MSG_TYPE_Get_Battery_Status:
+    case PD_EXT_GET_BATTERY_STATUS:
         if (pdinfo_on())
         {
             uint32_t bsdo = pdinfo_fe_bsdo(size ? d[0] : 0);
-            pd_phy_send(phy, MSG_TYPE_Battery_Status, 1, &bsdo);
+            pd_phy_send(phy, PD_DATA_BATTERY_STATUS, 1, &bsdo);
             return;
         }
         break;
@@ -572,12 +573,12 @@ static void handle_ext(const pd_rx_msg_t *m, const pd_header_t *h)
 static void send_epr_keepalive(void)
 {
     uint8_t d[2] = {ECDB_EPR_KEEPALIVE, 0};
-    pd_phy_send_ext(phy, MSG_TYPE_Extended_Control, d, sizeof(d));
+    pd_phy_send_ext(phy, PD_EXT_CONTROL, d, sizeof(d));
 }
 
 static bool caps_epr_capable(void)
 {
-    return num_caps > 0 && caps[0].type == FPDO && (caps[0].raw & PDO_EPR_CAPABLE);
+    return num_caps > 0 && caps[0].type == PDO_FIXED && (caps[0].raw & PDO_EPR_CAPABLE);
 }
 
 static void send_sink_caps(void)
@@ -586,7 +587,7 @@ static void send_sink_caps(void)
     uint16_t ma = bridge_back_max_ma();
     objs[0] = pd_build_fixed_pdo(5000, ma, 0);
     objs[1] = pd_build_pps_apdo(3300, 21000, ma);
-    pd_phy_send(phy, MSG_TYPE_Sink_Capabilities, 2, objs);
+    pd_phy_send(phy, PD_DATA_SNK_CAP, 2, objs);
 }
 
 /*
@@ -608,7 +609,7 @@ static void send_sink_caps_ext(void)
     d[18] = 15;                     /* SPR Sink Minimum PDP：5V 3A */
     d[19] = pdp;                    /* SPR Sink Operational PDP */
     d[20] = pdp;                    /* SPR Sink Maximum PDP */
-    pd_phy_send_ext(phy, MSG_TYPE_Sink_Capabilities_Extended, d, sizeof(d));
+    pd_phy_send_ext(phy, PD_EXT_SNK_CAP_EXT, d, sizeof(d));
     ev_avs_2nd_t e = {0, AVS2_FE_SKEDB_SENT, d[SKEDB_SINK_MODES]};
     evlog_add(EV_AVS_2ND, &e, sizeof(e));
 }
@@ -646,16 +647,16 @@ static void handle_cable_msg(const pd_rx_msg_t *m)
     pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
     uint8_t rev = h.revision < PD_REV_30 ? h.revision : PD_REV_30;
 
-    if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
+    if (!h.extended && h.num_objs == 0 && h.msg_type == PD_CTRL_SOFT_RESET)
     {
         cable_reset();
-        pd_phy_send_sop1(phy, MSG_TYPE_Accept, 0, NULL, rev);
+        pd_phy_send_sop1(phy, PD_CTRL_ACCEPT, 0, NULL, rev);
         return;
     }
     if (h.msg_id == cable_last_rx_id)
         return;
     cable_last_rx_id = h.msg_id;
-    if (h.extended || h.msg_type != MSG_TYPE_Vendor_Defined || h.num_objs == 0)
+    if (h.extended || h.msg_type != PD_DATA_VDM || h.num_objs == 0)
         return;
 
     uint32_t vdm = pd_get_u32(&m->data[2]);
@@ -666,13 +667,13 @@ static void handle_cable_msg(const pd_rx_msg_t *m)
         uint32_t o[6] = {(vdm & ~0xC0u) | 0x40u};
         uint8_t n = cfg_cable_n(cfg_ext()->fcable[0]);
         memcpy(&o[1], cfg_ext()->fcable, n * 4);
-        if (pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1 + n, o, rev))
+        if (pd_phy_send_sop1(phy, PD_DATA_VDM, 1 + n, o, rev))
             log_note(NOTE_FE_EMARKER, 0);
     }
     else
     {
         uint32_t nak = (vdm & ~0xC0u) | 0x80u;
-        pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &nak, rev);
+        pd_phy_send_sop1(phy, PD_DATA_VDM, 1, &nak, rev);
     }
 }
 
@@ -685,12 +686,12 @@ static void handle_msg(const pd_rx_msg_t *m)
     }
     pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
 
-    if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
+    if (!h.extended && h.num_objs == 0 && h.msg_type == PD_CTRL_SOFT_RESET)
     {
         log_reset(RST_SOFT_RCVD);
         pd_phy_reset_protocol(phy);
         last_rx_id = 0xFF;
-        send_ctrl(MSG_TYPE_Accept);
+        send_ctrl(PD_CTRL_ACCEPT);
         if (req_status == FE_REQ_BUSY)
             req_status = FE_REQ_ABORTED;
         bridge_req_waiting = false;
@@ -711,20 +712,20 @@ static void handle_msg(const pd_rx_msg_t *m)
     {
         switch (h.msg_type)
         {
-        case MSG_TYPE_Source_Capabilities:
+        case PD_DATA_SRC_CAP:
             handle_source_caps(m, &h);
             break;
-        case MSG_TYPE_Vendor_Defined:
+        case PD_DATA_VDM:
             handle_vdm(m, h.num_objs);
             break;
-        case MSG_TYPE_Source_Info:
+        case PD_DATA_SRC_INFO:
             if (query_is(PI_Q_SIDO))
             {
                 pdinfo_chg_sido(pd_get_u32(&m->data[2]));
                 query_end();
             }
             break;
-        case MSG_TYPE_EPR_Mode:
+        case PD_DATA_EPR_MODE:
         {
             uint32_t d = pd_get_u32(&m->data[2]);
             uint8_t action = d >> 24, data = (d >> 16) & 0xFF;
@@ -751,8 +752,8 @@ static void handle_msg(const pd_rx_msg_t *m)
             }
             break;
         }
-        case MSG_TYPE_Alert:
-        case MSG_TYPE_BIST:
+        case PD_DATA_ALERT:
+        case PD_DATA_BIST:
             break;
         default:
             send_not_supported();
@@ -763,19 +764,19 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     switch (h.msg_type)
     {
-    case MSG_TYPE_Accept:
+    case PD_CTRL_ACCEPT:
         if (state == FE_ST_WAIT_ACCEPT)
             set_state(FE_ST_WAIT_PS_RDY);
         else if (state == FE_ST_SOFT_RESET)
             set_state(FE_ST_WAIT_CAPS);
         break;
-    case MSG_TYPE_Reject:
-    case MSG_TYPE_Wait:
-        if (query && h.msg_type == MSG_TYPE_Reject)
+    case PD_CTRL_REJECT:
+    case PD_CTRL_WAIT:
+        if (query && h.msg_type == PD_CTRL_REJECT)
             query_end();
         else if (state == FE_ST_WAIT_ACCEPT)
         {
-            if (h.msg_type == MSG_TYPE_Wait && wait_count < N_WAIT_RETRY)
+            if (h.msg_type == PD_CTRL_WAIT && wait_count < N_WAIT_RETRY)
             {
                 wait_count++;
                 set_state(FE_ST_WAIT_RETRY);    /* 充电器忙（如请求过快），稍后重发 */
@@ -786,7 +787,7 @@ static void handle_msg(const pd_rx_msg_t *m)
                 do_hard_reset();
         }
         break;
-    case MSG_TYPE_PS_RDY:
+    case PD_CTRL_PS_RDY:
         if (state == FE_ST_WAIT_PS_RDY)
         {
             request_finished(true);
@@ -798,19 +799,19 @@ static void handle_msg(const pd_rx_msg_t *m)
             request_finished(true);
         }
         break;
-    case MSG_TYPE_Get_Sink_Cap:
+    case PD_CTRL_GET_SNK_CAP:
         send_sink_caps();
         break;
-    case MSG_TYPE_Get_Sink_Cap_Extended:
+    case PD_CTRL_GET_SNK_CAP_EXT:
         answer_sink_caps_ext();
         break;
-    case MSG_TYPE_Not_Supported:
+    case PD_CTRL_NOT_SUPPORTED:
         if (query)
             query_end();
         break;
-    case MSG_TYPE_GoodCRC:
-    case MSG_TYPE_GotoMin:
-    case MSG_TYPE_Ping:
+    case PD_CTRL_GOODCRC:
+    case PD_CTRL_GOTOMIN:
+    case PD_CTRL_PING:
         break;
     default:
         send_not_supported();
@@ -945,7 +946,7 @@ void fe_process(void)
 
     case FE_ST_WAIT_PS_RDY:
     {
-        bool avs = pending.type == SPR_AVS_PDO || pending.type == EPR_AVS_PDO;
+        bool avs = pending.type == PDO_SPR_AVS || pending.type == PDO_EPR_AVS;
         if (elapsed > (avs ? T_AVS_TRANSITION_MS : T_PS_TRANSITION_MS))
             do_hard_reset();
         break;
@@ -975,7 +976,7 @@ void fe_process(void)
                 send_request(&pending, ORIGIN_BRIDGE);
             }
         }
-        else if (has_contract && contract.type == PPS_PDO && millis() - keepalive_ts > PPS_KEEPALIVE_MS)
+        else if (has_contract && contract.type == PDO_PPS && millis() - keepalive_ts > PPS_KEEPALIVE_MS)
         {
             if (sink_tx_ok() || millis() - keepalive_ts > PPS_KEEPALIVE_MS + T_KEEPALIVE_NG_MS)
                 send_request(&contract, ORIGIN_KEEPALIVE);
@@ -993,7 +994,7 @@ void fe_process(void)
                 /* 进入 EPR：[31:24] Action = Enter，[23:16] EPR Sink Operational PDP */
                 uint32_t d = ((uint32_t)EPR_MODE_ENTER << 24) | ((uint32_t)EPR_SINK_PDP << 16);
                 epr_attempts++;
-                pd_phy_send(phy, MSG_TYPE_EPR_Mode, 1, &d);
+                pd_phy_send(phy, PD_DATA_EPR_MODE, 1, &d);
                 set_state(FE_ST_EPR_ENTER);
             }
         }
@@ -1001,7 +1002,7 @@ void fe_process(void)
         {
             /* 设备电池状态变化：转发 Alert，充电器随后读取电池状态 */
             if (phy->revision >= PD_REV_30)
-                pd_phy_send(phy, MSG_TYPE_Alert, 1, &alert_out);
+                pd_phy_send(phy, PD_DATA_ALERT, 1, &alert_out);
             alert_out = 0;
         }
         else if (has_contract && elapsed > T_SENDER_RESPONSE_MS && pdinfo_chg_next_query() && sink_tx_ok())
@@ -1044,7 +1045,7 @@ bool fe_flash_safe(void)
     /* PPS 保活、EPR KeepAlive 快到期时不做（Flash 操作期间无法收发） */
     if (epr_mode && millis() - phy->last_tx_ms > T_EPR_KEEPALIVE_MS - 100)
         return false;
-    return !(has_contract && contract.type == PPS_PDO && millis() - keepalive_ts > PPS_KEEPALIVE_MS - 200);
+    return !(has_contract && contract.type == PDO_PPS && millis() - keepalive_ts > PPS_KEEPALIVE_MS - 200);
 }
 
 uint8_t fe_state_code(void)

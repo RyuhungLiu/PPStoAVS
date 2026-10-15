@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * USB PD 报文定义与 PDO/RDO 编解码
  */
@@ -11,63 +12,53 @@
 #define PD_MAX_EPR_OBJS         11      /* EPR_Source_Capabilities：1~7 SPR（不足补 0），8~11 EPR */
 #define PD_REV_30               0b10
 
+/* 报文类型（Message Header 的 Message Type 字段，USB PD R3.2 表 6-5 / 6-6 / 6-48；只列本项目用到的） */
 typedef enum
 {
-    MSG_TYPE_GoodCRC                 = 0b00001,
-    MSG_TYPE_GotoMin                 = 0b00010,
-    MSG_TYPE_Accept                  = 0b00011,
-    MSG_TYPE_Reject                  = 0b00100,
-    MSG_TYPE_Ping                    = 0b00101,
-    MSG_TYPE_PS_RDY                  = 0b00110,
-    MSG_TYPE_Get_Source_Cap          = 0b00111,
-    MSG_TYPE_Get_Sink_Cap            = 0b01000,
-    MSG_TYPE_DR_Swap                 = 0b01001,
-    MSG_TYPE_PR_Swap                 = 0b01010,
-    MSG_TYPE_VCONN_Swap              = 0b01011,
-    MSG_TYPE_Wait                    = 0b01100,
-    MSG_TYPE_Soft_Reset              = 0b01101,
-    MSG_TYPE_Data_Reset              = 0b01110,
-    MSG_TYPE_Data_Reset_Complete     = 0b01111,
-    MSG_TYPE_Not_Supported           = 0b10000,
-    MSG_TYPE_Get_Source_Cap_Extended = 0b10001,
-    MSG_TYPE_Get_Status              = 0b10010,
-    MSG_TYPE_FR_Swap                 = 0b10011,
-    MSG_TYPE_Get_PPS_Status          = 0b10100,
-    MSG_TYPE_Get_Country_Codes       = 0b10101,
-    MSG_TYPE_Get_Sink_Cap_Extended   = 0b10110,
-    MSG_TYPE_Get_Source_Info         = 0b10111,
-    MSG_TYPE_Get_Revision            = 0b11000,
+    PD_CTRL_GOODCRC         = 0x01,
+    PD_CTRL_GOTOMIN         = 0x02,
+    PD_CTRL_ACCEPT          = 0x03,
+    PD_CTRL_REJECT          = 0x04,
+    PD_CTRL_PING            = 0x05,
+    PD_CTRL_PS_RDY          = 0x06,
+    PD_CTRL_GET_SRC_CAP     = 0x07,
+    PD_CTRL_GET_SNK_CAP     = 0x08,
+    PD_CTRL_DR_SWAP         = 0x09,
+    PD_CTRL_WAIT            = 0x0C,
+    PD_CTRL_SOFT_RESET      = 0x0D,
+    PD_CTRL_NOT_SUPPORTED   = 0x10,
+    PD_CTRL_GET_SRC_CAP_EXT = 0x11,
+    PD_CTRL_GET_STATUS      = 0x12,
+    PD_CTRL_GET_SNK_CAP_EXT = 0x16,
+    PD_CTRL_GET_SRC_INFO    = 0x17,
 } pd_ctrl_msg_t;
 
 typedef enum
 {
-    MSG_TYPE_Source_Capabilities = 0b00001,
-    MSG_TYPE_Request             = 0b00010,
-    MSG_TYPE_BIST                = 0b00011,
-    MSG_TYPE_Sink_Capabilities   = 0b00100,
-    MSG_TYPE_Battery_Status      = 0b00101,
-    MSG_TYPE_Alert               = 0b00110,
-    MSG_TYPE_Get_Country_Info    = 0b00111,
-    MSG_TYPE_Enter_USB           = 0b01000,
-    MSG_TYPE_EPR_Request         = 0b01001,
-    MSG_TYPE_EPR_Mode            = 0b01010,
-    MSG_TYPE_Source_Info         = 0b01011,
-    MSG_TYPE_Revision            = 0b01100,
-    MSG_TYPE_Vendor_Defined      = 0b01111,
+    PD_DATA_SRC_CAP         = 0x01,
+    PD_DATA_REQUEST         = 0x02,
+    PD_DATA_BIST            = 0x03,
+    PD_DATA_SNK_CAP         = 0x04,
+    PD_DATA_BATTERY_STATUS  = 0x05,
+    PD_DATA_ALERT           = 0x06,
+    PD_DATA_EPR_REQUEST     = 0x09,
+    PD_DATA_EPR_MODE        = 0x0A,
+    PD_DATA_SRC_INFO        = 0x0B,
+    PD_DATA_VDM             = 0x0F,
 } pd_data_msg_t;
 
 typedef enum
 {
-    MSG_TYPE_Source_Capabilities_Extended = 0b00001,
-    MSG_TYPE_Status                     = 0b00010,
-    MSG_TYPE_Get_Battery_Cap            = 0b00011,
-    MSG_TYPE_Get_Battery_Status         = 0b00100,
-    MSG_TYPE_Battery_Capabilities       = 0b00101,
-    MSG_TYPE_Get_Manufacturer_Info      = 0b00110,
-    MSG_TYPE_Manufacturer_Info          = 0b00111,
-    MSG_TYPE_Sink_Capabilities_Extended = 0b01111,
-    MSG_TYPE_Extended_Control           = 0b10000,
-    MSG_TYPE_EPR_Source_Capabilities    = 0b10001,
+    PD_EXT_SRC_CAP_EXT        = 0x01,
+    PD_EXT_STATUS             = 0x02,
+    PD_EXT_GET_BATTERY_CAP    = 0x03,
+    PD_EXT_GET_BATTERY_STATUS = 0x04,
+    PD_EXT_BATTERY_CAP        = 0x05,
+    PD_EXT_GET_MFR_INFO       = 0x06,
+    PD_EXT_MFR_INFO           = 0x07,
+    PD_EXT_SNK_CAP_EXT        = 0x0F,
+    PD_EXT_CONTROL            = 0x10,
+    PD_EXT_EPR_SRC_CAP        = 0x11,
 } pd_ext_msg_t;
 
 /* 结构化 VDM：[31:16] SVID，[15] 结构化，[14:13] 版本，[7:6] 命令类型，[4:0] 命令 */
@@ -110,14 +101,15 @@ typedef enum
 #define SINK_MODE_VBUS          (1u << 1)
 #define SINK_MODE_AVS           (1u << 5)
 
+/* PDO 类型：取 PDO 的 [31:28]。Fixed / Battery / Variable 只看 [31:30]（低两位清零），APDO（[31:30] = 11）再看 [29:28] */
 typedef enum
 {
-    FPDO        = 0b0000,
-    BPDO        = 0b0100,
-    VPDO        = 0b1000,
-    PPS_PDO     = 0b1100,
-    EPR_AVS_PDO = 0b1101,
-    SPR_AVS_PDO = 0b1110,
+    PDO_FIXED    = 0x0,
+    PDO_BATTERY  = 0x4,
+    PDO_VARIABLE = 0x8,
+    PDO_PPS      = 0xC,
+    PDO_EPR_AVS  = 0xD,
+    PDO_SPR_AVS  = 0xE,
 } pdo_type_t;
 
 typedef struct
@@ -136,24 +128,25 @@ typedef struct
 {
     pdo_type_t type;
     uint32_t   raw;
-    uint16_t   min_mv;      /* FPDO: = max_mv */
+    uint16_t   min_mv;      /* PDO_FIXED: = max_mv */
     uint16_t   max_mv;
     uint16_t   max_ma;      /* SPR_AVS: 9~15V 档电流 */
     uint16_t   max_ma_20v;  /* 仅 SPR_AVS: 15~20V 档电流 */
     uint8_t    pdp;         /* 仅 EPR_AVS: PDP（W） */
 } pdo_t;
 
+/* Message Header：[15] Extended，[14:12] 数据对象数，[11:9] MessageID，[8] 电源角色，[7:6] 规范版本，[5] 数据角色，[4:0] 报文类型 */
 static inline pd_header_t pd_parse_header(uint16_t h)
 {
-    pd_header_t r;
-    r.extended   = (h >> 15) & 0x1;
-    r.num_objs   = (h >> 12) & 0x7;
-    r.msg_id     = (h >> 9) & 0x7;
-    r.power_role = (h >> 8) & 0x1;
-    r.revision   = (h >> 6) & 0x3;
-    r.data_role  = (h >> 5) & 0x1;
-    r.msg_type   = h & 0x1F;
-    return r;
+    return (pd_header_t){
+        .msg_type   = h & 0x1F,
+        .data_role  = (h >> 5) & 1,
+        .revision   = (h >> 6) & 3,
+        .power_role = (h >> 8) & 1,
+        .msg_id     = (h >> 9) & 7,
+        .num_objs   = (h >> 12) & 7,
+        .extended   = h >> 15,
+    };
 }
 
 static inline uint16_t pd_build_header(uint8_t msg_type, uint8_t num_objs, uint8_t msg_id,
@@ -166,32 +159,32 @@ static inline uint16_t pd_build_header(uint8_t msg_type, uint8_t num_objs, uint8
 static inline pdo_t pd_parse_pdo(uint32_t v)
 {
     pdo_t p = {0};
-    uint8_t raw_type = (v >> 28) & 0b1100;
-    p.type = (raw_type != 0b1100) ? (pdo_type_t)raw_type : (pdo_type_t)(v >> 28);
+    uint8_t top = v >> 28;
+    p.type = (pdo_type_t)((top & 0xC) == 0xC ? top : (top & 0xC));    /* APDO 保留子类型，其余只留 [31:30] */
     p.raw = v;
     switch (p.type)
     {
-    case FPDO:
+    case PDO_FIXED:
         p.min_mv = p.max_mv = ((v >> 10) & 0x3FF) * 50;
         p.max_ma = (v & 0x3FF) * 10;
         break;
-    case VPDO:
+    case PDO_VARIABLE:
         p.max_mv = ((v >> 20) & 0x3FF) * 50;
         p.min_mv = ((v >> 10) & 0x3FF) * 50;
         p.max_ma = (v & 0x3FF) * 10;
         break;
-    case PPS_PDO:
+    case PDO_PPS:
         p.max_mv = ((v >> 17) & 0xFF) * 100;
         p.min_mv = ((v >> 8) & 0xFF) * 100;
         p.max_ma = (v & 0x7F) * 50;
         break;
-    case SPR_AVS_PDO:
+    case PDO_SPR_AVS:
         p.min_mv = 9000;
         p.max_mv = (v & 0x3FF) ? 20000 : 15000;
         p.max_ma = ((v >> 10) & 0x3FF) * 10;
         p.max_ma_20v = (v & 0x3FF) * 10;
         break;
-    case EPR_AVS_PDO:
+    case PDO_EPR_AVS:
         p.min_mv = ((v >> 8) & 0xFF) * 100;
         p.max_mv = ((v >> 17) & 0x1FF) * 100;
         p.pdp = v & 0xFF;

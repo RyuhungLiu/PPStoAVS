@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * QC2.0 / QC3.0 前端（见 qc.c）。fe_ufcs.c 把它当作另一种非 PD 前端：合成 PD 能力，协议桥不知道前端是哪种协议。
  */

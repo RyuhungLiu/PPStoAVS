@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "usb_hid.h"
 #include "board.h"
 #include "ch32m030_usb.h"

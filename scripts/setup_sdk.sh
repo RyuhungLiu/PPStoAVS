@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Recreate firmware/sdk from the CH32M030C9U template shipped with MounRiver Studio 2,
 # then apply the small patches this project needs.
 #

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "fe_ufcs.h"
 #include "analog.h"
 #include "bridge.h"
@@ -217,7 +218,7 @@ static bool map_target(const fe_target_t *t, uint8_t *mode, uint16_t *mv, uint16
 
 static uint32_t build_rdo(const fe_target_t *t)
 {
-    if (t->type == PPS_PDO)
+    if (t->type == PDO_PPS)
         return pd_build_pps_rdo(t->pos, t->mv, t->ma);
     return pd_build_fixed_rdo(t->pos, t->ma, t->ma);
 }
@@ -321,7 +322,7 @@ bool feu_process(void)
                 for (uint8_t i = 0; i < afcn; i++)
                     if (afc_mv(afcl[i]) == pending.mv)
                         k = (int8_t)i;
-                if (k < 0 || pending.type != FPDO)
+                if (k < 0 || pending.type != PDO_FIXED)
                     request_finished(false);
                 else
                 {
@@ -351,7 +352,7 @@ bool feu_process(void)
                     request_finished(false);
                 else
                 {
-                    qc_set(pending.mv, pending.type == PPS_PDO);
+                    qc_set(pending.mv, pending.type == PDO_PPS);
                     pending_valid = false;
                 }
             }

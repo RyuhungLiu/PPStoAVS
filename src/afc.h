@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 三星 AFC 前端（见 afc.c）。调用前须已完成 qc_handshake（D+ 保持 0.6V）。
  */

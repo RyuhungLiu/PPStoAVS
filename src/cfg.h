@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 可由上位机修改的透传设置，保存在 Flash（A/B 两页交替），修改后立即生效
  */

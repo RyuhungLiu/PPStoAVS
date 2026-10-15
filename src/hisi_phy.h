@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * HiSilicon D− 单线物理层（AFC / FCP / SCP 共用，见 hisi_phy.c）。调用前须已完成 qc_handshake（D+ 保持 0.6V）。
  */

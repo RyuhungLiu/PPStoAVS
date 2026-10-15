@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 透传记录：每次上电为一段（session），事件按时间顺序写入 Flash 环形区（32 页 × 128 字节，Flash 布局 2）
  *

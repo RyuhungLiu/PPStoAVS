@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "power_sw.h"
 #include "board.h"
 #include "timebase.h"

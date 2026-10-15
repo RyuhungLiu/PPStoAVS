@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # PPStoAVS 固件（CH32M030K9U7）
 # 工具链：MounRiver Studio 2 自带 RISC-V GCC12（riscv-wch-elf-），可用 TOOLCHAIN= 覆盖
 #   make            编译

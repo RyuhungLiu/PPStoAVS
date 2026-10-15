@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 前端 UFCS 适配：把 UFCS 充电器的输出模式翻译成合成的 PD 能力（Fixed 5/9/15/20V + 每个模式一个 PPS），
  * 把协议桥的前端请求翻译成 UFCS Request。协议桥和后端不知道前端是哪种协议。

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 三星 AFC 前端（Sink）。物理层见 hisi_phy.c；协议由探测固件实测（session 29 / 32）：
  *  - 一字节 V/I 请求：高 4 位 = 电压 − 5V（1V 一级），低 4 位 = 电流 0.75A + n × 0.15A

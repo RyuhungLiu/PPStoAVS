@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 协议桥：前端充电器能力 → 后端 Source_Capabilities；后端请求 → 前端请求；电压确认与保护
  */

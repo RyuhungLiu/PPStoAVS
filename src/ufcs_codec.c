@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "ufcs_codec.h"
 #include <string.h>
 

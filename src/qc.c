@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * QC2.0 / QC3.0 前端（Sink）：用 UDP/UDM 的 6 位 DAC 缓冲输出给 D+/D− 电平（0V = 0，0.6V = 12，3.3V = 63 ≈ 3.25V）。
  * 实测（v0.13.0 探测固件）：D+ 0.6V 后约 1.07s 充电器放开 D−；QC2 9V/12V、QC3 ±200mV/脉冲（0.2~5ms 脉宽都有效）。

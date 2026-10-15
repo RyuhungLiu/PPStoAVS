@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """合成首次烧录用的完整镜像：Bootloader + 程序 + 程序头页（布局见 src/flash_io.h、src/iap.h）。
 
 用法：python scripts/mkfull.py [--bl build_bl/PPStoAVS-BL.bin] [--app build/PPStoAVS.bin] [--out build/PPStoAVS-full]

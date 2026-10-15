@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "host.h"
 #include "analog.h"
 #include "be_source.h"

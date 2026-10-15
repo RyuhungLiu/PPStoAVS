@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "pdinfo.h"
 #include "board.h"
 #include "bridge.h"
@@ -100,7 +101,7 @@ static uint8_t back_pdp(void)
     {
         pdo_t p = pd_parse_pdo(pd_get_u32(&blob[i * 4]));
         uint32_t w = (uint32_t)p.max_mv * p.max_ma;
-        if (p.type == SPR_AVS_PDO)
+        if (p.type == PDO_SPR_AVS)
         {
             uint32_t w20 = 20000u * p.max_ma_20v;
             w = 15000u * p.max_ma;

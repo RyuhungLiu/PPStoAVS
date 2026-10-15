@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * UFCS 物理层（充电设备 / Sink 一侧）：
  *  - 旧板：前端 D+ = PB0（UART1 RX），D− = PB1（UART1 TX，重映射 011），与 USB HID 共用 PB0/PB1，互斥

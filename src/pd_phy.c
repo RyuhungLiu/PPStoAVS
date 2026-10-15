@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "pd_phy.h"
 #include "timebase.h"
 
@@ -277,7 +278,7 @@ static void phy_isr(pd_phy_t *p)
             pd_header_t h = pd_parse_header(header);
             uint8_t msg_len = rx_len - 4; /* 去掉 CRC32 */
 
-            if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_GoodCRC)
+            if (!h.extended && h.num_objs == 0 && h.msg_type == PD_CTRL_GOODCRC)
             {
                 p->goodcrc_id = h.msg_id;
                 p->goodcrc_sop1 = sop1;
@@ -296,8 +297,8 @@ static void phy_isr(pd_phy_t *p)
 
                 delay_us(30);   /* tInterFrameGap ≥ 25us（同 WCH EVT） */
                 /* SOP' 的 GoodCRC：对方是线材（bit8 = 1）则我们是端口（0）；对方是端口（0）则我们扮演线材（1） */
-                uint16_t goodcrc = sop1 ? pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, h.power_role ? 0 : 1, 0, h.revision)
-                                        : pd_build_header(MSG_TYPE_GoodCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
+                uint16_t goodcrc = sop1 ? pd_build_header(PD_CTRL_GOODCRC, 0, h.msg_id, h.power_role ? 0 : 1, 0, h.revision)
+                                        : pd_build_header(PD_CTRL_GOODCRC, 0, h.msg_id, p->power_role, p->data_role, h.revision);
                 p->tx_buf[0] = goodcrc & 0xFF;
                 p->tx_buf[1] = goodcrc >> 8;
                 phy_tx_blocking(p, 2, sop1 ? UPD_SOP1 : UPD_SOP0);

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 # PPStoAVS Bootloader（在线升级，见 src/iap.h）
 #   make -f Makefile.bl        编译到 build_bl/
 # 完整首次烧录镜像（BL + APP + 程序头）用 scripts/mkfull.py 生成

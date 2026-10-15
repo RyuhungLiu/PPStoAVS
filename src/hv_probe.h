@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * AFC / FCP 前端探测（-DHV_PROBE，见 hv_probe.c）
  */

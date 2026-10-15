@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * USB PD PHY：BMC 收发、GoodCRC 自动应答与重发
  * USBPD0 / USBPD1 双实例

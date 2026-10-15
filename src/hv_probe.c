@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * SCP（及 AFC / FCP）前端探测固件（-DHV_PROBE）：上电在协议桥之前阻塞执行一次，结果写入事件记录（EV_HV_STEP / EV_HV_EDGES / EV_HV_BYTES）。
  * 共用 HiSilicon 的 D− 单线物理层（BC1.2/DCP 后 D+ 保持 0.6V，D− 双向，只由设备端发起）：

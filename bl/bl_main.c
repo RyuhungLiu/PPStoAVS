@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * PPStoAVS Bootloader（在线升级，协议见 src/iap.h）
  *

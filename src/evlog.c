@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "evlog.h"
 #include "cfg.h"
 #include "flash_io.h"

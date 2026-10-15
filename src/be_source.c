@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "be_source.h"
 #include "analog.h"
 #include "board.h"
@@ -244,14 +245,14 @@ static void send_ctrl(uint8_t type)
 /* PD3.0 回 Not_Supported，PD2.0 没有该消息，回 Reject */
 static void send_not_supported(void)
 {
-    send_ctrl(phy->revision >= PD_REV_30 ? MSG_TYPE_Not_Supported : MSG_TYPE_Reject);
+    send_ctrl(phy->revision >= PD_REV_30 ? PD_CTRL_NOT_SUPPORTED : PD_CTRL_REJECT);
 }
 
 static bool send_caps(void)
 {
     uint32_t pdos[PD_MAX_DATA_OBJS];
     uint8_t n = bridge_back_caps(pdos);
-    return pd_phy_send(phy, MSG_TYPE_Source_Capabilities, n, pdos);
+    return pd_phy_send(phy, PD_DATA_SRC_CAP, n, pdos);
 }
 
 static void log_reset(uint8_t kind)
@@ -338,19 +339,19 @@ static bool send_query(uint8_t q)
     switch (q)
     {
     case PI_Q_CABLE:
-        return pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &vdm, PD_REV_30);
+        return pd_phy_send_sop1(phy, PD_DATA_VDM, 1, &vdm, PD_REV_30);
     case PI_Q_DRSWAP:
         drs_tried = true;
         drs_res = DRS_NO_REPLY;
-        return pd_phy_send(phy, MSG_TYPE_DR_Swap, 0, NULL);
+        return pd_phy_send(phy, PD_CTRL_DR_SWAP, 0, NULL);
     case PI_Q_IDENT:
-        return pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1, &vdm);
+        return pd_phy_send(phy, PD_DATA_VDM, 1, &vdm);
     case PI_Q_EXTCAPS:
-        return pd_phy_send(phy, MSG_TYPE_Get_Sink_Cap_Extended, 0, NULL);
+        return pd_phy_send(phy, PD_CTRL_GET_SNK_CAP_EXT, 0, NULL);
     case PI_Q_BCAP:
-        return pd_phy_send_ext(phy, MSG_TYPE_Get_Battery_Cap, battery_ref, 1);
+        return pd_phy_send_ext(phy, PD_EXT_GET_BATTERY_CAP, battery_ref, 1);
     default:
-        return pd_phy_send_ext(phy, MSG_TYPE_Get_Battery_Status, battery_ref, 1);
+        return pd_phy_send_ext(phy, PD_EXT_GET_BATTERY_STATUS, battery_ref, 1);
     }
 }
 
@@ -397,10 +398,10 @@ static void answer_ext_query(uint8_t type, const uint8_t *d, uint8_t size)
 {
     uint8_t buf[PI_EXT_MAX];
     uint8_t n = 0;
-    if (type == MSG_TYPE_Get_Manufacturer_Info && size >= 1 && d[0] == 0)     /* 目标 = 端口 */
+    if (type == PD_EXT_GET_MFR_INFO && size >= 1 && d[0] == 0)     /* 目标 = 端口 */
         n = pdinfo_be_midb(buf);
     if (n)
-        pd_phy_send_ext(phy, MSG_TYPE_Manufacturer_Info, buf, n);
+        pd_phy_send_ext(phy, PD_EXT_MFR_INFO, buf, n);
     else
         send_not_supported();
 }
@@ -435,7 +436,7 @@ static void handle_vdm(const pd_rx_msg_t *m, uint8_t n)
         uint32_t o[1 + PI_MAX_VDOS];
         o[0] = VDM_REPLY(vdm, VDM_ACK);
         memcpy(&o[1], id.vdo, id.n * 4);
-        pd_phy_send(phy, MSG_TYPE_Vendor_Defined, 1 + id.n, o);
+        pd_phy_send(phy, PD_DATA_VDM, 1 + id.n, o);
         return;
     }
     send_not_supported();
@@ -446,29 +447,29 @@ static void virtual_cable_reply(const pd_rx_msg_t *m, const pd_header_t *h)
 {
     uint8_t rev = h->revision < PD_REV_30 ? h->revision : PD_REV_30;
     phy->sop1_plug = 1;                 /* 以线材身份发送 */
-    if (!h->extended && h->num_objs == 0 && h->msg_type == MSG_TYPE_Soft_Reset)
+    if (!h->extended && h->num_objs == 0 && h->msg_type == PD_CTRL_SOFT_RESET)
     {
         cable_last_rx_id = 0xFF;
         phy->tx_msg_id_sop1 = 0;
-        pd_phy_send_sop1(phy, MSG_TYPE_Accept, 0, NULL, rev);
+        pd_phy_send_sop1(phy, PD_CTRL_ACCEPT, 0, NULL, rev);
     }
     else if (h->msg_id != cable_last_rx_id)
     {
         cable_last_rx_id = h->msg_id;
         uint32_t vdm = pd_get_u32(&m->data[2]);
-        if (!h->extended && h->msg_type == MSG_TYPE_Vendor_Defined && h->num_objs > 0 && VDM_STRUCTURED(vdm) &&
+        if (!h->extended && h->msg_type == PD_DATA_VDM && h->num_objs > 0 && VDM_STRUCTURED(vdm) &&
             VDM_CMD_TYPE(vdm) == 0)
         {
             if (VDM_IS_DISC_IDENT(vdm))
             {
                 uint32_t o[6] = {VDM_REPLY(vdm, VDM_ACK)};
                 memcpy(&o[1], cfg_ext()->cable, sizeof(cfg_ext()->cable));
-                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1 + virtual_cable_n(), o, rev);
+                pd_phy_send_sop1(phy, PD_DATA_VDM, 1 + virtual_cable_n(), o, rev);
             }
             else
             {
                 uint32_t nak = VDM_REPLY(vdm, VDM_NAK);
-                pd_phy_send_sop1(phy, MSG_TYPE_Vendor_Defined, 1, &nak, rev);
+                pd_phy_send_sop1(phy, PD_DATA_VDM, 1, &nak, rev);
             }
         }
     }
@@ -486,14 +487,14 @@ static void selfqa_run(void)
     uint32_t o[6] = {VDM_REPLY(req, VDM_ACK)};
     memcpy(&o[1], cfg_ext()->cable, sizeof(cfg_ext()->cable));
 
-    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_Vendor_Defined, 1, pid, 0, 0, PD_REV_30), &req, 1);
+    pd_phy_send_sop1_raw(phy, pd_build_header(PD_DATA_VDM, 1, pid, 0, 0, PD_REV_30), &req, 1);
     delay_us(30);
-    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_GoodCRC, 0, pid, 1, 0, PD_REV_30), NULL, 0);
+    pd_phy_send_sop1_raw(phy, pd_build_header(PD_CTRL_GOODCRC, 0, pid, 1, 0, PD_REV_30), NULL, 0);
     delay_ms(1);
-    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_Vendor_Defined, 1 + virtual_cable_n(), cid, 1, 0, PD_REV_30), o,
+    pd_phy_send_sop1_raw(phy, pd_build_header(PD_DATA_VDM, 1 + virtual_cable_n(), cid, 1, 0, PD_REV_30), o,
                          1 + virtual_cable_n());
     delay_us(30);
-    pd_phy_send_sop1_raw(phy, pd_build_header(MSG_TYPE_GoodCRC, 0, cid, 0, 0, PD_REV_30), NULL, 0);
+    pd_phy_send_sop1_raw(phy, pd_build_header(PD_CTRL_GOODCRC, 0, cid, 0, 0, PD_REV_30), NULL, 0);
     phy->tx_msg_id_sop1 = (pid + 1) & 0x7;
     selfqa_cable_id = (cid + 1) & 0x7;
 }
@@ -514,7 +515,7 @@ static void handle_cable_msg(const pd_rx_msg_t *m)
     if (h.msg_id == cable_last_rx_id)
         return;
     cable_last_rx_id = h.msg_id;
-    if (h.extended || h.msg_type != MSG_TYPE_Vendor_Defined || h.num_objs == 0)
+    if (h.extended || h.msg_type != PD_DATA_VDM || h.num_objs == 0)
         return;
     uint32_t vdm = pd_get_u32(&m->data[2]);
     if (!VDM_STRUCTURED(vdm) || VDM_CMD_TYPE(vdm) == 0 || !VDM_IS_DISC_IDENT(vdm))
@@ -544,13 +545,13 @@ static void handle_request(uint32_t rdo)
 {
     if (bridge_eval_back_request(rdo))
     {
-        send_ctrl(MSG_TYPE_Accept);
+        send_ctrl(PD_CTRL_ACCEPT);
         bridge_start_transition();
         set_state(BE_ST_TRANSITION);
     }
     else
     {
-        send_ctrl(MSG_TYPE_Reject);
+        send_ctrl(PD_CTRL_REJECT);
         set_state(BE_ST_READY);
     }
 }
@@ -559,12 +560,12 @@ static void handle_msg(const pd_rx_msg_t *m)
 {
     pd_header_t h = pd_parse_header(m->data[0] | (m->data[1] << 8));
 
-    if (!h.extended && h.num_objs == 0 && h.msg_type == MSG_TYPE_Soft_Reset)
+    if (!h.extended && h.num_objs == 0 && h.msg_type == PD_CTRL_SOFT_RESET)
     {
         log_reset(RST_SOFT_RCVD);
         pd_phy_reset_protocol(phy);
         last_rx_id = 0xFF;
-        send_ctrl(MSG_TYPE_Accept);
+        send_ctrl(PD_CTRL_ACCEPT);
         caps_count = 0;
         caps_sent_once = false;
         set_state(BE_ST_SEND_CAPS);
@@ -586,7 +587,7 @@ static void handle_msg(const pd_rx_msg_t *m)
             return;
         switch (h.msg_type)
         {
-        case MSG_TYPE_Sink_Capabilities_Extended:
+        case PD_EXT_SNK_CAP_EXT:
             if (state == BE_ST_QUERY_WAIT && query == PI_Q_EXTCAPS)
             {
                 pdinfo_dev_skedb(d, size);
@@ -595,14 +596,14 @@ static void handle_msg(const pd_rx_msg_t *m)
                 query_end();
             }
             break;
-        case MSG_TYPE_Battery_Capabilities:
+        case PD_EXT_BATTERY_CAP:
             if (state == BE_ST_QUERY_WAIT && query == PI_Q_BCAP)
             {
                 pdinfo_dev_bcap(d, size);
                 query_end();
             }
             break;
-        case MSG_TYPE_Get_Manufacturer_Info:
+        case PD_EXT_GET_MFR_INFO:
             answer_ext_query(h.msg_type, d, size);
             break;
         default:
@@ -616,27 +617,27 @@ static void handle_msg(const pd_rx_msg_t *m)
     {
         switch (h.msg_type)
         {
-        case MSG_TYPE_Request:
+        case PD_DATA_REQUEST:
             if (state == BE_ST_QUERY_WAIT)
                 query_end();    /* 设备抢先发了请求：本次查询作废 */
             if (state == BE_ST_WAIT_REQUEST || state == BE_ST_READY)
                 handle_request(pd_get_u32(&m->data[2]));
             break;
-        case MSG_TYPE_Vendor_Defined:
+        case PD_DATA_VDM:
             handle_vdm(m, h.num_objs);
             break;
-        case MSG_TYPE_Battery_Status:
+        case PD_DATA_BATTERY_STATUS:
             if (state == BE_ST_QUERY_WAIT && query == PI_Q_BSTAT)
             {
                 pdinfo_dev_bsdo(pd_get_u32(&m->data[2]));
                 query_end();
             }
             break;
-        case MSG_TYPE_Alert:
+        case PD_DATA_ALERT:
             pdinfo_dev_alert(pd_get_u32(&m->data[2]));
             break;
-        case MSG_TYPE_BIST:
-        case MSG_TYPE_Sink_Capabilities:
+        case PD_DATA_BIST:
+        case PD_DATA_SNK_CAP:
             break;
         default:
             send_not_supported();
@@ -647,52 +648,52 @@ static void handle_msg(const pd_rx_msg_t *m)
 
     switch (h.msg_type)
     {
-    case MSG_TYPE_Get_Source_Cap:
+    case PD_CTRL_GET_SRC_CAP:
         if (state == BE_ST_READY || state == BE_ST_WAIT_REQUEST)
         {
             if (send_caps())
                 set_state(BE_ST_WAIT_REQUEST);
         }
         break;
-    case MSG_TYPE_Get_Source_Cap_Extended:
+    case PD_CTRL_GET_SRC_CAP_EXT:
     {
         uint8_t buf[PI_EXT_MAX];
         uint8_t n = pdinfo_be_scedb(buf);
         if (n)
-            pd_phy_send_ext(phy, MSG_TYPE_Source_Capabilities_Extended, buf, n);
+            pd_phy_send_ext(phy, PD_EXT_SRC_CAP_EXT, buf, n);
         else
             send_not_supported();
         break;
     }
-    case MSG_TYPE_Get_Source_Info:
+    case PD_CTRL_GET_SRC_INFO:
     {
         uint32_t sido;
         if (pdinfo_be_sido(&sido))
-            pd_phy_send(phy, MSG_TYPE_Source_Info, 1, &sido);
+            pd_phy_send(phy, PD_DATA_SRC_INFO, 1, &sido);
         else
             send_not_supported();
         break;
     }
-    case MSG_TYPE_Get_Status:
+    case PD_CTRL_GET_STATUS:
     {
         uint8_t buf[PI_EXT_MAX];
         uint8_t n = pdinfo_be_status(buf);
         if (n)
-            pd_phy_send_ext(phy, MSG_TYPE_Status, buf, n);
+            pd_phy_send_ext(phy, PD_EXT_STATUS, buf, n);
         else
             send_not_supported();
         break;
     }
-    case MSG_TYPE_Reject:
-    case MSG_TYPE_Not_Supported:
-    case MSG_TYPE_Wait:
+    case PD_CTRL_REJECT:
+    case PD_CTRL_NOT_SUPPORTED:
+    case PD_CTRL_WAIT:
         if (state == BE_ST_QUERY_WAIT)
         {
-            drs_res = h.msg_type == MSG_TYPE_Reject ? DRS_REJECT : h.msg_type == MSG_TYPE_Wait ? DRS_WAIT : DRS_NOT_SUPP;
+            drs_res = h.msg_type == PD_CTRL_REJECT ? DRS_REJECT : h.msg_type == PD_CTRL_WAIT ? DRS_WAIT : DRS_NOT_SUPP;
             query_end();
         }
         break;
-    case MSG_TYPE_Accept:
+    case PD_CTRL_ACCEPT:
         if (state == BE_ST_QUERY_WAIT && query == PI_Q_DRSWAP)
         {
             phy->data_role = 0;     /* 设备成为 DFP（USB 主机） */
@@ -700,25 +701,25 @@ static void handle_msg(const pd_rx_msg_t *m)
             query_end();
         }
         break;
-    case MSG_TYPE_DR_Swap:
+    case PD_CTRL_DR_SWAP:
         /* 设备要求交换数据角色：Ready 时接受（本端的 USB 只能当设备，当 UFP 更合适；交换回 DFP 也接受） */
         drs_tried = true;
         if (state == BE_ST_READY)
         {
-            send_ctrl(MSG_TYPE_Accept);
+            send_ctrl(PD_CTRL_ACCEPT);
             phy->data_role ^= 1;
             log_usb(USBE_DRS_RCVD, phy->data_role);
         }
         else
         {
-            send_ctrl(MSG_TYPE_Reject);
+            send_ctrl(PD_CTRL_REJECT);
             log_usb(USBE_DRS_RCVD, 2);
         }
         break;
-    case MSG_TYPE_GoodCRC:
-    case MSG_TYPE_PS_RDY:
-    case MSG_TYPE_Ping:
-    case MSG_TYPE_GotoMin:
+    case PD_CTRL_GOODCRC:
+    case PD_CTRL_PS_RDY:
+    case PD_CTRL_PING:
+    case PD_CTRL_GOTOMIN:
         break;
     default:
         send_not_supported();
@@ -999,7 +1000,7 @@ void be_process(void)
         switch (bridge_poll_transition())
         {
         case BRIDGE_OK:
-            send_ctrl(MSG_TYPE_PS_RDY);
+            send_ctrl(PD_CTRL_PS_RDY);
             has_contract = true;
             hard_reset_count = 0;
             bridge_on_back_contract();

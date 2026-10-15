@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * PD 信息透传：前端读到的充电器信息、后端读到的设备信息缓存起来，由另一端代答。
  *   设备 → 充电器：电池（Battery_Capabilities / Battery_Status / Alert）、Sink_Capabilities_Extended、身份

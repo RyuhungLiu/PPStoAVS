@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 #include "cfg.h"
 #include "flash_io.h"
 #include "pd_defs.h"
@@ -144,7 +145,7 @@ static bool pdo_list_valid(const uint32_t *pdo, uint8_t n)
     for (uint8_t i = 0; i < n; i++)
     {
         pdo_t p = pd_parse_pdo(pdo[i]);
-        if (p.type == FPDO)
+        if (p.type == PDO_FIXED)
         {
             if (p.max_mv < 5000 || p.max_mv > 20000 || p.max_mv % 100 || p.max_ma < 500 || p.max_ma > CFG_MAX_MA_5A ||
                 p.max_ma % 50 || (pdo[i] & 0xC0000000u))
@@ -152,12 +153,12 @@ static bool pdo_list_valid(const uint32_t *pdo, uint8_t n)
             v5 += p.max_mv == 5000;
             v15 += p.max_mv == 15000;
         }
-        else if (p.type == PPS_PDO)
+        else if (p.type == PDO_PPS)
         {
             if (p.min_mv < 3300 || p.max_mv > 21000 || p.min_mv >= p.max_mv || p.max_ma < 500 || p.max_ma > CFG_MAX_MA_5A)
                 return false;
         }
-        else if (p.type == SPR_AVS_PDO)
+        else if (p.type == PDO_SPR_AVS)
             avs++;
         else
             return false;

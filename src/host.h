@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 上位机协议（USB HID，64 字节报告，小端）
  *

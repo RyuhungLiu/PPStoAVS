@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * HiSilicon D− 单线物理层（AFC / FCP / SCP 共用；BC1.2/DCP 握手后 D+ 保持 0.6V，D− 双向，只由设备端发起）
  *   UI = 160µs；主机 Ping = D− 高 16 UI；从机 Ping 高 10~20 UI（实测 16 UI）

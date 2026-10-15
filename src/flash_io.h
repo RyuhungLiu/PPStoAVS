@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 片内 Flash 页操作（快速模式，128 字节/页）与分区布局
  *

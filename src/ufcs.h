@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * UFCS 充电设备（Sink）协议引擎与探测流程（T/TAF 083-2022）
  *

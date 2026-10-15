@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MPL-2.0 */
 /*
  * 在线升级（IAP）：Bootloader（BL）与程序（APP）共用的定义
  *
