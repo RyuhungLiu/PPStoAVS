@@ -406,7 +406,7 @@ CONTROL, CONFIG >> 6.
 |---|---|---|
 | Firmware, bootloader, build scripts | [MPL-2.0](LICENSE) | `src/`, `bl/`, `scripts/`, `Makefile`, `Makefile.bl` |
 | Host tool | [MPL-2.0](LICENSE) | `tools/ppstoavs.html` |
-| Hardware (schematic, PCB) | CC BY 4.0, as published on [OSHWHub](https://oshwhub.com/n.nun/project_wcrwgcrt); hardware files added to this repository: [CERN-OHL-W-2.0](LICENSES/CERN-OHL-W-2.0.txt) | |
+| Hardware (schematic, PCB) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) | [OSHWHub project](https://oshwhub.com/n.nun/project_wcrwgcrt), and any hardware files added here |
 | Documentation | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) | `README.md` and other documents |
 
 Each source file in this repository carries an `SPDX-License-Identifier` line. MPL-2.0 is file-level copyleft: if you distribute a modified
