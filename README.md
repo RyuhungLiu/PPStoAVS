@@ -1,19 +1,36 @@
 # PPStoAVS
 
-USB PD protocol converter on **WCH CH32M030K9U7**: takes a charger that offers **PPS** and presents
-**SPR AVS** to the device. No DC/DC — the charger's output is passed through a back-to-back NMOS switch.
+**Hardware (open source): [PPS2AVS 转换器（CH32M030）on OSHWHub](https://oshwhub.com/n.nun/project_wcrwgcrt)**
+— schematic and PCB (4 layers, 28 × 13 mm). This repository holds the firmware, the bootloader and the host tool.
+
+USB PD protocol converter on **WCH CH32M030K9U7**: takes a charger that offers **PPS** and presents **SPR AVS** to the
+device, so a PPS charger can fast-charge a device that asks for AVS. No DC/DC: the charger's output is passed through a
+back-to-back NMOS switch.
 
 ```
 PPS charger ── Type-C plug (USBPD1, Sink) ── CH32M030K9U7 ── NMOS switch ── Type-C receptacle (USBPD0, Source) ── device
 ```
 
-v0.1.1 is verified on hardware. v0.2.0 adds a USB HID link on the front D+/D− for a browser-based
-host tool: change the output mode and limits, and read back per-session logs. v0.3.0 adds Lab mode
-(AVS second handshake) and handles fast AVS/PPS requests reliably. v0.4.0 adds Lab mode AVS as PPS. v0.5.0 adds Lab modes virtual 5 A E-Marker with EPR,
-EPR AVS as SPR AVS, and custom Fixed. v0.6.0 adds voltage compensation, PD info passthrough (battery and
-identity) and Lab mode force PPS. v0.6.1 fixes current sensing (R compensation and OCP). v0.7.0 adds
-Lab mode custom PPS, and a PDO conversion simulator and Simplified Chinese in the host tool. v0.8.0 adds an
-unstable Lab UFCS front end and a redesigned host tool. v0.9.0 adds custom VID/PID (rear Source on by default, front Sink) and a 5 V/9 V start option for AVS as PPS; Lab modes AVS as PPS, EPR AVS as SPR AVS and UFCS are marked unstable. v0.10.0 adds online update: a bootloader and a Firmware tab in the host tool (first flash needs the full image). v0.10.1 builds the application with link-time optimization (36.1 KB, was 39.7 KB) and turns event recording off by default; enable it in the host tool (Settings, Records). v0.11.0 reads the e-marker of the cable on the rear port (SOP' Discover Identity, shown on the Status tab) and, when the e-marker declares 5 A, raises the default 3 A limit to 5 A (Source only, no EPR). v0.12.0 replaces the 3 A / 5 A output cable setting with a fully editable virtual e-marker (off by default) and adds an optional custom PDO list (up to 7 levels, with AVS) to the Lab force PPS mode. v0.12.1 polishes the host tool (settings that cannot work together are greyed out with the reason or blocked before Apply, number fields snap to their range on leave, scroll position kept per tab, unsaved-change warning; UFCS moved to the front group and EPR AVS to the E-Marker tab). Firmware: custom AVS only needs a 15 V Fixed (20 V AVS needs both), and custom PPS levels are narrowed to what the charger can give instead of being dropped. v0.12.3 holds off transmitting while a received frame is still waiting for its GoodCRC (suspected cause of charger Soft Resets during PPS forwarding), fixes the over-current limit at 5.35 A / 50 ms once the rear port runs at 5 A, and adds an optional "always answer cable queries" mode to the rear virtual e-marker (answers SOP' Discover Identity with no device attached and the output off). v0.13.0 adds a second custom PDO list to Lab force PPS: the rear port offers it once the device declares AVS in Sink_Capabilities_Extended (Sink Modes bit 5), otherwise the first list (not together with the rear AVS second handshake). The second list is stored in two flash pages taken from the event log (log is now 126 pages; host protocol 12). A port with only an Rd pull-down and no PD reply now gets 16 Source_Capabilities before it is treated as non-PD. v0.14.0 changes the flash layout (application area 41.5 KB → 54.5 KB, event log 126 → 32 pages, new bootloader 2.0 — boards on v0.13.x or older need one WCH-LinkE flash of the full image) and adds a Lab QC2.0/QC3.0 front end: at power-up (after UFCS; with both on UFCS always wins) the converter checks D+/D− for a QC charger and, if found, offers Fixed 5/9/12 V plus QC3 as PPS (three PPS by the 18 W convention, or optionally one 3.6–12 V PPS whose current follows the voltage band). PPS contracts are now kept when a capability's current drops; the new capabilities are re-sent instead of a Hard Reset. v0.14.5 adds a Lab Samsung AFC front end: after the same HVDCP handshake (UFCS → QC → AFC at power-up), a 5 V request the charger does not support returns its voltage/current table, which is offered as Fixed levels with the charger's own currents; a switch is three echoed requests on the D− single-wire bus (`src/hisi_phy.c`, shared with the AFC/FCP/SCP probe). v0.14.6 is a maintenance release from a project review: a PPS pass-through request never asks the charger for more current than its current PPS offers (after a capability drop the device re-requests), the firmware version is now encoded as major<<12 | minor<<6 | patch (older releases used 0xMMmp, which runs out at v0.16; the host tool reads both), and the QC probe image was removed. v0.15.0 supports the new board with a USB switch (TPCH442EG, SEL on PA12): when no computer uses the front port within 3 s (the front is a charger), USB moves to the rear port; with a phone or a Type-C computer on the rear the converter asks it to become USB host (DR_Swap) and also accepts a device's DR_Swap. Old boards are detected and stay on the front. Bootloader 2.1 follows the application to the rear port (needs one WCH-LinkE flash of the full image; 2.0 keeps working, front only). The host tool shows the rear output in the header (protocol and contract power, e.g. `PPS:33W`, plus the measured power). v0.16.0 makes the front virtual 5 A e-marker work with chargers that query the cable right after VBUS turns on (verified: a charger now offers 5 A): bootloader 2.2 starts the application after checking only the header (the full CRC took about 85 ms at the 8 MHz reset clock, during which the charger's SOP' queries went unanswered); the application checks its CRC in the background and logs a mismatch, and with the front e-marker on it no longer erases log pages at boot. The e-marker needs a fixed 1 kΩ Ra from the plug's B5 (VCONN) to GND: the charger looks for Ra before VBUS is on, when the MCU is still unpowered. In the host tool the current limit follows the front e-marker (5 A ↔ 3 A). v0.16.1 moves UFCS to PB5/PB4 on the new board so the host tool works on the rear port while the front runs UFCS (QC and AFC still need the PB0/PB1 DAC), and resets the rear USB when the rear device is unplugged so a phone or Type-C computer is asked to become USB host again after re-plugging. v0.16.2 is a host tool update: request tags now run 1–255 and never use 0, which is left to the polling of the Android notification service. v0.16.3 adds the MPL-2.0 license (see License below) and fixes the Simplified Chinese host tool: event names in the log and in exported JSON were still Traditional, and the character table missed a number of characters; it now covers about 2,400 common characters plus mainland terms.
+## At a glance
+
+- **PPS → SPR AVS**, with the charger's Fixed levels passed through, optional 12 V from PPS, and four output modes
+  (Fixed + AVS, Fixed + PPS, all, Fixed only). Rules follow USB PD R3.2.
+- **Front protocols**: USB PD 3.x (EPR read), and Lab UFCS, QC 2.0/3.0 and Samsung AFC chargers turned into PD capabilities.
+- **5 A**: the front can answer the charger as a virtual 5 A e-marker; the rear reads the device cable's e-marker.
+- **Protection**: OVP/UVP window (±5 %), OCP (3.5 A / 50 ms, 5.35 A in 5 A mode), voltage compensation for cable drop.
+- **PD info passthrough**: battery level to chargers with a screen, identity, custom VID/PID.
+- **Host tool** in the browser (WebHID, no driver): live status, settings, e-marker editor, flash event log, PDO
+  simulator, online firmware update.
+- **Lab modes** for testing: AVS second handshake, force PPS with custom PDO lists, custom Fixed/PPS, EPR AVS as SPR AVS.
+
+## Getting started
+
+1. Build the board from the [hardware project](https://oshwhub.com/n.nun/project_wcrwgcrt).
+2. Flash `PPStoAVS-vX.Y.Z-full.hex` from the [latest release](https://github.com/RyuhungLiu/PPStoAVS/releases/latest)
+   once with WCH-LinkE (see [Flashing](#flashing)). Later updates go through the host tool.
+3. Open [`tools/ppstoavs.html`](tools/ppstoavs.html) in desktop Chrome or Edge and connect (see [Host tool](#host-tool)).
+
+Release notes for every version are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Pin assignment
 
@@ -389,7 +406,7 @@ CONTROL, CONFIG >> 6.
 |---|---|---|
 | Firmware, bootloader, build scripts | [MPL-2.0](LICENSE) | `src/`, `bl/`, `scripts/`, `Makefile`, `Makefile.bl` |
 | Host tool | [MPL-2.0](LICENSE) | `tools/ppstoavs.html` |
-| Hardware (schematics, PCB, when published here) | [CERN-OHL-W-2.0](LICENSES/CERN-OHL-W-2.0.txt) | |
+| Hardware (schematic, PCB) | CC BY 4.0, as published on [OSHWHub](https://oshwhub.com/n.nun/project_wcrwgcrt); hardware files added to this repository: [CERN-OHL-W-2.0](LICENSES/CERN-OHL-W-2.0.txt) | |
 | Documentation | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) | `README.md` and other documents |
 
 Each source file in this repository carries an `SPDX-License-Identifier` line. MPL-2.0 is file-level copyleft: if you distribute a modified
