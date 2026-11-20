@@ -48,12 +48,19 @@ static uint16_t dropped;
 static uint32_t last_add_ms;
 static int16_t clear_idx = -1;
 
+static bool forced;
+
+void evlog_force(void)
+{
+    forced = true;
+}
+
 static bool log_on(void)
 {
 #ifdef HV_PROBE
     return true;        /* 探测固件：不论设置都记录 */
 #endif
-    return (cfg()->flags3 & CFG3_LOG) != 0;
+    return forced || (cfg()->flags3 & CFG3_LOG) != 0;
 }
 
 static const log_page_t *flash_page(uint8_t idx)

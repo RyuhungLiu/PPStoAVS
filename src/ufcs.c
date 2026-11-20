@@ -700,6 +700,12 @@ bool ufcs_connect(bool bridge)
      * dcp_detect 的下拉方式在这些充电器上误判为「不跟随」，只记录不作判据 */
     if (lv[2] < 8 && lv[3] < 8)
         return false;
+    /* D+ 不跟随 D−（≥ 1.55V，没有短接，例如苹果 2.7V 分压）：先做 BC1.2 主检测，让充电器切到 DCP 短接再握手 */
+    if (lv[2] >= 30)
+    {
+        uint16_t ms = ufcs_phy_bc12(1000);
+        log_step(UFS_BC12, ms ? 1 : 0, ms, 0);
+    }
 
     /* 每轮换一组（波特率，发送地址）：规范：115200 缺省，多次无回应才换档；地址字段含义待实测 */
     static const struct { uint8_t baud, addr; } plan[] = {

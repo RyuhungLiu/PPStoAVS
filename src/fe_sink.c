@@ -819,8 +819,11 @@ static void handle_msg(const pd_rx_msg_t *m)
     }
 }
 
+static bool started;    /* fe_init 已调用（Lab 固定诱骗测试用 QC / AFC 时 PD 前端不启动） */
+
 void fe_init(void)
 {
+    started = true;
     /* 关闭 SDI，PA3 交给 USBPD1 */
     AFIO->PCFR1 = (AFIO->PCFR1 & ~AFIO_SWCFG_Mask) | AFIO_SWCFG_DISABLE;
 
@@ -1038,6 +1041,8 @@ bool fe_flash_safe(void)
 {
     if (feu_active())
         return feu_flash_safe();
+    if (!started)
+        return true;            /* PD 前端没启动：不会有收发要保护 */
     if (state == FE_ST_LEGACY)
         return true;
     if (state != FE_ST_READY || bridge_req_waiting)

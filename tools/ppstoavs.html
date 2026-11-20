@@ -50,6 +50,11 @@ button, input, select { font: inherit; color: inherit; }
 .out .live { font-weight: 400; font-size: 12px; color: rgba(238, 242, 232, .6); }
 .out[data-on="0"] { border-color: rgba(238, 242, 232, .22); color: rgba(238, 242, 232, .55); }
 .out[data-on="0"] .proto { color: inherit; }
+.out[data-trig="1"] { background: #b0281f; border-color: #e0574c; color: #fff; }
+.out[data-trig="1"] .proto, .out[data-trig="1"] .live { color: #fff; }
+.trigp { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 8px; }
+.trigp label { display: flex; gap: 6px; align-items: center; }
+.trigp .skip { color: var(--warn); font-size: 12px; }
 .top select { background: rgba(238, 242, 232, .08); border-color: rgba(238, 242, 232, .25); color: var(--silk); }
 .top select option { color: #17231e; }
 .top .btn { background: transparent; border-color: rgba(238, 242, 232, .3); color: var(--silk); }
@@ -331,6 +336,7 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
     </div>
     <div class="vaxis" id="vaxis"></div>
     </div>
+    <div class="card" id="trigCard" hidden><h3><span data-i18n="trigRes"></span><span class="tag" id="trigTag"></span></h3><div class="kv" id="trigKv"></div></div>
     <div class="grid2">
       <div class="card"><h3 data-i18n="chargerCaps"></h3><div class="scroll" id="frontCaps"></div></div>
       <div class="card"><h3><span data-i18n="rearCaps"></span><span class="tag" id="avs2Tag"></span></h3><div class="scroll" id="rearCaps"></div></div>
@@ -547,6 +553,25 @@ input.bad, select.bad { border-color: var(--bad) !important; outline: 1px solid 
           <details><summary data-i18n="labMore"></summary><ul data-i18n-list="ppscL"></ul></details>
         </div>
       </div>
+      <h4 class="labgrp" data-i18n="labTest"></h4>
+      <div class="labs">
+        <div class="lab" id="lab-trig">
+          <label class="labhead"><input type="checkbox" id="trigOn"><div><b data-i18n="trig"></b><span data-i18n="trigS"></span></div><span class="labtags"><span class="tag bad" data-i18n="tagRearOff"></span></span></label>
+          <div class="labin" id="trigIn" hidden>
+            <div class="trigp">
+              <label><input type="checkbox" id="trigPu">UFCS<span class="skip" id="trigPuH"></span></label>
+              <label><input type="checkbox" id="trigPq">QC<span class="skip" id="trigPqH"></span></label>
+              <label><input type="checkbox" id="trigPa">AFC<span class="skip" id="trigPaH"></span></label>
+              <label><input type="checkbox" id="trigPd">PD<span class="skip" id="trigPdH"></span></label>
+            </div>
+            <div class="inline"><span data-i18n="trigTarget"></span><input type="number" id="trigV" min="3.3" max="21" step="0.01"><span class="muted">V</span>
+              <span data-i18n="trigCur"></span><input type="number" id="trigI" min="0.1" max="5" step="0.05"><span class="muted">A</span><span class="small muted" data-i18n="trigCurS"></span></div>
+            <label class="check"><input type="checkbox" id="trigAdj"><div><b data-i18n="trigAdj"></b><span data-i18n="trigAdjS"></span></div></label>
+            <div class="small" id="trigErrLine" style="color:var(--bad)" hidden></div>
+          </div>
+          <details><summary data-i18n="labMore"></summary><ul data-i18n-list="trigL"></ul></details>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -761,7 +786,7 @@ const T = {
     stReq: "requests", stFail: "failed", stProt: "protection", stRst: "resets",
     ev: { 18: "Cable e-marker", 1: "Power on", 2: "Charger caps", 3: "Non-PD charger", 4: "Front request", 5: "Device attached",
           6: "Device detached", 7: "Offered to device", 8: "Device request", 9: "Protection", 10: "Reset", 11: "Settings changed",
-          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step", 19: "QC / AFC", 20: "AFC/FCP/SCP probe", 21: "D− waveform", 22: "D− reply bytes", 23: "USB" },
+          12: "Offered to device", 13: "AVS 2nd handshake", 14: "Protocol event", 15: "Identity", 16: "UFCS packet", 17: "UFCS step", 19: "QC / AFC", 20: "AFC/FCP/SCP probe", 21: "D− waveform", 22: "D− reply bytes", 23: "USB", 24: "Trigger test" },
     res: ["OK", "Rejected", "Charger failed", "Voltage not stable"],
     usbE: { 1: "Front port not used by a computer for 3 s → USB switched to the rear port", 2: "Front port not used by a computer for 3 s; this board has no USB switch, staying on the front",
             3: "Computer on the rear port connected (host tool available there)", 4: "Asked the device to become USB host (DR_Swap)", 5: "Device asked to swap data roles (DR_Swap)" },
@@ -817,6 +842,22 @@ const T = {
     simNoCaps: "Connect the converter while it is powered by a charger to load its PDOs.",
     offlineEdit: "Not connected — changes here only affect the simulator",
     labFront: "Front · charger side", labRear: "Rear · device side", labMore: "Details",
+    labTest: "Test", tagRearOff: "Rear off",
+    trig: "Fixed trigger test (rear locked)", trigS: "At power-up, ask the charger for one protocol and voltage and hold it, to test whether the charger can be triggered. The rear switch stays off and the rear port is disabled. No load: this is a test only.",
+    trigTarget: "Target", trigCur: "Request current", trigCurS: "Empty = the level's maximum (PD / UFCS only)",
+    trigAdj: "PD may use PPS / AVS", trigAdjS: "If the charger has no Fixed level at this voltage, use a PPS (20 mV steps) or AVS (100 mV steps) range that covers it.",
+    trigL: ["Tried in the order UFCS → QC → AFC → PD; protocols turned off, or for which the voltage is not valid, are skipped. The first one that gives exactly the target voltage is used.",
+      "Valid voltages: UFCS 3.4–21 V; QC 5/9/12 V (QC2) or 3.6–12 V in 0.2 V steps (QC3); AFC 5–12 V in 1 V steps; PD 3.3–21 V.",
+      "Negotiation never goes above the target (QC skips its capability probe). If the charger cannot give it, the front stays at 5 V.",
+      "If the front voltage leaves the OVP/UVP window, the charger is sent back to 5 V and stays there until the next power-up.",
+      "Turning this on locks the rear switch off at once. The test starts after the next power-up. Turning it off takes effect after the next power-up as well.",
+      "Results are on the Status tab and in the log (recorded even if recording is off). With QC or AFC the host tool cannot connect while testing (D+/D− are in use): read the log afterwards."],
+    trigOnConfirm: "Fixed trigger test: the rear port will be disabled now. Type the target voltage again (in volts) to confirm:",
+    trigMismatch: "The voltages do not match. Nothing was written.",
+    trigSkip: "not valid, skipped", trigCanUse: (l) => `. This voltage works with: ${l}. Turn one of them on, change the voltage, or turn the whole test off.`, trigNoneCan: ". No protocol accepts this voltage.", errTrigProto: "Fixed trigger test: turn on at least one protocol", errTrigMv: "Fixed trigger test: the voltage is not valid for any protocol that is on", errTrigCur: "Fixed trigger test: request current 0.1–5 A",
+    trigRes: "Fixed trigger test", trigSt: ["Off", "Negotiating", "Holding target", "Not available, at 5 V", "Connection lost", "Fault, back to 5 V", "Skipped"],
+    trigWhy: ["", "protocol off", "voltage not valid for this protocol", "no answer", "charger has no such voltage", "requested but voltage not reached", "request rejected or timed out", "connection lost", "voltage left the window", "too many reconnects"],
+    trigRow: ["State", "Protocol", "Target", "Front VBUS", "Request current", "Reconnects", "Rear switch"], trigLocked: "locked off", trigMaxCur: "level maximum", trigReboot: "Takes effect after the next power-up",
     tagHw: "HW revision", tag5a: "5 A / EPR", tagAC: "modes a/c", tagBC: "modes b/c", tagNeedEm: "needs E-Marker", tagNo12: "not with 12 V",
     fe2nd: "AVS second handshake (front)", fe2ndS: "Tell the charger the converter supports AVS.",
     fe2ndL: ["When the charger sends Get_Sink_Cap_Extended, reply with Sink_Capabilities_Extended, Sink Modes = AVS (bit 5).",
@@ -1011,7 +1052,7 @@ const T = {
     stReq: "次請求", stFail: "次失敗", stProt: "次保護", stRst: "次重置",
     ev: { 18: "線材 E-Marker", 1: "上電", 2: "充電器能力", 3: "非 PD 充電器", 4: "前端請求", 5: "設備插入",
           6: "設備拔出", 7: "輸出給設備", 8: "設備請求", 9: "保護動作", 10: "重置", 11: "設定已修改", 12: "輸出給設備",
-          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟", 19: "QC / AFC", 20: "AFC/FCP/SCP 探測", 21: "D− 波形", 22: "D− 回應位元組", 23: "USB" },
+          13: "AVS 二次握手", 14: "協議事件", 15: "身份", 16: "UFCS 報文", 17: "UFCS 步驟", 19: "QC / AFC", 20: "AFC/FCP/SCP 探測", 21: "D− 波形", 22: "D− 回應位元組", 23: "USB", 24: "誘騙測試" },
     res: ["成功", "拒絕", "充電器失敗", "電壓未穩定"],
     usbE: { 1: "前端 3 秒沒被電腦使用 → USB 切到後端", 2: "前端 3 秒沒被電腦使用；此板沒有 USB 切換器，留在前端",
             3: "後端的電腦已連上 USB（可在後端使用上位機）", 4: "請設備改當 USB 主機（DR_Swap）", 5: "設備要求交換資料角色（DR_Swap）" },
@@ -1067,6 +1108,22 @@ const T = {
     simNoCaps: "要在轉換器接著充電器時連線，才能載入充電器的 PDO。",
     offlineEdit: "未連線：這裡的修改只用於轉換模擬",
     labFront: "前端 · 充電器側", labRear: "後端 · 設備側", labMore: "詳細說明",
+    labTest: "測試", tagRearOff: "後端關閉",
+    trig: "固定誘騙測試（後端鎖定）", trigS: "上電後用指定的協議把充電器固定在指定電壓，測試充電器能不能被誘騙。後端開關保持關斷、後端停用。不接負載，只做測試。",
+    trigTarget: "目標", trigCur: "請求電流", trigCurS: "留空 = 該檔位最大（僅 PD／UFCS）",
+    trigAdj: "PD 可用 PPS／AVS", trigAdjS: "充電器沒有這個電壓的 Fixed 檔時，改用涵蓋它的 PPS（20 mV 一步）或 AVS（100 mV 一步）。",
+    trigL: ["依 UFCS → QC → AFC → PD 的順序嘗試；沒開啟、或目標電壓對它不合法的協議會跳過，用第一個能精確給出目標電壓的協議。",
+      "合法電壓：UFCS 3.4–21 V；QC 5／9／12 V（QC2）或 3.6–12 V、0.2 V 一步（QC3）；AFC 5–12 V、1 V 一步；PD 3.3–21 V。",
+      "協商過程不會超過目標（QC 不做能力探測）。充電器給不出時，前端停在 5 V。",
+      "前端電壓超出 OVP／UVP 容許範圍時，讓充電器回到 5 V，並保持到下次上電。",
+      "開啟後立即鎖住後端開關，測試在下次上電後開始；關閉也是下次上電後才生效。",
+      "結果看「狀態」頁和記錄（記錄功能關閉時也會記）。用 QC 或 AFC 測試時 D+／D− 被佔用，上位機連不上，之後再讀記錄。"],
+    trigOnConfirm: "固定誘騙測試：後端會立即停用。請再輸入一次目標電壓（單位 V）確認：",
+    trigMismatch: "兩次輸入的電壓不一致，沒有寫入。",
+    trigSkip: "不適用，會跳過", trigCanUse: (l) => `。這個電壓只能用：${l}。請開啟其中一個、改目標電壓，或關閉整個測試。`, trigNoneCan: "。沒有任何協議能用這個電壓。", errTrigProto: "固定誘騙測試：至少要開啟一個協議", errTrigMv: "固定誘騙測試：目標電壓對已開啟的協議都不合法", errTrigCur: "固定誘騙測試：請求電流需在 0.1–5 A",
+    trigRes: "固定誘騙測試", trigSt: ["關閉", "協商中", "已固定在目標", "不支援，停在 5 V", "連線中斷", "故障，已回 5 V", "跳過"],
+    trigWhy: ["", "未開啟", "目標電壓不適用此協議", "沒有回應", "充電器沒有此電壓", "已請求但電壓沒到位", "請求被拒絕或逾時", "協議連線中斷", "電壓超出容許範圍", "重新連線次數用完"],
+    trigRow: ["狀態", "協議", "目標", "前端 VBUS", "請求電流", "重新連線", "後端開關"], trigLocked: "已鎖定關斷", trigMaxCur: "檔位最大", trigReboot: "下次上電後生效",
     tagHw: "需硬體改版", tag5a: "5A / EPR", tagAC: "方式 a/c", tagBC: "方式 b/c", tagNeedEm: "需 E-Marker", tagNo12: "與 12V 轉換互斥",
     fe2nd: "AVS 二次握手（前端）", fe2ndS: "向充電器宣告轉換器支援 AVS。",
     fe2ndL: ["充電器送 Get_Sink_Cap_Extended 時，回覆 Sink_Capabilities_Extended，Sink Modes = AVS（bit5）。",
@@ -1307,6 +1364,10 @@ async function refreshStatus() {
   state.rearSrc = Array.from({ length: m }, (_, i) => b[1 + m * 4 + i]);
   state.pdInfo = state.info && state.info.proto >= 5 ? parsePdInfo(await request(0x02, [3])) : null;
   state.cable = state.info && state.info.proto >= 10 ? parseCable(await request(0x02, [4])) : null;
+  if (state.info && state.info.proto >= 14) {
+    const g = await request(0x02, [5]);
+    state.trig = { active: !!g[0], st: g[1], proto: g[2], why: g[3], mv: u16(g, 4), vbus: u16(g, 6), ma: u16(g, 8), lost: g[10], locked: !!g[11] };
+  } else state.trig = null;
   renderStatus();
 }
 
@@ -1423,14 +1484,36 @@ function renderOut() {
   } else if (on && s.be === 11) {
     proto = "USB"; mw = s.vbus * s.ibus / 1000;      /* 非 PD 設備：沒有合約，用實測 */
   }
+  const g = state.trig;
+  if (g && (g.active || g.locked)) {
+    el.dataset.trig = "1"; el.dataset.on = "1"; el.title = t("trigRes");
+    $("outProto").textContent = "TRIG " + (g.active ? trigName(g.proto) : "");
+    $("outW").textContent = g.active ? fmtV(g.mv) : t("trigLocked");
+    $("outLive").textContent = g.active ? (t("trigSt")[g.st] ?? "") : "";
+    return;
+  }
+  el.dataset.trig = "0";
   el.dataset.on = on ? "1" : "0";
   el.title = t("outTip");
   $("outProto").textContent = proto;
   $("outW").textContent = fmtW(mw);
   $("outLive").textContent = on && proto !== "USB" ? `${t("outLive")} ${fmtW(s.vbus * s.ibus / 1000)}` : "";
 }
+function renderTrig() {
+  const g = state.trig, card = $("trigCard");
+  card.hidden = !dev || !g || (!g.active && !g.locked);
+  if (card.hidden) return;
+  const cls = g.st === 2 ? "ok" : g.st === 5 || g.st === 3 ? "bad" : g.st === 4 ? "warn" : "acc";
+  setTag("trigTag", [t("trigSt")[g.st] ?? g.st, cls]);
+  const R = t("trigRow"), why = g.why ? ` · ${t("trigWhy")[g.why] ?? g.why}` : "";
+  const kv = g.active ? [[R[0], (t("trigSt")[g.st] ?? g.st) + why], [R[1], trigName(g.proto)], [R[2], fmtV(g.mv)], [R[3], fmtV(g.vbus)],
+    [R[4], g.ma ? fmtA(g.ma) : t("trigMaxCur")], [R[5], String(g.lost)], [R[6], g.locked ? t("trigLocked") : "—"]]
+    : [[R[6], t("trigLocked")], [R[0], t("trigReboot")]];
+  $("trigKv").replaceChildren(...kv.flatMap(([k, v]) => [Object.assign(document.createElement("div"), { textContent: k }), Object.assign(document.createElement("div"), { textContent: v })]));
+}
 function renderStatus() {
   renderOut();
+  renderTrig();
   const s = state.status;
   if (!s || !dev) {
     ["feBig", "vbusBig", "beBig"].forEach((id) => setBig(id, "—"));
@@ -1894,7 +1977,9 @@ function readForm() {
     beVid: idHex("beVid", "idBe", "beVid", 0x5A1E), bePid: idHex("bePid", "idBe", "bePid", 0x30A5),
     /* 擴充設定（協議 v11 起；舊韌體沒有） */
     x: state.cfg && !state.cfg.x ? null : { flags: ($("vcable").checked ? 1 : 0) | ($("pdol").checked ? 2 : 0) | ($("beIdle").checked ? 4 : 0) | ($("pdol2").checked ? 8 : 0), cable: state.vc.slice(), fcable: state.fc.slice(), pdo: pdolRaws(),
-      pdo2: $("pdol2").checked || !pdolErr(PE[1]) ? pdolRaws(PE[1]) : (state.cfg && state.cfg.x && state.cfg.x.pdo2 ? state.cfg.x.pdo2.slice() : PDOL_DEFAULT.map(simRaw)) } };
+      pdo2: $("pdol2").checked || !pdolErr(PE[1]) ? pdolRaws(PE[1]) : (state.cfg && state.cfg.x && state.cfg.x.pdo2 ? state.cfg.x.pdo2.slice() : PDOL_DEFAULT.map(simRaw)) },
+    /* 固定誘騙測試（協議 v14 起；舊韌體沒有）。關閉時其餘欄位沿用原值，不算修改 */
+    trig: state.cfg && !state.cfg.trig ? null : $("trigOn").checked || !state.cfg ? readTrig() : { ...state.cfg.trig, flags: state.cfg.trig.flags & ~1 } };
 }
 function writeForm(c) {
   document.querySelectorAll("input[name=mode]").forEach((r) => (r.checked = Number(r.value) === c.mode));
@@ -1915,6 +2000,7 @@ function writeForm(c) {
   $("beVid").value = hex4(c.beVid ?? 0x5A1E); $("bePid").value = hex4(c.bePid ?? 0x30A5);
   $("ppsc").checked = !!((c.flags2 ?? 0) & 8); $("ppscLo").value = ((c.ppsLo || 33) / 10).toFixed(1);
   $("ppscHi").value = ((c.ppsHi || 160) / 10).toFixed(1); $("ppscA").value = ((c.ppsMa50 || 60) / 20).toFixed(2);
+  writeTrig(c.trig);
   applyCurLimits(); applyLabDeps(); applyComp(); applyInfo();
   updateDirty();
 }
@@ -2094,7 +2180,55 @@ function writeExt(x) {
 }
 
 /* 套用前檢查：回傳 { k: 訊息鍵, id: 要跳過去的欄位 } 或 null */
+/* 固定誘騙測試（協議 v14）：與韌體 cfg_trig_mv_ok 相同 */
+const TRIGP = [[1, "UFCS", "trigPu"], [2, "QC", "trigPq"], [4, "AFC", "trigPa"], [8, "PD", "trigPd"]];
+const trigName = (b) => (TRIGP.find((x) => x[0] === b) || [0, "—"])[1];
+function trigMvOk(b, mv) {
+  if (b === 1) return mv >= 3400 && mv <= 21000 && mv % 10 === 0;
+  if (b === 2) return mv === 5000 || mv === 9000 || mv === 12000 || (mv >= 3600 && mv <= 12000 && mv % 200 === 0);
+  if (b === 4) return mv >= 5000 && mv <= 12000 && mv % 1000 === 0;
+  if (b === 8) return mv >= 3300 && mv <= 21000 && mv % 10 === 0;
+  return false;
+}
+const TRIG_DEFAULT = { flags: 2, protos: 15, mv: 9000, ma: 0 };
+function readTrig() {
+  const protos = TRIGP.reduce((a, [b, , id]) => a | ($(id).checked ? b : 0), 0);
+  const i = $("trigI").value.trim();
+  return { flags: ($("trigOn").checked ? 1 : 0) | ($("trigAdj").checked ? 2 : 0), protos, mv: Math.round(Number($("trigV").value) * 1000) || 0, ma: i === "" ? 0 : Math.round(Number(i) * 1000) };
+}
+function writeTrig(g) {
+  g = g || TRIG_DEFAULT;
+  $("trigOn").checked = !!(g.flags & 1); $("trigAdj").checked = !!(g.flags & 2);
+  TRIGP.forEach(([b, , id]) => ($(id).checked = !!(g.protos & b)));
+  $("trigV").value = (g.mv / 1000).toFixed(2); $("trigI").value = g.ma ? (g.ma / 1000).toFixed(2) : "";
+  applyTrigDeps();
+}
+function applyTrigDeps() {
+  const ok = !state.cfg || !!state.cfg.trig;
+  $("lab-trig").hidden = !ok;
+  $("trigIn").hidden = !$("trigOn").checked;
+  const mv = Math.round(Number($("trigV").value) * 1000) || 0;
+  TRIGP.forEach(([b, , id]) => ($(id + "H").textContent = $(id).checked && !trigMvOk(b, mv) ? " " + t("trigSkip") : ""));
+  /* 錯誤直接顯示在卡片裡，並說明這個電壓能用哪些協議 */
+  const e = trigErr(), line = $("trigErrLine");
+  line.hidden = !e;
+  if (e) {
+    const can = TRIGP.filter(([b]) => trigMvOk(b, mv)).map(([, n]) => n).join(" / ");
+    line.textContent = t(e.k) + (e.k === "errTrigMv" ? (can ? t("trigCanUse")(can) : t("trigNoneCan")) : "");
+  }
+}
+function trigErr() {
+  if (!$("trigOn").checked || (state.cfg && !state.cfg.trig)) return null;
+  const g = readTrig();
+  if (!g.protos) return { k: "errTrigProto", id: "trigPu" };
+  if (!TRIGP.some(([b]) => (g.protos & b) && trigMvOk(b, g.mv))) return { k: "errTrigMv", id: "trigV" };
+  if (g.ma && (g.ma < 100 || g.ma > 5000)) return { k: "errTrigCur", id: "trigI" };
+  return null;
+}
+const trigToBytes = (g) => { const b = new Uint8Array(8); b[0] = 0xA5; b[1] = g.flags; b[2] = g.protos; b[4] = g.mv & 255; b[5] = g.mv >> 8; b[6] = g.ma & 255; b[7] = g.ma >> 8; return Array.from(b); };
+const trigFromBytes = (p) => p[0] === 0xA5 ? { flags: p[1], protos: p[2], mv: u16(p, 4), ma: u16(p, 6) } : { ...TRIG_DEFAULT };
 function formErr() {
+  const te = trigErr(); if (te) return te;
   const list = $("forcePps").checked && $("pdol").checked, num = (id) => Number($(id).value);
   const tenth = (x, d) => Math.abs(x * d - Math.round(x * d)) < 1e-6;
   if ($("fixc").checked && !list) {
@@ -2123,7 +2257,7 @@ function updateDirty() {
 }
 $("dirtyText").addEventListener("click", () => {
   const id = $("dirtyText").dataset.go; if (!id) return;
-  const view = ["fixcV", "ppscLo", "feVid", "beVid", "pdol", "pdol2"].includes(id) ? "settings" : state.tab;
+  const view = ["fixcV", "ppscLo", "feVid", "beVid", "pdol", "pdol2", "trigPu", "trigV", "trigI"].includes(id) ? "settings" : state.tab;
   if (state.tab !== view) setTab(view);
   const el = $(id); el.scrollIntoView({ block: "center", behavior: "smooth" }); if (el.focus) el.focus();
 });
@@ -2150,6 +2284,10 @@ async function loadCfg(force) {
       state.cfgSaving = state.cfgSaving || !!pp[32];
     } else state.cfg.x.pdo2 = PDOL_DEFAULT.map(simRaw);
   } else state.cfg.x = null;
+  if (state.info && state.info.proto >= 14) {
+    const pt = await request(0x19);
+    state.cfg.trig = trigFromBytes(pt); state.cfgSaving = state.cfgSaving || !!pt[8];
+  } else state.cfg.trig = null;
   if (force || !wasDirty) writeForm(state.cfg); else updateDirty();
   renderCfgState();
 }
@@ -2164,6 +2302,15 @@ async function applyCfg(defaults) {
       if (f.x) {
         await request(0x14, extToBytes(f.x)); await request(0x16, fcToBytes(f.x.fcable));
         if (state.info.proto >= 12 && stable(f.x.pdo2) !== stable(state.cfg.x.pdo2)) await request(0x18, pdo2ToBytes(f.x.pdo2));
+      }
+      if (f.trig && state.cfg.trig && stable(f.trig) !== stable(state.cfg.trig)) {
+        /* 開啟時要再輸入一次目標電壓確認（後端會立即停用） */
+        if ((f.trig.flags & 1) && !(state.cfg.trig.flags & 1)) {
+          const a = prompt(t("trigOnConfirm"), "");
+          if (a == null || Math.round(Number(a) * 1000) !== f.trig.mv) { msg(t("trigMismatch")); await loadCfg(false); return; }
+        }
+        await request(0x1A, trigToBytes(f.trig));
+        if ((f.trig.flags & 1) !== (state.cfg.trig.flags & 1)) setTimeout(() => msg(t("trigReboot")), 50);
       }
     }
     await loadCfg(true);
@@ -2314,7 +2461,7 @@ async function runFw(steps) {
 $("fwFile").onchange = onFwFile;
 
 /* GitHub 最新發行版：查版本與發行說明，下載應用程式 .bin 載入（刷寫仍按下方「刷寫」） */
-const WEB_VER = "0.16.3";      /* 本頁版本（發版時同步） */
+const WEB_VER = "0.17.0";      /* 本頁版本（發版時同步） */
 const GH_REPO = "RyuhungLiu/PPStoAVS";
 const verNum = (s) => { const m = /(\d+)\.(\d+)\.(\d+)/.exec(s || ""); return m ? (+m[1] << 16) | (+m[2] << 8) | +m[3] : 0; };
 let ghRel = null;
@@ -2534,7 +2681,8 @@ function ufcsStepText(d) {
   switch (code) {
     case 1: return `BC1.2/DCP check: D+ follows D− ${arg & 1 ? "yes" : "no"} · baseline ${arg & 2 ? "ok" : "-"}`;
     case 2: return `UFCS handshake OK (attempt ${arg})`;
-    case 3: return `UFCS handshake failed: D+ never went high (${arg} attempts) — not a UFCS charger`;
+    case 3: return arg & 0x80 ? `UFCS handshake refused: D+ stays high before the handshake (D+/D− not shorted, e.g. an Apple 2.7 V divider) — the charger is not waiting for UFCS`
+      : `UFCS handshake failed: D+ never went high (${arg} attempts) — not a UFCS charger`;
     case 4: return `Ping ACKed · ${UFCS_BAUD[arg & 15]} bps · header addr ${arg >> 4} · ${v} ms after handshake`;
     case 5: return `Ping not answered · ${UFCS_BAUD[arg & 15]} bps · header addr ${arg >> 4}`;
     case 6: return `Output_Capabilities: ${arg} mode(s)`;
@@ -2550,6 +2698,7 @@ function ufcsStepText(d) {
     case 17: return `Level scan: D+ while D− driven 0.6 V = ${arg} (~${(arg * 51.6 / 1000).toFixed(2)} V) · D− while D+ driven 0.6 V = ${v} (~${(v * 51.6 / 1000).toFixed(2)} V)`;
     case 18: return `VBUS lost (${v} mV) during flow state ${arg} — charger cut power`;
     case 19: return `Charger hard reset: D+ low for ${v} µs (spec ≥ 2000)`;
+    case 20: return arg ? `BC1.2 detection: D+ 0.6 V → D− followed after ${v} ms (charger switched to DCP short)` : `BC1.2 detection: D− did not follow within 1 s (charger stays in its own mode)`;
     case 15: return `PHY: training ok ${v} · bad ${arg} · frame/timeouts ${i}`;
     default: return `step ${code}`;
   }
@@ -2606,6 +2755,13 @@ function decodeRecords(records) {
       case 15: text = `${t("identS")[d[0]] ?? d[0]} · ${idText(u16(d, 1), u16(d, 3))} · bcd ${hex4(u16(d, 5))}`; cls = "acc"; break;
       case 20: text = hvStepText(d); cls = (d[0] === 1 && !d[1]) || (d[0] === 2 && (d[1] & 15)) || (d[0] === 6 && d[1] === 0xFF) ? "warn" : d[0] === 6 || (d[0] === 4 && (u16(d, 2) & 255) > 2) ? "ok" : d[0] === 3 ? (u16(d, 2) > 7500 ? "ok" : "acc") : "acc"; cat = "other"; break;
       case 21: text = hvEdgesText(d); cls = ""; cat = "other"; break;
+      case 24: {
+        const why = d[2] ? ` · ${t("trigWhy")[d[2]] ?? d[2]}` : "";
+        text = `${t("trigSt")[d[0]] ?? d[0]} · ${trigName(d[1])} · ${t("trigRow")[2]} ${fmtV(u16(d, 3))} · ${t("trigRow")[3]} ${fmtV(u16(d, 5))}` +
+          (u16(d, 7) ? ` · ${fmtA(u16(d, 7))}` : "") + why;
+        cls = d[0] === 2 ? "ok" : d[0] === 5 || d[0] === 3 ? "bad" : d[0] === 6 ? "warn" : "acc";
+        cat = d[0] === 2 ? "req" : d[0] === 5 ? "bad" : "other";
+        break; }
       case 23: {
         const w = d[0], a = d[1];
         text = (w === 1 && a === 1 ? t("usbUfcs") : t("usbE")[w] ?? `USB ${w}`) + (w === 4 ? ` · ${t("drs")[a] ?? a}` : w === 5 ? ` · ${t("drsR")[a] ?? a}` : "");
@@ -2816,6 +2972,8 @@ $("ppsc").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("avs2pps").addEventListener("change", () => { applyLabDeps(); updateDirty(); });
 $("fixc").addEventListener("change", (e) => { if (e.target.checked && $("fix12").checked) { $("fix12").checked = false; msg(t("fixcOff12")); } applyLabDeps(); updateDirty(); });
 $("fix12").addEventListener("change", (e) => { if (e.target.checked && $("fixc").checked) { $("fixc").checked = false; msg(t("fix12OffC")); } applyLabDeps(); updateDirty(); });
+["trigOn", "trigPu", "trigPq", "trigPa", "trigPd", "trigAdj"].forEach((id) => $(id).addEventListener("change", () => { applyTrigDeps(); updateDirty(); }));
+["trigV", "trigI"].forEach((id) => $(id).addEventListener("input", () => { applyTrigDeps(); updateDirty(); }));
 $("emarker").addEventListener("change", (e) => {
   const b = !e.target.checked && ((state.fc[3] >>> 5) & 3) === 2;      /* 切換前的狀態 */
   if (e.target.checked && !confirm(t("emarkerWarn"))) e.target.checked = false;
@@ -2884,7 +3042,7 @@ setTab(["status", "settings", "em", "log", "fw", "sim"].includes(startTab) ? sta
 /* 未連線時表單填入韌體預設值（供轉換模擬）；連線後載入裝置設定 */
 const CFG_DEFAULT = { mode: 0, hide: 0, maxMv: 20000, maxMa: 3000, ovp: 5, uvp: 5, ocpMa: 3500, ocpMs: 50, flags: 0, fixDv: 0, fixMa50: 0,
   compMode: 2, compVal: 15, flags2: 0, flags3: 0, ppsLo: 33, ppsHi: 160, ppsMa50: 60,
-  x: { flags: 0, cable: VC_DEFAULT.slice(), fcable: FC_DEFAULT.slice(), pdo: PDOL_DEFAULT.map(simRaw), pdo2: PDOL_DEFAULT.map(simRaw) } };
+  x: { flags: 0, cable: VC_DEFAULT.slice(), fcable: FC_DEFAULT.slice(), pdo: PDOL_DEFAULT.map(simRaw), pdo2: PDOL_DEFAULT.map(simRaw) }, trig: { ...TRIG_DEFAULT } };
 writeForm(CFG_DEFAULT);
 applyI18n();
 

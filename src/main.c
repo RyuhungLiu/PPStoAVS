@@ -29,6 +29,7 @@
 #include "power_sw.h"
 #include "store.h"
 #include "timebase.h"
+#include "trig.h"
 #include "ufcs.h"
 #include "ufcs_phy.h"
 #include "usb_hid.h"
@@ -96,9 +97,12 @@ int main(void)
     RCC->RSTSCKR |= RCC_RMVF;
 
     cfg_init();
+    trig_boot();        /* Lab 固定诱骗测试：启用时立即锁死后端 MOS（重新上电才解除） */
     fe_ra_apply();      /* 虚拟 E-Marker：尽早呈现 Ra */
     /* 虚拟 E-Marker：充电器一上电就查询线材（早于首次广播），前端 PHY 要在其余初始化之前开始接收 */
-    const bool early_fe = (cfg()->flags & CFG_FE_EMARKER) && !(cfg()->flags2 & CFG2_UFCS)
+    /* 诱骗测试要先试 UFCS / QC / AFC 时不能先起 PD 前端（顺序是 UFCS → QC → AFC → PD） */
+    const bool early_fe = (cfg()->flags & CFG_FE_EMARKER) && !(cfg()->flags2 & CFG2_UFCS) &&
+                          !(trig_active() && (cfg_trig()->protos & (TRIGP_UFCS | TRIGP_QC | TRIGP_AFC)))
 #if defined(UFCS_PROBE) || defined(HV_PROBE)
                           && false
 #endif
@@ -126,7 +130,8 @@ int main(void)
 
     if (!early_fe)
         pd_phy_hw_init();
-    be_init();
+    if (!trig_active())
+        be_init();      /* 诱骗测试：后端不初始化，CC 不挂 Rp，插上的设备看不到电源 */
     if (early_fe)
         fe_cable_poll();
 #ifdef HV_PROBE
@@ -144,8 +149,11 @@ int main(void)
 #elif defined(HV_PROBE)
     const bool ufcs_up = false;
 #else
-    const bool ufcs_up = ((cfg()->flags2 & CFG2_UFCS) && feu_start()) || ((cfg()->flags3 & (CFG3_QC | CFG3_AFC)) && feu_start_dcp());
+    const bool ufcs_up = trig_active() ? trig_run_dcp() != 0
+                                       : ((cfg()->flags2 & CFG2_UFCS) && feu_start()) || ((cfg()->flags3 & (CFG3_QC | CFG3_AFC)) && feu_start_dcp());
 #endif
+    /* 前端 PD：诱骗测试时只在 UFCS / QC / AFC 都没成功、且开启了 PD 时才启动 */
+    const bool pd_on = !ufcs_up && (!trig_active() || trig_pd_wanted());
     /* 新板 UFCS 走 PB5/PB4，PB0/PB1 空出：USB 直接切到后端，UFCS 时也能接上位机（QC / AFC 仍占用 PB0/PB1 的 DAC） */
     const bool hid_on = !ufcs_up || ufcs_phy_alt();
     if (!ufcs_up)
@@ -179,18 +187,27 @@ int main(void)
     /* 虚拟 E-Marker：充电器在首次广播前查询线材，同样立即接管前端（重烧用断电擦除） */
     while (!ufcs_up && millis() < BOOT_DEBUG_WINDOW_MS && !(cfg()->flags & CFG_FE_EMARKER))
     {
-        be_process();
+        if (!trig_active())
+            be_process();
         watchdog_feed();
     }
 #endif
-    if (!ufcs_up && !early_fe)
+    if (pd_on && !early_fe)
         fe_init();
+    /* 诱骗测试：QC / AFC 成功或全部放弃时没有前端协议栈要跑；UFCS 由 fe_process 转给 feu_process */
+    const bool fe_run = ufcs_up ? feu_active() : (pd_on || early_fe);
 
     while (1)
     {
-        fe_process();
-        bridge_process();
-        be_process();
+        if (fe_run)
+            fe_process();
+        if (trig_active())
+            trig_process();
+        else
+        {
+            bridge_process();
+            be_process();
+        }
         if (hid_on)
         {
             host_process();

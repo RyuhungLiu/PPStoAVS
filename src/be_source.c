@@ -876,9 +876,26 @@ void be_init(void)
     go_unattached();
 }
 
+static bool disabled;
+
+/* Lab 固定诱骗测试在运行中启用：断开设备、撤掉 Rp，之后不再检测（重新上电后由 main 决定是否初始化后端） */
+void be_shutdown(void)
+{
+    if (disabled)
+        return;
+    disabled = true;
+    if (!phy->regs)
+        return;         /* 后端从未初始化（本次上电已是诱骗测试）：没有要断开的东西，也不能碰 PHY 寄存器 */
+    go_unattached();
+    phy->regs->PORT_CC1 = 0;
+    phy->regs->PORT_CC2 = 0;
+}
+
 void be_process(void)
 {
     uint32_t now = millis();
+    if (disabled)
+        return;
 
     if (!attached_state())
     {

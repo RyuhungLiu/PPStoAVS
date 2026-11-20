@@ -12,6 +12,7 @@
 #include "pdinfo.h"
 #include "power_sw.h"
 #include "timebase.h"
+#include "trig.h"
 #include "usb_hid.h"
 
 enum
@@ -27,6 +28,8 @@ enum
     CMD_CFGF_SET     = 0x16,
     CMD_CFGP_GET     = 0x17,    /* 协议 v12：第二组自订 PDO（32 字节） */
     CMD_CFGP_SET     = 0x18,
+    CMD_TRIG_GET     = 0x19,    /* 协议 v14：Lab 固定诱骗测试设置 cfg_trig_t（8 字节） */
+    CMD_TRIG_SET     = 0x1A,
     CMD_LOG_SESSIONS = 0x20,
     CMD_LOG_READ     = 0x21,
     CMD_LOG_CLEAR    = 0x22,
@@ -76,6 +79,13 @@ static void put_bytes(wr_t *w, const void *src, uint8_t len)
 
 static uint8_t cmd_status(const uint8_t *arg, wr_t *w)
 {
+    if (arg[0] == 5)
+    {
+        /* 协议 v14：Lab 固定诱骗测试状态（格式见 trig_status） */
+        uint8_t buf[16];
+        put_bytes(w, buf, trig_status(buf));
+        return ST_OK;
+    }
     if (arg[0] == 4)
     {
         /* 协议 v10：后端线材 E-Marker：status u8, flags u8（bit0 硬件可供 VCONN，bit1 声明 5A，bit2 已按 5A 放宽后端电流上限，bit3 另一根 CC 脚有 Ra）, n u8, vdo u32[n] */
@@ -203,6 +213,8 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
         cfg_ext_defaults(&x);
         cfg_pdo2_t p2 = {0};
         cfg_pdo2_set(&p2);
+        cfg_trig_t tg = {TRIG_TAG, TRIGF_PD_ADJ, TRIGP_MASK, 0, 9000, 0};    /* 诱骗测试关闭（已锁的后端到重新上电才解除） */
+        cfg_trig_set(&tg);
         return cfg_ext_set(&x) ? cmd_cfg_set(&c) : ST_BAD_ARG;
     }
 
@@ -228,6 +240,26 @@ static uint8_t handle(const uint8_t *req, wr_t *w)
         if (!cfg_pdo2_set(&p))
             return ST_BAD_ARG;
         bridge_on_cfg_changed();
+        return ST_OK;
+    }
+
+    case CMD_TRIG_GET:
+        put_bytes(w, cfg_trig(), CFGT_SIZE);
+        put8(w, cfg_save_pending());
+        return ST_OK;
+
+    case CMD_TRIG_SET:
+    {
+        cfg_trig_t t;
+        memcpy(&t, arg, CFGT_SIZE);
+        if (!cfg_trig_set(&t))
+            return ST_BAD_ARG;
+        if ((t.flags & TRIGF_ON) && !trig_active())
+        {
+            /* 启用立即锁死后端（有设备也马上断开）；诱骗本身要重新上电才开始。停用要重新上电才解除锁定 */
+            power_sw_lock();
+            be_shutdown();
+        }
         return ST_OK;
     }
 

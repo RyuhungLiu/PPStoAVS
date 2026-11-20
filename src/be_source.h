@@ -10,6 +10,7 @@
 
 void be_init(void);
 void be_process(void);
+void be_shutdown(void);         /* 关断后端并停用（Lab 固定诱骗测试运行中启用时） */
 bool be_flash_safe(void);
 uint8_t be_state_code(void);
 bool be_attached(void);

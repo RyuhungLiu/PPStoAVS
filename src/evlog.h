@@ -44,6 +44,7 @@ typedef enum
     EV_QC_STEP      = 19,   /* ev_qc_step_t：QC / AFC 前端的连线结果（QCS_CONNECT / QCS_AFC）；QCS_DCP ~ QCS_IDLE 为 v0.14.x 的 QC 探测固件所记（已删除，网页仍可解码旧记录） */
     EV_CABLE        = 18,   /* ev_cable_t：后端线材 E-Marker 读取结果（每次连接一条） */
     EV_USB          = 23,   /* ev_usb_t：USB 接口切换（新板 SEL）与后端数据角色交换（DR_Swap） */
+    EV_TRIG         = 24,   /* ev_trig_t：Lab 固定诱骗测试的每次状态变化 */
 } ev_type_t;
 
 typedef struct __attribute__((packed))
@@ -185,6 +186,17 @@ typedef struct __attribute__((packed))
     uint8_t arg;
 } ev_usb_t;
 
+/* Lab 固定诱骗测试（state / reason 见 trig.h） */
+typedef struct __attribute__((packed))
+{
+    uint8_t  state;         /* trig_state_t */
+    uint8_t  proto;         /* TRIGP_* 单个，0 = 无 */
+    uint8_t  reason;        /* trig_reason_t */
+    uint16_t target_mv;
+    uint16_t vbus_mv;       /* 记录时的前端实测电压 */
+    uint16_t ma;            /* 请求电流（PD / UFCS），0 = 不适用 */
+} ev_trig_t;
+
 typedef struct __attribute__((packed))
 {
     uint16_t session;
@@ -192,6 +204,7 @@ typedef struct __attribute__((packed))
     uint8_t  pages;
 } evlog_session_t;
 
+void evlog_force(void);                             /* 不论设置都记录（Lab 固定诱骗测试：QC / AFC 时只能从记录看结果） */
 void evlog_init(bool pre_erase);                    /* 上电：扫描环形区，pre_erase 时预擦除（PD 初始化前调用；前端已在接收线材查询时不擦，免得 Flash 停顿漏回 GoodCRC） */
 uint16_t evlog_session(void);
 uint16_t evlog_dropped(void);
@@ -221,7 +234,7 @@ typedef enum
 {
     UFS_DCP         = 1,    /* arg = 判别标志（bit0 D+ 跟随 D−，bit1 撤去驱动后 D+ 回低） */
     UFS_HS_OK       = 2,    /* arg = 第几次握手尝试成功 */
-    UFS_HS_FAIL     = 3,    /* 三次握手均无 D+ 拉高：不是 UFCS 充电器 */
+    UFS_HS_FAIL     = 3,    /* 三次握手均无 D+ 拉高：不是 UFCS 充电器；arg bit7 = D+ 在握手前就一直为高（充电器没有短接 D+/D−，例如苹果 2.7V 分压） */
     UFS_PING_OK     = 4,    /* arg = baud | (发送地址 << 4)；v_mv = 从握手到 ACK 的 ms */
     UFS_PING_FAIL   = 5,    /* arg = baud | (发送地址 << 4) */
     UFS_CAPS        = 6,    /* arg = 模式数（原始报文见 EV_UFCS_PKT） */
@@ -237,6 +250,7 @@ typedef enum
     UFS_SCAN_B      = 17,   /* arg = D− 驱动 0.6V 时的 D+，v_mv = D+ 驱动 0.6V 时的 D− */
     UFS_VBUS_LOST   = 18,   /* 前端 VBUS 掉到 3.5V 以下（充电器断电）：arg = 当时的流程状态，v_mv = 读数；随后立即把记录写入 Flash */
     UFS_RESET_LEN   = 19,   /* 充电器硬复位的低电平持续时间：v_mv = µs（规范应 ≥ 2000） */
+    UFS_BC12        = 20,   /* 握手前的 BC1.2 主检测（D+ 不跟随 D− 时才做）：arg = 1 D− 已跟随（充电器切到 DCP 短接），0 = 1s 内没有；v_mv = 所用 ms */
     UFS_PHY_STATS   = 15,   /* arg = 训练不合格数，v_mv = 训练合格数，i_ma = 超时+成帧错误 */
 } ufs_step_t;
 

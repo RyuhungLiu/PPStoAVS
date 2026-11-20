@@ -46,7 +46,10 @@ void ufcs_phy_set_yield(void (*fn)(void));
  * lv[0] = D+ 悬空，lv[1] = D− 悬空，lv[2] = D− 驱动 0.6V 时的 D+，lv[3] = D+ 驱动 0.6V 时的 D− */
 void ufcs_phy_scan(uint8_t lv[4]);
 
-/* 握手（最多 3 次，阻塞约 30~90ms）。成功后已切到 UART 模式并可收发 */
+/* BC1.2 主检测（阻塞，最长 timeout_ms）：D+ 给 0.6V，等 D− 跟随（充电器切到 DCP 短接）。返回所用 ms（| 1），0 = 没有跟随 */
+uint16_t ufcs_phy_bc12(uint16_t timeout_ms);
+
+/* 握手（最多 3 次，阻塞约 30~90ms）。成功后已切到 UART 模式并可收发。D− 拉低 8ms 后 D+ 仍为高的尝试不算（*tries bit7：三次都如此） */
 bool ufcs_phy_handshake(uint8_t *tries);
 
 /* 退出 UFCS，D+/D− 回到高阻，可以启动 USB HID */

@@ -242,6 +242,47 @@ void ufcs_phy_scan(uint8_t lv[4])
     analog_off();
 }
 
+/* ---------------- BC1.2 主检测 ---------------- */
+
+/* D+ 输出 VDP_SRC 0.6V，等 D− 跟随到 0.31~1.03V 并保持 10ms（充电器已短接 D+/D−，即 DCP）。
+ * 多协议充电器上电常停在苹果 2.7V 分压，要看到 BC1.2 检测才切到 DCP 短接，之后才会理会 UFCS 握手。
+ * 持续时间远小于 QC 的 1.25s，不会让充电器进入 HVDCP。返回跟随所用 ms（| 1），0 = 超时 */
+uint16_t ufcs_phy_bc12(uint16_t timeout_ms)
+{
+    pins_init_clock();
+    usb_pins_float();
+    analog_off();
+    exten1_modify(UDP_ANALOG_MASK | UDM_ANALOG_MASK,
+                  EXTEN_UDP_PDE | EXTEN_UDP_PUE | EXTEN_UDP_AE | EXTEN_UDP_BUFOE | (12u << 5) |
+                  EXTEN_UDM_PDE | EXTEN_UDM_PUE | EXTEN_UDM_AE | (6u << 21));
+    uint32_t t0 = millis(), in_ms = 0;
+    uint16_t res = 0;
+    while (millis() - t0 < timeout_ms)
+    {
+        exten1_modify(EXTEN_UDM_DAC, 6u << 21);         /* 0.31V：AI = 0 表示 D− 高于它 */
+        delay_us(30);
+        bool above = !(EXTEN->EXTEN_CTLR1 & EXTEN_UDM_AI);
+        exten1_modify(EXTEN_UDM_DAC, 20u << 21);        /* 1.03V：AI = 1 表示 D− 低于它 */
+        delay_us(30);
+        bool below = (EXTEN->EXTEN_CTLR1 & EXTEN_UDM_AI) != 0;
+        uint32_t now = millis();
+        if (above && below)
+        {
+            if (!in_ms)
+                in_ms = now | 1;
+            else if (now - in_ms >= 10)
+            {
+                res = (uint16_t)(in_ms - t0) | 1;
+                break;
+            }
+        }
+        else
+            in_ms = 0;
+    }
+    analog_off();
+    return res;
+}
+
 /* ---------------- 握手 ---------------- */
 
 /* 切到 UART：D− 交给 UART1 TX（空闲高），D+ 作为 RX */
@@ -320,6 +361,7 @@ bool ufcs_phy_handshake(uint8_t *tries)
     GPIOB->BSHR = PIN_DM;
     pin_dm(GPIO_Mode_Out_PP);
 
+    uint8_t dp_stuck = 0;
     for (uint8_t attempt = 0; attempt < 3; attempt++)
     {
         if (tries)
@@ -329,6 +371,17 @@ bool ufcs_phy_handshake(uint8_t *tries)
         delay_us(2000);
         GPIOB->BCR = PIN_DM;                /* tDet2：低 8ms */
         delay_us(8000);
+        /* 等待握手的 UFCS 充电器 D+/D− 短接（DCP），D− 拉低后 D+ 也是低。此时 D+ 仍为高 = 充电器把 D+ 拉在别的电平
+         * （例如苹果 2.7V 分压），之后看到的「D+ 拉高」不是握手应答，不能算成功 */
+        if (dp_high())
+        {
+            dp_stuck++;
+            pin_dm(GPIO_Mode_IN_FLOATING);
+            delay_ms(5);
+            GPIOB->BCR = PIN_DM;
+            pin_dm(GPIO_Mode_Out_PP);
+            continue;
+        }
         GPIOB->BSHR = PIN_DM;               /* tDet3：高 2ms */
         delay_us(2000);
         GPIOB->BCR = PIN_DM;                /* tDet4：低，同时监视 D+ 拉高，窗口 tDpDet 11~15ms */
@@ -360,6 +413,8 @@ bool ufcs_phy_handshake(uint8_t *tries)
         GPIOB->BCR = PIN_DM;
         pin_dm(GPIO_Mode_Out_PP);
     }
+    if (tries && dp_stuck == 3)
+        *tries |= 0x80;                     /* 三次都是 D+ 一直为高 */
     pin_dm(GPIO_Mode_IN_FLOATING);
     return false;
 }

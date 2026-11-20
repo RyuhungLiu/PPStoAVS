@@ -21,7 +21,8 @@ PPS charger ── Type-C plug (USBPD1, Sink) ── CH32M030K9U7 ── NMOS sw
 - **PD info passthrough**: battery level to chargers with a screen, identity, custom VID/PID.
 - **Host tool** in the browser (WebHID, no driver): live status, settings, e-marker editor, flash event log, PDO
   simulator, online firmware update.
-- **Lab modes** for testing: AVS second handshake, force PPS with custom PDO lists, custom Fixed/PPS, EPR AVS as SPR AVS.
+- **Lab modes** for testing: AVS second handshake, force PPS with custom PDO lists, custom Fixed/PPS, EPR AVS as SPR AVS, and a
+  fixed trigger test that holds a charger at one protocol and voltage with the output locked off.
 
 ## Getting started
 
@@ -246,6 +247,38 @@ conversion and the custom Fixed / PPS options are ignored while the list is on.
   The current is min(your value, charger source, current limit, 5 A cable rule); the maximum voltage setting still caps the list.
 - AVS follows the existing rule: source = native AVS or a PPS reaching 15/20 V; 9–15 V current follows the 15 V Fixed, 15–20 V the 20 V Fixed.
 - The device list is sorted Fixed (ascending), AVS, PPS. The Simulator tab shows the result (the port in `simBuild` follows `build_back_caps`).
+
+### Lab mode: fixed trigger test (v0.17.0)
+
+A test mode that checks which voltage a charger gives on which protocol. It is not a power path. While it is on,
+**the output switch is locked off for the whole power-up** (`power_sw_lock()`), the rear port never starts and
+nothing reaches the receptacle. Use it with no load and nothing wired to the output.
+
+Settings are on the Lab page, group *Test*: target voltage, optional current, and the protocols to try. At power-up
+the front tries the protocols in this order; any of them can be turned off:
+
+| Protocol | Usable targets | How |
+|---|---|---|
+| UFCS | 3.4–21 V, 10 mV steps | an output mode covering the target, Request at that voltage |
+| QC 2.0/3.0 | 5 / 9 / 12 V, or 3.6–12 V in 200 mV steps (QC3) | levels set directly, no probing above the target |
+| Samsung AFC | 5–12 V in 1 V steps | the voltage must be in the charger's table |
+| USB PD | 3.3–21 V, 10 mV steps | Fixed at the exact voltage first, then PPS or SPR AVS if *PD may use PPS / AVS* is on |
+
+- Only the exact target is requested. If a protocol cannot reach it, the converter skips that protocol and logs why:
+  no answer, level not offered, request rejected or voltage not reached. If no protocol works, the charger stays at 5 V.
+- The current is the lower of the setting and the charger's offer; 0 means the offer's maximum.
+- Once the target is reached, VBUS must stay inside the OVP/UVP window. The charger goes back to 5 V and the fault
+  stays latched until the next power-up when either happens:
+  - three samples fall outside the window;
+  - the protocol drops more than 3 times.
+- The host tool shows a red header pill and a *Fixed trigger test* status card with the protocol, target, VBUS,
+  current and reason.
+- Each step is logged as an `EV_TRIG` record (24).
+- Host commands:
+  - `0x19` TRIG_GET / `0x1A` TRIG_SET (8 bytes);
+  - STATUS part 5 is the trigger status;
+  - host protocol 14.
+- The settings are stored in the second PDO page. Going back to v0.16.x loses the second custom PDO list.
 
 ## Host tool
 

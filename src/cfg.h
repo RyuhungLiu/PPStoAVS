@@ -137,6 +137,31 @@ typedef struct
 const cfg_pdo2_t *cfg_pdo2(void);
 bool cfg_pdo2_set(const cfg_pdo2_t *p);
 
+/* Lab 固定诱骗测试（v0.17.0，设计见上层目录「設計-固定誘騙模式.md」）：与第二组 PDO 同页保存，命令 0x19 / 0x1A。
+ * 启用时后端 MOS 永久关断，前端按 UFCS → QC → AFC → PD 的顺序（关闭的跳过）把充电器固定在目标电压 */
+#define TRIG_TAG            0xA5        /* 有效标记：旧页读到其他值 = 关闭 */
+#define TRIGF_ON            (1u << 0)
+#define TRIGF_PD_ADJ        (1u << 1)   /* PD 可用 PPS / AVS 凑出非 Fixed 电压 */
+#define TRIGF_MASK          (TRIGF_ON | TRIGF_PD_ADJ)
+#define TRIGP_UFCS          (1u << 0)
+#define TRIGP_QC            (1u << 1)
+#define TRIGP_AFC           (1u << 2)
+#define TRIGP_PD            (1u << 3)
+#define TRIGP_MASK          0x0F
+typedef struct __attribute__((packed))
+{
+    uint8_t  tag;           /* TRIG_TAG */
+    uint8_t  flags;         /* TRIGF_* */
+    uint8_t  protos;        /* TRIGP_*，至少一个 */
+    uint8_t  reserved;
+    uint16_t mv;            /* 目标电压 */
+    uint16_t ma;            /* 请求电流（PD / UFCS），0 = 该档位最大 */
+} cfg_trig_t;
+#define CFGT_SIZE           8
+const cfg_trig_t *cfg_trig(void);       /* tag 不对时返回关闭的默认值 */
+bool cfg_trig_set(const cfg_trig_t *t);
+bool cfg_trig_mv_ok(uint8_t proto, uint16_t mv);    /* proto = 单个 TRIGP_*：目标电压对该协议是否合法 */
+
 const cfg_ext_t *cfg_ext(void);
 void cfg_ext_defaults(cfg_ext_t *x);
 bool cfg_ext_valid(const cfg_ext_t *x);

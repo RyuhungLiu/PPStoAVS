@@ -32,6 +32,7 @@ _Static_assert(sizeof(cfg_page_t) == FLASH_PAGE_SIZE, "cfg_page_t size");
 static cfg_t cur;
 static cfg_ext_t cur_x;
 static cfg_pdo2_t cur_p2;
+static cfg_trig_t cur_trig;
 static uint32_t cur_seq;
 static uint8_t cur_slot;            /* 最近一次有效数据所在页 */
 
@@ -46,9 +47,11 @@ typedef struct
     uint32_t magic;
     uint32_t seq;
     cfg_pdo2_t p;
-    uint32_t crc;           /* magic ~ p */
-    uint32_t pad[21];
+    cfg_trig_t trig;        /* v0.17.0 起；旧页此处是 crc（只涵盖 magic ~ p） */
+    uint32_t crc;           /* magic ~ trig */
+    uint32_t pad[19];
 } pdo2_page_t;
+#define P2_OLD_CRC_OFF      offsetof(pdo2_page_t, trig)
 _Static_assert(sizeof(pdo2_page_t) == FLASH_PAGE_SIZE, "pdo2_page_t size");
 static uint32_t p2_seq;
 static uint8_t p2_slot;
@@ -217,6 +220,7 @@ void cfg_init(void)
     cfg_defaults(&cur);
     cfg_ext_defaults(&cur_x);
     memset(&cur_p2, 0, sizeof(cur_p2));
+    memset(&cur_trig, 0, sizeof(cur_trig));
     cur_seq = 0;
     cur_slot = 1;
     p2_seq = 0;
@@ -224,10 +228,16 @@ void cfg_init(void)
     for (uint8_t k = 0; k < EXT2_FLASH_PAGES; k++)
     {
         const pdo2_page_t *q = p2_page(k);
-        if (q->magic == PDO2_MAGIC && q->crc == crc32_calc(q, offsetof(pdo2_page_t, crc)) && q->p.n <= CFGX_MAX_PDOS &&
+        bool now = q->crc == crc32_calc(q, offsetof(pdo2_page_t, crc));
+        bool old = !now && *(const uint32_t *)((const uint8_t *)q + P2_OLD_CRC_OFF) == crc32_calc(q, P2_OLD_CRC_OFF);
+        if (q->magic == PDO2_MAGIC && (now || old) && q->p.n <= CFGX_MAX_PDOS &&
             (!q->p.n || pdo_list_valid(q->p.pdo, q->p.n)) && q->seq >= p2_seq)
         {
             cur_p2 = q->p;
+            if (now)
+                cur_trig = q->trig;
+            else
+                memset(&cur_trig, 0, sizeof(cur_trig));
             p2_seq = q->seq;
             p2_slot = k;
         }
@@ -277,6 +287,45 @@ bool cfg_pdo2_set(const cfg_pdo2_t *p)
     memset(&cur_p2, 0, sizeof(cur_p2));
     cur_p2.n = p->n;
     memcpy(cur_p2.pdo, p->pdo, p->n * 4u);
+    p2_state = P2_ERASE;
+    return true;
+}
+
+bool cfg_trig_mv_ok(uint8_t proto, uint16_t mv)
+{
+    switch (proto)
+    {
+    case TRIGP_UFCS:
+        return mv >= 3400 && mv <= 21000 && mv % 10 == 0;
+    case TRIGP_QC:
+        return mv == 5000 || mv == 9000 || mv == 12000 || (mv >= 3600 && mv <= 12000 && mv % 200 == 0);
+    case TRIGP_AFC:
+        return mv >= 5000 && mv <= 12000 && mv % 1000 == 0;
+    case TRIGP_PD:
+        return mv >= 3300 && mv <= 21000 && mv % 10 == 0;
+    default:
+        return false;
+    }
+}
+
+const cfg_trig_t *cfg_trig(void)
+{
+    static const cfg_trig_t off = {TRIG_TAG, TRIGF_PD_ADJ, TRIGP_MASK, 0, 9000, 0};
+    return cur_trig.tag == TRIG_TAG ? &cur_trig : &off;
+}
+
+bool cfg_trig_set(const cfg_trig_t *t)
+{
+    if (t->tag != TRIG_TAG || (t->flags & ~TRIGF_MASK) || !t->protos || (t->protos & ~TRIGP_MASK) || t->reserved ||
+        (t->ma && (t->ma < 100 || t->ma > 5000)))
+        return false;
+    bool any = false;
+    for (uint8_t b = 1; b <= TRIGP_PD; b <<= 1)
+        if ((t->protos & b) && cfg_trig_mv_ok(b, t->mv))
+            any = true;
+    if (!any)
+        return false;
+    cur_trig = *t;
     p2_state = P2_ERASE;
     return true;
 }
@@ -355,6 +404,7 @@ bool cfg_flush_step(void)
         p2_buf.magic = PDO2_MAGIC;
         p2_buf.seq = p2_seq + 1;
         p2_buf.p = cur_p2;
+        p2_buf.trig = cur_trig;
         p2_buf.crc = crc32_calc(&p2_buf, offsetof(pdo2_page_t, crc));
         if (flash_page_program(EXT2_FLASH_ADDR + s2 * FLASH_PAGE_SIZE, (const uint32_t *)&p2_buf))
         {

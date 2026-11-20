@@ -2,6 +2,22 @@
 
 Newest first. Downloads and SHA-256 sums are on the [Releases](https://github.com/RyuhungLiu/PPStoAVS/releases) page.
 
+## v0.17.0
+- Lab fixed trigger test: at power-up the front holds the charger at one protocol and voltage. UFCS → QC → AFC → PD
+  are tried in order, and each one can be turned off.
+- While the test is on, the output switch stays locked off and the rear port never starts. Use it for testing only,
+  with no load.
+- Only the exact target is requested. If VBUS leaves the OVP/UVP window, the charger goes back to 5 V and the fault
+  stays latched until the next power-up.
+- Host protocol 14 (`0x19` / `0x1A`, STATUS part 5) and new `EV_TRIG` log records.
+- UFCS handshake:
+  - a charger that holds D+ high, such as an Apple 2.7 V divider, is now logged as "handshake refused" instead of a
+    false success;
+  - before the handshake on such a charger, the converter now tries BC1.2 primary detection.
+- Host tool:
+  - settings that cannot be applied show their reason inside the card;
+  - applying settings while the trigger test runs no longer hangs at "Saving".
+
 ## v0.16.3
 - MPL-2.0 license for firmware and host tool (README License and References sections, SPDX headers).
 - `src/pd_defs.h` message and PDO definitions rewritten from the USB PD R3.2 specification; binary unchanged.

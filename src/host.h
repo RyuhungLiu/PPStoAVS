@@ -15,9 +15,13 @@
  *                      part 2：n u8, 前端 EPR 能力 PDO[n]（8 号起）
  *                      part 3：PD 信息透传（设备电量、双方身份，格式见 pdinfo_status）
  *                      part 4：后端线材 E-Marker（协议 v10 起，每次连接都读，不看 Ra）：status u8（be_cable_status_t）, flags u8, n u8, vdo u32[n]
+ *                      part 5：Lab 固定诱骗测试（协议 v14 起）：active u8, state u8（trig_state_t）, proto u8（TRIGP_*）, reason u8（trig_reason_t）,
+ *                              target_mv u16, vbus_mv u16, ma u16, lost u8, mos_locked u8
  * 0x10 CFG_GET      → cfg_t（32 字节，协议 v8 起；v6 为 24 字节，v5 为 20 字节）, save_pending u8
  * 0x13 CFGX_GET     → cfg_ext_t（52 字节，协议 v11 起：虚拟 E-Marker、自订 PDO）, save_pending u8；0x14 CFGX_SET 写入同一结构
  * 0x17 CFGP_GET     → 第二组自订 PDO（协议 v12 起，32 字节：n u8, 保留 3 字节, pdo u32[7]）, save_pending u8；0x18 CFGP_SET 写入同一结构
+ * 0x19 TRIG_GET     → Lab 固定诱骗测试设置 cfg_trig_t（协议 v14 起，8 字节）, save_pending u8；0x1A TRIG_SET 写入同一结构
+ *                      （启用时立即锁死后端 MOS，诱骗在重新上电后开始；停用要重新上电才解除锁定）
  * 0x11 CFG_SET cfg  → 校验失败返回 BAD_ARG；成功立即生效并排队保存
  * 0x12 CFG_DEFAULT  → 恢复默认设置
  * 0x20 LOG_SESSIONS → current u16, ram_mask u8（bit0 当前页，bit1/2 待写页），n u8, {session u16, first_idx u8, pages u8}[n]
@@ -28,6 +32,6 @@
  */
 #pragma once
 
-#define HOST_PROTO_VERSION  13
+#define HOST_PROTO_VERSION  14
 
 void host_process(void);

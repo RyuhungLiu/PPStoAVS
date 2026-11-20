@@ -70,8 +70,24 @@ void power_sw_hvcp_start(void)
     delay_ms(HVCP_STARTUP_MS);
 }
 
+static bool locked;
+
+/* Lab 固定诱骗测试：后端 MOS 永久关断，之后任何 power_sw_set(true) 都无效（重新上电才解除） */
+void power_sw_lock(void)
+{
+    locked = true;
+    power_sw_set(false);
+}
+
+bool power_sw_locked(void)
+{
+    return locked;
+}
+
 void power_sw_set(bool on)
 {
+    if (locked)
+        on = false;
     if (on)
         GPIO_ResetBits(GATE_GPIO_PORT, GATE_GPIO_PIN);  /* 高阻：R3 把栅极拉到 VHVCP */
     else

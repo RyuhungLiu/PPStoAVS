@@ -7,3 +7,5 @@ void power_sw_early_off(void);  /* main 第一件事：PB15 拉低，保证 MOS 
 void power_sw_hvcp_start(void); /* 启动 2 级电荷泵（必须在 early_off 之后） */
 void power_sw_set(bool on);
 bool power_sw_is_on(void);
+void power_sw_lock(void);       /* 永久关断（Lab 固定诱骗测试），之后 power_sw_set(true) 无效，直到重新上电 */
+bool power_sw_locked(void);

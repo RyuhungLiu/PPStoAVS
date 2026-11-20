@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "bridge.h"
+#include "trig.h"
 #include "analog.h"
 #include "board.h"
 #include "cfg.h"
@@ -757,6 +758,11 @@ static fe_target_t reevaluate(void)
  */
 fe_target_t bridge_on_front_caps(bool *for_bridge)
 {
+    if (trig_active())
+    {
+        *for_bridge = false;
+        return trig_on_caps();      /* Lab 固定诱骗测试：后端锁死，前端只要目标档位 */
+    }
     fe_target_t t = reevaluate();
     *for_bridge = false;
     if ((tr_state == TR_FRONT_REQ || tr_state == TR_FRONT_WAIT) && !back_caps_dirty && !back_hard_reset &&
@@ -817,12 +823,17 @@ void bridge_on_back_cable(bool five_amp)
 void bridge_on_cfg_changed(void)
 {
     evlog_add(EV_CFG, cfg(), sizeof(cfg_t));
-    if (fe_caps_available())
+    if (fe_caps_available() && !trig_active())
         reevaluate();
 }
 
 void bridge_on_front_reset(void)
 {
+    if (trig_active())
+    {
+        trig_on_front_reset();
+        return;
+    }
     if (back_has_contract || tr_state != TR_IDLE)
         back_hard_reset = true;
     back_has_contract = false;
@@ -1129,6 +1140,8 @@ bool bridge_back_contract(uint32_t *rdo, uint16_t *mv)
 
 bool bridge_flash_safe(void)
 {
+    if (trig_active())
+        return true;    /* 诱骗测试：协议桥不运行，它的状态不会再变 */
     return tr_state == TR_IDLE && !want_front_5v && !front_5v_pending;
 }
 
@@ -1200,6 +1213,8 @@ static void comp_update(uint32_t now, uint16_t ma)
 
 void bridge_process(void)
 {
+    if (trig_active())
+        return;                     /* 后端锁死，不做转换、补偿与保护 */
     if (want_front_5v)
     {
         const fe_target_t *c = fe_contract();
